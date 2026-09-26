@@ -1,0 +1,7 @@
+TEAM_ID=
+
+PRODUCT_NAME=geosentinel_mobile
+PRODUCT_BUNDLE_IDENTIFIER=it.unical.geosentinel_mobile.geosentinel_mobile$(TEAM_ID)
+
+CURRENT_PROJECT_VERSION=1
+MARKETING_VERSION=1.0
