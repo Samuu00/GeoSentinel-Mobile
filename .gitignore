@@ -17,3 +17,8 @@ captures
 !*.xcworkspace/contents.xcworkspacedata
 **/xcshareddata/WorkspaceSettings.xcsettings
 node_modules/
+
+# segreti: configurazione Firebase e keystore (M0.1)
+google-services.json
+GoogleService-Info.plist
+*.jks
