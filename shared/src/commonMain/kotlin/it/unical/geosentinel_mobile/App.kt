@@ -18,7 +18,9 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -113,6 +115,9 @@ fun App() {
     GeoSentinelTheme(mode) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
+            // safeDrawing e non systemBars (il default): include anche tacca e Dynamic Island,
+            // che in orizzontale stanno di lato. Vale per contenuto e pulsante SOS.
+            contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 TabBar(role, destination) { route ->
                     navController.navigate(route) {
@@ -194,10 +199,15 @@ fun App() {
 private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Route) -> Unit) {
     Box(
         Modifier
-            .windowInsetsPadding(WindowInsets.navigationBars)
+            .fillMaxWidth()
+            // indicatore Home / barra di navigazione in basso, tacca sui lati in orizzontale
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
             .padding(horizontal = 16.dp, vertical = 8.dp),
+        contentAlignment = Alignment.Center,
     ) {
         Surface(
+            // in orizzontale e sui tablet non si allunga da bordo a bordo
+            modifier = Modifier.widthIn(max = 560.dp),
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainer,
             shadowElevation = 8.dp,

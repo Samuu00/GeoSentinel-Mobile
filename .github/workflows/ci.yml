@@ -1,0 +1,76 @@
+# Build e test di shared su Android (Ubuntu) e iOS (macOS), più la ricerca di segreti, a ogni push su main
+# e su ogni pull request (M0.5).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Il token del workflow può solo leggere il codice
+permissions:
+  contents: read
+
+# Un nuovo push sulla stessa PR/branch annulla la run precedente
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android (build + test host)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      # JDK 21 Zulu: è quello che chiede gradle/gradle-daemon-jvm.properties.
+      # Con un'altra versione Gradle ne scaricherebbe uno da foojay a ogni run.
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: '21'
+      # Cache di Gradle; scrive la cache solo su main, le PR la leggono
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      # Una sola invocazione: la configurazione del progetto si paga una volta
+      - run: ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug
+
+  ios:
+    name: iOS (compilazione + test sul simulatore)
+    runs-on: macos-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: ${{ github.ref != 'refs/heads/main' }}
+      # Se fallisce con "Invalid device", il simulatore di default di Kotlin non c'è sull'immagine del runner:
+      # va indicato il dispositivo nel blocco kotlin {} di shared
+      - run: ./gradlew :shared:compileKotlinIosSimulatorArm64 :shared:iosSimulatorArm64Test
+
+  # Secret scanning, come nel backend: scansiona tutta la storia a ogni push/PR e fallisce se trova
+  # chiavi, password o token
+  secrets:
+    name: Segreti (gitleaks)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      # Binario a versione fissa con checksum verificato (Dependabot non aggiorna questa riga: va fatto a mano)
+      - name: gitleaks
+        env:
+          GITLEAKS_VERSION: 8.30.1
+          GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -
+          tar -xzf gitleaks.tar.gz gitleaks
+          ./gitleaks git . --redact --no-banner

@@ -262,6 +262,10 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
     con cursore a molla) e, solo in debug, il selettore del ruolo. Schermata SOS "spinta" con Indietro proprio.
   - **Icone** da `material-icons-core` 1.7.3 (ultima pubblicata); i simboli del tema sono disegnati a mano.
   - **Stringhe** tutte in `composeResources/values/strings.xml`.
+  - **Safe area:** `Scaffold` con `contentWindowInsets = WindowInsets.safeDrawing` (il default `systemBars` non
+    include la tacca, che in orizzontale sta di lato); la barra in basso usa `safeDrawing` su lati e fondo ed è larga
+    al massimo 560 dp. Verificato sull'emulatore in orizzontale con una tacca emulata (02/10); su iPhone resta un
+    checkpoint di M0.5.
 - Checkpoint:
   - [x] la barra cambia voci simulando i quattro ruoli (flag di debug nel Profilo; verificato sull'emulatore il 02/10).
   - [ ] tema chiaro e scuro con contrasto AA (Accessibility Scanner su Android). Contrasti calcolati a mano, manca il
@@ -270,8 +274,17 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
 **M0.5 CI**
 - GitHub Actions: job `android` (`assembleDebug` e test host) su Ubuntu, job `ios` (`compileKotlinIosSimulatorArm64` e
   `iosSimulatorArm64Test`) su macOS, gitleaks come nel backend. Dependabot per gradle e github-actions.
+- Fatto il 02/10: `.github/workflows/ci.yml` con tre job (`android`, `ios`, `secrets`) e `.github/dependabot.yml`
+  (in `.github/`, non in `workflows/`). Allineato al backend: `permissions: contents: read`, `checkout@v7`,
+  `setup-java@v6`, gitleaks 8.30.1 come binario con SHA-256 verificato. JDK 21 Zulu, quello richiesto da
+  `gradle/gradle-daemon-jvm.properties` (con un altro JDK Gradle ne scarica uno a ogni run). Dependabot raggruppa
+  Kotlin, KSP e Compose in una sola PR (sono legati alla versione esatta di Kotlin). `gradlew` versionato con il bit
+  di esecuzione. In locale: comando del job `android` verde, gitleaks senza segreti sui 4 commit.
 - Checkpoint:
-  - [ ] i job verdi su una PR di prova.
+  - [ ] i job verdi su una PR di prova. Se `ios` fallisce con "Invalid device", va indicato il simulatore nel blocco
+    `kotlin {}` di `shared`.
+  - [ ] (con il Mac) l'app sul simulatore di un iPhone con Dynamic Island, in verticale e in orizzontale: niente sotto
+    la tacca o l'indicatore Home, barra in basso e pulsante SOS dentro la safe area.
 
 ### Milestone 1: client API e rete
 

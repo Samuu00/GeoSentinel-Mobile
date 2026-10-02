@@ -84,7 +84,10 @@ shared/src/
   - bersagli da 48 dp (72 per le azioni principali);
   - `contentDescription` sulle icone che hanno un significato da sole, `null` su quelle decorative accanto a un testo;
   - ogni schermata ha uno sfondo pieno (altrimenti nelle transizioni trasparisce quella sotto);
-  - le schermate "spinte" hanno un pulsante Indietro proprio, perché su iPhone non c'è quello di sistema.
+  - le schermate "spinte" hanno un pulsante Indietro proprio, perché su iPhone non c'è quello di sistema;
+  - **safe area:** si disegna fino ai bordi (`ignoresSafeArea` su iOS, `enableEdgeToEdge` su Android) e i margini li
+    dà `WindowInsets.safeDrawing` (barre, indicatore Home, tacca e Dynamic Island anche in orizzontale), mai
+    `systemBars` da solo. Nei form, dalla M2, anche `WindowInsets.ime` per la tastiera.
 - **Commenti in italiano, nomi in inglese.**
 - **Mai tracciati da git:** `local.properties`, `google-services.json`, `GoogleService-Info.plist`, `*.jks`.
 

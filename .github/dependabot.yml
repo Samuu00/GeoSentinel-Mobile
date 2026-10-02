@@ -1,0 +1,25 @@
+# Aggiornamenti settimanali delle dipendenze (M0.5), come nel backend.
+# Deve stare in .github/ e non in .github/workflows/: lì GitHub lo tratterebbe come un workflow.
+version: 2
+updates:
+  # libs.versions.toml e plugin Gradle
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      # Kotlin, KSP e Compose Multiplatform sono legati alla versione esatta di Kotlin (anche nelle minor):
+      # devono arrivare insieme in una sola PR, altrimenti ogni PR singola rompe la build
+      kotlin-toolchain:
+        patterns:
+          - "org.jetbrains.kotlin*"
+          - "com.google.devtools.ksp*"
+          - "org.jetbrains.compose*"
+      # tutto il resto: minor e patch in una PR, le major arrivano separate (possono rompere: vanno lette)
+      gradle-minor-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
