@@ -30,7 +30,7 @@ jobs:
           distribution: zulu
           java-version: '21'
       # Cache di Gradle; scrive la cache solo su main, le PR la leggono
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       # Una sola invocazione: la configurazione del progetto si paga una volta
@@ -46,7 +46,7 @@ jobs:
         with:
           distribution: zulu
           java-version: '21'
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       # Se fallisce con "Invalid device", il simulatore di default di Kotlin non c'è sull'immagine del runner:
