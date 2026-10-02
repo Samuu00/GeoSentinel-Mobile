@@ -205,9 +205,16 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
 - iOS: chiave `API_BASE_URL` in `Info.plist`, letta in `MainViewController`.
 - HTTP in chiaro **solo in debug**: Android con un `network_security_config` che permette `10.0.2.2` e l'IP del PC,
   iOS con `NSAllowsLocalNetworking`. In release solo HTTPS.
+- Fatto il 02/10: Koin parte in M0.4, quindi per ora `MainActivity` e `MainViewController` passano la config ad
+  `App(config)`; in M0.4 diventa un `single` di Koin. Cleartext Android nel source set `debug` (manifest +
+  `res/xml/network_security_config.xml`), così la release non lo contiene. iOS: `API_BASE_URL[config=Debug|Release]`
+  in `Config.xcconfig` (con `$()` perché `//` è un commento), `NSAllowsLocalNetworking` nell'unico `Info.plist`:
+  apre solo indirizzi locali, mai HTTP verso internet. URL di release segnaposto fino a M9.3.
 - Checkpoint:
-  - [ ] l'app debug sull'emulatore raggiunge `GET http://10.0.2.2:8080/actuator/health` (backend locale acceso).
-  - [ ] una build release non ha il cleartext abilitato (controllo sul manifest unito).
+  - [x] l'app debug sull'emulatore raggiunge `GET http://10.0.2.2:8080/actuator/health` (backend locale acceso):
+    `200 {"status":"UP"}` dall'app su `Medium_Phone`, 02/10, con una chiamata di prova poi rimossa.
+  - [x] una build release non ha il cleartext abilitato (manifest unito senza `networkSecurityConfig` né
+    `usesCleartextTraffic`, 02/10).
 
 **M0.4 Tema, navigazione e DI**
 - `GeoSentinelTheme` (chiaro e scuro, colori di §2), `NavHost` con rotte tipizzate e barra in basso, `startKoin`.

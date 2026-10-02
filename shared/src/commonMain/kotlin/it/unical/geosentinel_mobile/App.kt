@@ -15,13 +15,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.tooling.preview.Preview
 import org.jetbrains.compose.resources.painterResource
+import it.unical.geosentinel_mobile.core.config.AppConfig
 
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.compose_multiplatform
 
 @Composable
-@Preview
-fun App() {
+fun App(config: AppConfig) {
     MaterialTheme {
         var showContent by remember { mutableStateOf(false) }
         Column(

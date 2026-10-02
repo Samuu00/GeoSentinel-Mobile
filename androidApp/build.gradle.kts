@@ -36,7 +36,13 @@ android {
         }
     }
     buildTypes {
+        debug {
+            // 10.0.2.2 è il PC visto dall'emulatore
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
+        }
         release {
+            // segnaposto finché non c'è il dominio di produzione (M9.3)
+            buildConfigField("String", "API_BASE_URL", "\"https://api.geosentinel.dev\"")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -50,5 +56,6 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
