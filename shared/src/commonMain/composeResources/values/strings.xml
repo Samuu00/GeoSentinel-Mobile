@@ -23,7 +23,6 @@
     <string name="placeholder_management_title">Gestione del parco</string>
     <string name="placeholder_management_body">Qui potrai verificare le segnalazioni e gestire sentieri, ticket e rifugi.</string>
     <string name="placeholder_profile_title">Profilo</string>
-    <string name="placeholder_profile_body">Accesso e account arriveranno presto.</string>
     <string name="placeholder_sos_title">Richiesta di soccorso</string>
     <string name="placeholder_sos_body">In caso di pericolo immediato chiama subito il 112.</string>
 
@@ -41,7 +40,65 @@
     <string name="theme_light">Chiaro</string>
     <string name="theme_dark">Scuro</string>
 
-    <!-- Solo debug -->
-    <string name="debug_section">Simula un ruolo</string>
-    <string name="debug_role_hint">Solo nelle build di debug: cambia le voci della barra in basso.</string>
+    <!-- Accesso e registrazione (M2.2) -->
+    <string name="auth_login_title">Accedi</string>
+    <string name="auth_login_body">Con il tuo account puoi segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
+    <string name="auth_email">Email</string>
+    <string name="auth_password">Password</string>
+    <string name="auth_show_password">Mostra</string>
+    <string name="auth_hide_password">Nascondi</string>
+    <string name="auth_login_button">Accedi</string>
+    <string name="auth_no_account">Non hai un account?</string>
+    <string name="auth_register_link">Registrati</string>
+    <string name="auth_have_account">Hai già un account?</string>
+    <string name="auth_login_link">Accedi</string>
+    <string name="auth_register_body">Bastano pochi dati. La data di nascita serve solo a verificare l'età minima e non viene salvata.</string>
+    <string name="auth_register_title">Crea un account</string>
+    <string name="auth_display_name">Nome</string>
+    <string name="auth_birth_date">Data di nascita</string>
+    <string name="auth_birth_date_pick">Apri il calendario</string>
+    <string name="auth_password_rules">Almeno 12 caratteri</string>
+    <string name="auth_register_button">Registrati</string>
+    <string name="auth_confirm">OK</string>
+    <string name="auth_cancel">Annulla</string>
+    <string name="error_login_failed">Email o password non corretti.</string>
+    <string name="error_register_failed">Registrazione non riuscita: l'email potrebbe essere già registrata.</string>
+    <string name="error_field_email">Inserisci un indirizzo email valido.</string>
+    <string name="error_field_password_short">Servono almeno 12 caratteri.</string>
+    <string name="error_field_password_long">Troppo lunga: al massimo 72 byte (le lettere accentate e le emoji ne occupano di più).</string>
+    <string name="error_field_display_name">Il nome deve avere da 2 a 100 caratteri.</string>
+    <string name="error_field_birth_date">Inserisci la data di nascita.</string>
+
+    <!-- Profilo -->
+    <string name="profile_guest_body">Accedi per segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
+    <string name="profile_session_expired">La sessione è scaduta: accedi di nuovo.</string>
+    <string name="profile_account_section">Account</string>
+    <string name="profile_login">Accedi</string>
+    <string name="profile_register">Registrati</string>
+    <string name="profile_logout">Esci</string>
+
+    <!-- Errori dell'API (M1.3): uno per slug della guida all'API, mai il title o il detail del server -->
+    <string name="error_network">Nessuna connessione. Controlla la rete e riprova.</string>
+    <string name="error_unauthorized">La sessione è scaduta. Accedi di nuovo.</string>
+    <string name="error_forbidden">Il tuo profilo non permette questa operazione.</string>
+    <string name="error_not_found">Non trovato: potrebbe essere stato rimosso.</string>
+    <string name="error_validation">Alcuni campi non sono validi. Controlla i dati inseriti.</string>
+    <string name="error_conflict">Qualcun altro ha appena fatto la stessa operazione. Riprova.</string>
+    <string name="error_capacity_exceeded">Non ci sono abbastanza posti liberi nelle date scelte.</string>
+    <string name="error_alert_already_taken">Un altro operatore ha già preso in carico questa allerta.</string>
+    <string name="error_concurrent_modification">Qualcuno l'ha modificato nel frattempo: ricarico i dati aggiornati.</string>
+    <string name="error_resource_busy">Il server è occupato. Riprova tra qualche secondo.</string>
+    <string name="error_account_managed">Gli account del personale si cancellano solo tramite l'amministratore.</string>
+    <string name="error_business_rule">Operazione non consentita.</string>
+    <string name="error_idempotency_key_reused">La richiesta è cambiata rispetto al primo invio. Ripeti l'operazione.</string>
+    <string name="error_age_requirement_not_met">Non è possibile completare la registrazione.</string>
+    <string name="error_media_quota_exceeded">Hai raggiunto lo spazio massimo per le foto.</string>
+    <string name="error_media_unsupported_type">Formato non supportato: usa JPEG, PNG o WebP.</string>
+    <string name="error_media_payload_too_large">La foto supera i 10 MB.</string>
+    <string name="error_precondition_required">Richiesta incompleta. Aggiorna l'app e riprova.</string>
+    <string name="error_rate_limited">Troppe richieste. Riprova tra qualche istante.</string>
+    <string name="error_rate_limited_seconds">Troppe richieste. Riprova tra %1$d secondi.</string>
+    <string name="error_server">Errore del server. Riprova più tardi.</string>
+    <string name="error_generic">Operazione non riuscita. Riprova.</string>
+
 </resources>

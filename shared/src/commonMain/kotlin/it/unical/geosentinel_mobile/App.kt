@@ -41,6 +41,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,8 +80,11 @@ import geosentinel_mobile.shared.generated.resources.placeholder_sos_body
 import geosentinel_mobile.shared.generated.resources.placeholder_sos_title
 import geosentinel_mobile.shared.generated.resources.sos_button
 import geosentinel_mobile.shared.generated.resources.sos_button_description
-import it.unical.geosentinel_mobile.core.config.AppConfig
+import it.unical.geosentinel_mobile.auth.ui.LoginScreen
+import it.unical.geosentinel_mobile.auth.ui.RegisterScreen
+import it.unical.geosentinel_mobile.core.session.SessionManager
 import it.unical.geosentinel_mobile.core.session.UserRole
+import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.PlaceholderScreen
 import it.unical.geosentinel_mobile.core.ui.ProfilePlaceholderScreen
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
@@ -100,16 +104,25 @@ private const val PopMillis = 240
 
 @Composable
 fun App() {
-    val config = koinInject<AppConfig>()
     val themeSettings = koinInject<ThemeSettings>()
+    val session = koinInject<SessionManager>()
+    val sessionState by session.state.collectAsState()
     // null finché DataStore non ha letto il file (pochi ms): meglio un frame vuoto che un lampo del tema sbagliato
     val themeMode by themeSettings.mode.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
-    // In M2 il ruolo arriva dallo StateFlow di SessionManager
-    var role by rememberSaveable { mutableStateOf(UserRole.GUEST) }
+    // Il ruolo arriva dalla sessione (GET /users/me) e decide solo cosa mostrare
+    val role = sessionState.role
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
+
+    // Sessione salvata letta una volta all'avvio (una seconda chiamata non fa nulla)
+    LaunchedEffect(session) { session.restore() }
+    // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa
+    LaunchedEffect(role, destination) {
+        val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
+        if (tab != null && !tab.isVisible(role)) navController.navigate(Route.Map) { popUpTo(navController.graph.findStartDestination().id) }
+    }
 
     val mode = themeMode ?: return
     GeoSentinelTheme(mode) {
@@ -119,6 +132,8 @@ fun App() {
             // che in orizzontale stanno di lato. Vale per contenuto e pulsante SOS.
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
+                // nei form di accesso la barra non serve, e con la tastiera aperta ruberebbe spazio
+                if (destination?.hasRoute<Route.Login>() == true || destination?.hasRoute<Route.Register>() == true) return@Scaffold
                 TabBar(role, destination) { route ->
                     navController.navigate(route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -166,12 +181,34 @@ fun App() {
                 }
                 composable<Route.Profile> {
                     ProfilePlaceholderScreen(
-                        role = role,
-                        // il selettore del ruolo esiste solo in debug (checkpoint M0.4)
-                        showRolePicker = config.isDebug,
-                        onRoleSelected = { role = it },
+                        session = sessionState,
+                        onLogin = { navController.navigate(Route.Login) },
+                        onRegister = { navController.navigate(Route.Register) },
+                        // la pulizia locale avviene comunque, anche se la composizione sparisce (NonCancellable)
+                        onLogout = { scope.launch { session.logout() } },
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
+                    )
+                }
+                composable<Route.Login>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    LoginScreen(
+                        onBack = { navController.popBackStack() },
+                        // la registrazione prende il posto dell'accesso: Indietro torna al Profilo
+                        onRegister = { navController.navigate(Route.Register) { popUpTo<Route.Login> { inclusive = true } } },
+                        onLoggedIn = { navController.popBackStack<Route.Profile>(inclusive = false) },
+                    )
+                }
+                composable<Route.Register>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    RegisterScreen(
+                        onBack = { navController.popBackStack() },
+                        onLogin = { navController.navigate(Route.Login) { popUpTo<Route.Register> { inclusive = true } } },
+                        onRegistered = { navController.popBackStack<Route.Profile>(inclusive = false) },
                     )
                 }
                 // Schermata "spinta" sopra la mappa: entra da destra e copre tutto (ha uno sfondo pieno)

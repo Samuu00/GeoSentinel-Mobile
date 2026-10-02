@@ -4,12 +4,15 @@ import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -29,8 +32,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -54,13 +58,17 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.back
-import geosentinel_mobile.shared.generated.resources.debug_role_hint
-import geosentinel_mobile.shared.generated.resources.debug_section
-import geosentinel_mobile.shared.generated.resources.placeholder_profile_body
+import geosentinel_mobile.shared.generated.resources.profile_account_section
+import geosentinel_mobile.shared.generated.resources.profile_guest_body
+import geosentinel_mobile.shared.generated.resources.profile_login
+import geosentinel_mobile.shared.generated.resources.profile_logout
+import geosentinel_mobile.shared.generated.resources.profile_register
+import geosentinel_mobile.shared.generated.resources.profile_session_expired
 import geosentinel_mobile.shared.generated.resources.role_admin
 import geosentinel_mobile.shared.generated.resources.role_guest
 import geosentinel_mobile.shared.generated.resources.role_hiker
@@ -71,7 +79,9 @@ import geosentinel_mobile.shared.generated.resources.theme_light
 import geosentinel_mobile.shared.generated.resources.theme_section
 import geosentinel_mobile.shared.generated.resources.theme_system
 import geosentinel_mobile.shared.generated.resources.theme_title
+import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
+import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.StringResource
@@ -140,9 +150,9 @@ fun PlaceholderScreen(
     }
 }
 
-// Le schermate "spinte" (es. SOS) hanno il loro Indietro: su iPhone non c'è un tasto di sistema
+// Le schermate "spinte" (es. SOS, accesso) hanno il loro Indietro: su iPhone non c'è un tasto di sistema
 @Composable
-private fun BackButton(onBack: () -> Unit) {
+internal fun BackButton(onBack: () -> Unit) {
     Row(
         modifier = Modifier
             .heightIn(min = 48.dp)
@@ -162,12 +172,14 @@ private fun BackButton(onBack: () -> Unit) {
 
 @Composable
 fun ProfilePlaceholderScreen(
-    role: UserRole,
-    showRolePicker: Boolean,
-    onRoleSelected: (UserRole) -> Unit,
+    session: SessionState,
+    onLogin: () -> Unit,
+    onRegister: () -> Unit,
+    onLogout: () -> Unit,
     themeMode: ThemeMode,
     onThemeModeSelected: (ThemeMode) -> Unit,
 ) {
+    val profile = (session as? SessionState.LoggedIn)?.profile
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -194,17 +206,73 @@ fun ProfilePlaceholderScreen(
                 }
             }
             Spacer(Modifier.size(48.dp))
+            // Loggato: nome, poi ruolo ed email. Ospite: "Ospite" e cosa si guadagna accedendo.
             Text(
-                text = stringResource(role.label()),
+                text = profile?.displayName ?: stringResource(session.role.label()),
                 style = MaterialTheme.typography.headlineSmall,
                 modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() },
             )
             Text(
-                text = stringResource(Res.string.placeholder_profile_body),
+                text = when {
+                    profile != null -> stringResource(profile.role.label()) + " · " + profile.email
+                    session is SessionState.LoggedIn -> "" // profilo non ancora letto (offline)
+                    session is SessionState.Expired -> stringResource(Res.string.profile_session_expired)
+                    else -> stringResource(Res.string.profile_guest_body)
+                },
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
             )
+
+            if (session is SessionState.LoggedIn) {
+                SectionHeader(Res.string.profile_account_section)
+                Card {
+                    // Riga come quella del tema; "Esci" è un'uscita, non un errore: verde pino, non prugna
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable(role = Role.Button, onClick = onLogout)
+                            .padding(horizontal = 16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            stringResource(Res.string.profile_logout),
+                            style = MaterialTheme.typography.bodyLarge,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                }
+            } else {
+                // Ospite: due capsule compatte affiancate, l'azione principale piena e la secondaria solo bordo.
+                // FlowRow: con il testo ingrandito la seconda va a capo invece di tagliarsi.
+                Spacer(Modifier.size(20.dp))
+                FlowRow(
+                    modifier = Modifier.padding(horizontal = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                ) {
+                    Button(
+                        onClick = onLogin,
+                        shape = CircleShape,
+                        contentPadding = PaddingValues(horizontal = 28.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(stringResource(Res.string.profile_login), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                    OutlinedButton(
+                        onClick = onRegister,
+                        shape = CircleShape,
+                        // outline e non outlineVariant: il bordo di un pulsante deve vedersi (3:1)
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
+                        contentPadding = PaddingValues(horizontal = 28.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(stringResource(Res.string.profile_register), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
 
             SectionHeader(Res.string.theme_section)
             Card {
@@ -217,21 +285,6 @@ fun ProfilePlaceholderScreen(
                 }
             }
 
-            if (showRolePicker) {
-                SectionHeader(Res.string.debug_section)
-                Card(Modifier.selectableGroup()) {
-                    UserRole.entries.forEachIndexed { index, r ->
-                        if (index > 0) HorizontalDivider(Modifier.padding(start = 16.dp), thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
-                        CheckRow(stringResource(r.label()), selected = r == role, onClick = { onRoleSelected(r) })
-                    }
-                }
-                Text(
-                    text = stringResource(Res.string.debug_role_hint),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp),
-                )
-            }
             Spacer(Modifier.size(32.dp))
         }
     }
@@ -258,22 +311,6 @@ private fun SectionHeader(text: StringResource) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(start = 4.dp, top = 28.dp, bottom = 10.dp).semantics { heading() },
     )
-}
-
-// Riga di scelta singola: la spunta a destra indica quella attiva
-@Composable
-private fun CheckRow(text: String, selected: Boolean, onClick: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 52.dp)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(horizontal = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
-        if (selected) Icon(Icons.Filled.Check, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-    }
 }
 
 // ---- Selettore del tema: capsula con tre simboli e un cursore che scorre ----

@@ -2,7 +2,6 @@ package it.unical.geosentinel_mobile
 
 import androidx.compose.ui.window.ComposeUIViewController
 import it.unical.geosentinel_mobile.core.config.AppConfig
-import it.unical.geosentinel_mobile.core.di.PREFERENCES_FILE_NAME
 import it.unical.geosentinel_mobile.core.di.initKoin
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSBundle
@@ -21,7 +20,7 @@ fun MainViewController(): UIViewController {
         ?: error("API_BASE_URL mancante in Info.plist")
     initKoin(
         config = AppConfig(apiBaseUrl = apiBaseUrl, isDebug = Platform.isDebugBinary),
-        preferencesPath = documentsPath() + "/" + PREFERENCES_FILE_NAME,
+        filesDir = documentsPath(),
     )
     return ComposeUIViewController { App() }
 }

@@ -9,7 +9,9 @@
 > ruolo, pulsante SOS, schermate segnaposto, safe area anche in orizzontale. Checkpoint ancora aperti di M0:
 > Accessibility Scanner (M0.4), job verdi su una PR di prova e verifica sul simulatore iPhone (M0.5). La parte iOS
 > si compila per la prima volta nel job `ios` della CI.
-> Prossimo: aprire la PR di prova per chiudere M0.5, poi la catena di review di M0 (§6) e M1.1.
+> **M1 fatta** (02/10): client generato in `:apiClient`, enum tolleranti ai valori nuovi, `HttpClient` condiviso
+> con refresh, retry e log, `ApiError` dallo slug con i messaggi in `strings.xml`; 22 test con `MockEngine`.
+> Prossimo: la catena di review di M1 (§6), poi M2.
 
 ---
 
@@ -74,6 +76,14 @@ Non sono bug del backend, sono cose che l'app vorrebbe e l'API oggi non dà:
 - **Nessun elenco "le mie segnalazioni"** né "pericoli vicino a me": i pericoli si leggono solo per sentiero
   (`/hazards/trail/{trailId}`).
 - **I rifugi richiedono il login** (`/refuges/**` non è pubblico): l'ospite non li vede sulla mappa.
+- **Risposta del refresh persa: risolto nel backend il 02/10** (ADR-0019 del backend, migration V10). Se la
+  connessione cade dopo che il server ha ruotato il refresh token, l'app può riprovare con lo stesso token entro
+  **60 secondi**, purché il successore non sia mai stato usato: il server emette una coppia nuova e invalida quella
+  persa. Fuori dalla finestra, o se il successore è già stato usato o revocato (logout, cambio password), resta la
+  revoca della famiglia. Un furto dentro la finestra viene scoperto al primo refresh dell'app legittima.
+  Lato app (M2.2) non serve codice in più, basta non rompere questo: su un errore di rete `refreshTokens` restituisce
+  null **e non tocca i token salvati**; il plugin `Auth` tiene il refresh token vecchio e al 401 successivo ci riprova
+  da solo, di solito dentro la finestra. Un 401 del refresh resta "sessione scaduta, accedi di nuovo".
 - **L'SOS richiede il login.** Un ospite, o un utente con la sessione scaduta (oltre i 30 giorni) e senza rete, non
   può lanciarlo: per questo c'è sempre il pulsante "Chiama 112" (M6).
 
@@ -350,10 +360,45 @@ fun createHttpClient(config: AppConfig, session: SessionManager, engine: HttpCli
   richieste con `Idempotency-Key`).
 - `HttpTimeout`: connessione 10 s, richiesta 30 s (l'upload ha il suo timeout, M4).
 - `Logging` solo in debug, con l'header `Authorization` oscurato.
-- Checkpoint (`commonTest` con `MockEngine`):
-  - [ ] un 401 seguito da un refresh riuscito ripete la richiesta originale una volta.
-  - [ ] due richieste parallele che ricevono 401 fanno **un solo** refresh.
-  - [ ] un 429 con `Retry-After: 2` si ripete dopo almeno 2 s (tempo virtuale); un 422 no.
+- Fatto il 02/10:
+  - **Firma reale:** `HttpClientFactory.createHttpClient(config, sessionRepository, engine)`. Al posto di
+    `SessionManager` (M2.2) il client dipende da un'interfaccia minima, `SessionRepository` (`core/session/
+    SessionModels.kt`): `getTokens()`, `refreshTokens(refreshToken): AuthTokens?`, `clearSession()`. In M2
+    `SessionManager` la implementa.
+  - **Enum:** template personalizzato (la prima strada). Con `enumUnknownDefaultCase=true` (in
+    `additionalProperties`: in `configOptions` è ignorato) ogni enum ha un ultimo caso `unknown_default_open_api`;
+    `apiClient/templates/data_class.mustache` è il template di 7.14.0 con il serializer che ci ripiega anche in
+    `multiplatform` (blocchi marcati "GeoSentinel"). Gli enum sono tutti incorporati nei modelli, quindi
+    `typeMappings` a `String` non era applicabile. Quando si aggiorna il generatore il template va ricopiato dal jar
+    e ripatchato. Nei `when` dell'app il caso sconosciuto va gestito (es. ruolo sconosciuto → vista da `HIKER`).
+  - **Refresh:** `SessionRepository.refreshTokens` svuota la sessione **solo** su un 401: un errore di rete
+    restituisce null e l'utente resta loggato (in montagna la rete va e viene, e senza sessione non c'è SOS). Il
+    plugin fa un refresh alla volta dentro il client; fuori dal client serve il `Mutex` del repository (M2.2).
+  - **Dove vale il plugin `Auth`** (dalla review di sicurezza di M1): su un 401 di una richiesta partita senza token,
+    Ktor la **rimanda con il token**. Per questo il plugin `AuthScope`, installato prima di `Auth`, mette
+    `AuthCircuitBreaker` su ogni richiesta che non va al backend (schema, host **e porta** di `apiBaseUrl`) e su
+    `/auth/login`, `/auth/register`, `/auth/refresh`. Lì niente bearer, niente richiesta ripetuta, niente refresh:
+    un 401 del login (password sbagliata) è definitivo e non consuma il refresh token. Così anche login e refresh
+    possono usare il client condiviso: un solo client autenticato per tutta l'app. `/auth/logout` il bearer lo vuole
+    e lo riceve.
+  - **Redirect:** `followRedirects = false` (l'API non ne fa).
+  - **Retry:** lo slug sta nel body, che `retryIf` non può leggere; tra i 409 il backend manda `Retry-After` solo con
+    `resource-busy`, quindi si ritentano 429, 409 e 503 **solo se c'è `Retry-After`**, e solo fino a 10 s
+    (`MAX_RETRY_AFTER_SECONDS`): oltre, il 429 arriva alla UI con il tempo d'attesa (login bloccato, M2.2). Errori di
+    rete: solo GET, PUT e DELETE o richieste con `Idempotency-Key`; mai una cancellazione.
+  - **Log:** Kermit, solo in debug, `Authorization` oscurato; non si loggano le richieste con `lat`, `lon` o `bbox`
+    nell'URL, né `/devices` (il token push sta nel path) né `/auth/`.
+  - `Content-Type` lo mette il client generato sulle richieste con body; `coerceInputValues` non si usa.
+- Checkpoint (`commonTest` con `MockEngine`, `core/network/HttpClientTest.kt`):
+  - [x] un 401 seguito da un refresh riuscito ripete la richiesta originale una volta.
+  - [x] due richieste parallele che ricevono 401 fanno **un solo** refresh.
+  - [x] un 429 con `Retry-After: 2` si ripete dopo almeno 2 s (tempo virtuale); un 422 no.
+  - [x] in più: 409 `resource-busy` ritentato e 409 senza `Retry-After` no; `Retry-After` oltre 10 s non
+    ritentato; errore di rete ritentato solo su GET o con `Idempotency-Key`; niente token verso altri host; refresh
+    senza token nuovi → resta il 401 e il client non svuota la sessione; ruolo sconosciuto →
+    `unknown_default_open_api`; dopo la review: niente token su un'altra porta, un 401 da un altro host o dal login
+    non fa rimandare la richiesta né partire il refresh, i redirect non si seguono (14 test). Verificato anche
+    rompendo apposta il codice: i test falliscono (02/10).
 
 **M1.3 Errori**
 ```kotlin
@@ -377,9 +422,27 @@ suspend fun <T> apiCall(block: suspend () -> T): Result<T>   // ProblemDetail ->
 ```
 - Lo slug è l'ultima parte di `type` (`https://geosentinel.dev/problems/<slug>`). Ogni slug della tabella della guida
   all'API ha un messaggio italiano in `strings.xml`.
-- Checkpoint:
-  - [ ] un test per ogni slug della guida: il `ProblemDetail` finisce nel ramo giusto di `ApiError`.
-  - [ ] i messaggi per campo di un errore di validazione (`errors[]`) arrivano fino al form.
+- Fatto il 02/10 (firma cambiata):
+  - `suspend fun <T : Any> apiCall(block: suspend () -> HttpResponse<T>): Result<T>`, con l'`HttpResponse` del
+    client generato. Il client generato non lancia eccezioni sui 4xx/5xx: l'errore si legge da `success = false`.
+    Il fallimento è un `ApiException(error: ApiError)`. Solo `IOException` (timeout compresi, anche durante la
+    lettura del body) diventa `Network`; la cancellazione si propaga; un 2xx che non si deserializza lancia
+    `ContractViolationException`, senza la causa: il messaggio di kotlinx.serialization contiene un pezzo del JSON
+    ricevuto (email, posizione). Anche il messaggio di `ApiException` ha solo il tipo e il `traceId`.
+  - Il body si decodifica nel `ProblemDetail` **generato** (`errors[]` ha `field` e `message`), dal testo:
+    `ContentNegotiation` non gestisce `application/problem+json`. Senza body valido (es. proxy) decide lo status.
+  - Lo status sceglie il ramo (ogni slug della guida ha uno status fisso), lo slug lo precisa; `title` e `detail` mai.
+  - Messaggi: `suspend fun ApiError.userMessage(): String` (dal ViewModel) e `messageResource()`. Slug e status non
+    si mostrano all'utente. Nei test host si verifica `messageResource()`: `getString` sulla JVM non ha le risorse
+    Android.
+- Checkpoint (`commonTest`, `core/network/ApiErrorTest.kt`, 12 test, 02/10):
+  - [x] un test per ogni slug della guida: il `ProblemDetail` finisce nel ramo giusto di `ApiError`, e ogni slug ha
+    il suo messaggio (uno slug sconosciuto ha quello generico del ramo).
+  - [ ] i messaggi per campo di un errore di validazione (`errors[]`) arrivano fino al form. Fino a `apiCall` sì
+    (`Validation.fieldErrors`, testato con `MockEngine`); il form arriva in M2.2 e il checkpoint si chiude lì.
+  - [x] in più: 2xx → successo; `Retry-After` portato in `RateLimited`; pagina HTML di un proxy → `Server`;
+    `IOException` → `Network`; la cancellazione si propaga; un 2xx fuori contratto non diventa `ApiException`.
+    Verificato rompendo apposta il codice: i test falliscono.
 
 ### Milestone 2: sessione e account
 
@@ -393,12 +456,35 @@ expect class SecureTokenStore {
 }
 data class StoredTokens(val accessToken: String, val refreshToken: String, val accessExpiresAt: Instant)
 ```
-- Android: chiave AES-GCM nel Keystore (`AndroidKeyStore`), token cifrati in DataStore.
+- Android: chiave AES-GCM nel Keystore (`AndroidKeyStore`), token cifrati in DataStore. Il file dei token va
+  **escluso dal backup** (`android:dataExtractionRules` e `fullBackupContent`; oggi `allowBackup="true"`): la chiave
+  del Keystore non si salva, e dopo un ripristino i token cifrati non si leggerebbero più (review di M1).
   iOS: Keychain con `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly`.
+- Fatto il 02/10 (firma cambiata):
+  - `interface SecureTokenStore { read(): AuthTokens?; write(AuthTokens); clear() }` invece di `expect class`: in
+    M2.2 `SessionManager` si testa in commonTest con un fake. Le implementazioni arrivano da
+    `internal expect fun createSecureTokenStore(filesDir)`, registrata in Koin. Un solo tipo per i token,
+    `AuthTokens` (in `SessionModels.kt`), con `accessExpiresAt` non nullo come in `TokenResponse`; il suo
+    `toString()` non stampa i token. `StoredToken`/`StoredTokens` non esistono più.
+  - `initKoin(config, filesDir)`: la piattaforma passa la cartella dei dati, i nomi dei file li decide `shared`.
+  - Android (`AndroidSecureTokenStore`): AES-256-GCM con la chiave `geosentinel_session` nell'Android Keystore, IV in
+    testa al testo cifrato, tutto in un DataStore a parte (`geosentinel.session.preferences_pb`), su
+    `Dispatchers.IO`. Il file è escluso dal backup e dal trasferimento (`data_extraction_rules.xml`, Android 12+;
+    `backup_rules.xml`, fino ad Android 11). Se i dati non si decifrano più (chiave diversa dopo un ripristino,
+    file rovinato) `read()` li cancella e restituisce null: niente crash, si rifà il login.
+  - iOS (`KeychainTokenStore`): una voce `kSecClassGenericPassword` con
+    `kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly` (leggibile dopo il primo sblocco anche per le push, mai nei
+    backup); scrittura = delete + add. Compilata solo nel job `ios` della CI.
+  - Test: `TokenCodecTest` (commonTest), `AndroidSecureTokenStoreTest` (JVM, chiave software, storage Okio perché
+    su Windows lo storage di default non sostituisce il file alla seconda scrittura) e
+    `AndroidSecureTokenStoreDeviceTest` sull'emulatore con il Keystore vero
+    (`./gradlew :shared:connectedAndroidDeviceTest`; albero separato da commonTest, nomi senza spazi per D8).
 - Checkpoint:
-  - [ ] dopo un riavvio dell'app la sessione c'è ancora; dopo `clear()` no.
-  - [ ] il file di DataStore su Android non contiene il token in chiaro (`adb shell run-as` e `strings`).
-  - [ ] Keychain verificato su simulatore iOS (serve il Mac).
+  - [x] dopo un riavvio dell'app la sessione c'è ancora; dopo `clear()` no (host test, 02/10).
+  - [x] il file di DataStore su Android non contiene il token in chiaro: verificato sul file vero
+    nell'emulatore `Medium_Phone` con il Keystore (device test) e sulla JVM (02/10). Verificato anche rompendo
+    apposta la cifratura: i test falliscono.
+  - [ ] Keychain verificato su simulatore iOS (serve il Mac); la compilazione si vede nel job `ios`.
 
 **M2.2 `SessionManager` e login**
 ```kotlin
@@ -410,15 +496,50 @@ class SessionManager(store: SecureTokenStore, authApi: AuthApi, usersApi: UsersA
 }
 ```
 - Dopo login e registrazione si chiama `getMyProfile`: il ruolo per la UI arriva da lì, non dal JWT.
+- **Cache dei token del client** (dalla review di M1): il plugin `Auth` tiene in memoria i token di `loadTokens`.
+  Dopo login, logout, cambio password e `clearSession()` va chiamato
+  `client.authProvider<BearerAuthProvider>()?.clearToken()`. Altrimenti dopo un nuovo login partono i token del
+  primo utente, e al primo 401 il plugin manda un refresh token già sostituito: il server lo vede riusato e revoca
+  la sessione. Test: "dopo il login, la richiesta successiva manda il bearer nuovo".
+- **Un refresh alla volta in tutta l'app:** `SessionManager` implementa `SessionRepository` con un `Mutex` attorno a
+  `refreshTokens`; dentro il lock rilegge i token salvati e, se sono già cambiati, li restituisce senza chiamare il
+  server. Un solo `SessionManager` (singleton Koin) e un solo `HttpClient` autenticato (outbox, Coil e
+  `createUploadRequest` compresi; lo storage MinIO ha il suo client senza `Auth`, M4.2). Test: due `refreshTokens`
+  in parallelo fuori dal client → una sola chiamata al server.
+- **Login, registrazione e refresh** passano dal client condiviso (il plugin `Auth` lì è spento, M1.2). Il refresh
+  non ha retry automatico di `HttpRequestRetry` (POST senza `Idempotency-Key`: va mantenuto così); il nuovo tentativo
+  dopo una risposta persa lo fa il plugin `Auth` al 401 successivo, coperto dal periodo di grazia del backend (§1).
+- **Enum sconosciuti:** un DTO ricevuto con `unknown_default_open_api` non si rimanda al server così com'è (il server
+  risponderebbe 400); nei `when` il caso sconosciuto si gestisce (es. ruolo sconosciuto → vista da `HIKER`).
 - **Logout nell'ordine del contratto:** `unregisterDevice` (se c'è un token push), poi `logout`, poi `clear()` locale,
   anche se la rete non risponde.
 - Registrazione: data di nascita con un date picker; la soglia di età la controlla il server (422
   `age-requirement-not-met`, messaggio neutro). Password da 12 caratteri a 72 byte UTF-8, controllata anche in locale
   contando i byte, non i caratteri.
-- Checkpoint (contro il backend locale, utenti del seed):
-  - [ ] login di `hiker@geosentinel.dev` → barra da `HIKER`; con `rescuer@` compare "Allerte".
-  - [ ] password sbagliata 11 volte → il messaggio del limite (429) con il tempo d'attesa.
-  - [ ] dopo il logout la sessione locale è vuota e il token push non è più registrato.
+- Fatto il 02/10 (firma cambiata):
+  - `SessionManager(store, httpClient: () -> HttpClient, apiBaseUrl, pushToken = { null })`: crea da sé
+    `AuthenticationApi`, `UserProfileApi`, `DevicesApi`; il client arriva come funzione perché il client usa
+    `SessionManager` per i token (in Koin niente ciclo). Stati: `Loading | Anonymous | LoggedIn(profile?) | Expired`;
+    `profile` null = sessione salvata ma profilo non letto (avvio offline: vista da `HIKER`, l'SOS resta possibile).
+    `SessionState.role` dà il ruolo per la barra; un ruolo sconosciuto diventa `HIKER`. `restore()` all'avvio.
+    `clearSession()` tolta da `SessionRepository`: la sessione la chiude solo `SessionManager`.
+  - Refresh: `Mutex` + rilettura dello store; solo un 401 chiude la sessione (`Expired`); rete, 429 e 5xx lasciano i
+    token. Login e registrazione svuotano la cache del plugin `Auth` (`clearToken`). Logout: `unregisterDevice` (in
+    M7, quando c'è il token push), `logout`, pulizia locale in `NonCancellable`.
+  - UI: `LoginScreen`/`RegisterScreen` (`auth/ui`, ViewModel con `UiState` e `UiMessage` come risorsa), rotte
+    `Login`/`Register` spinte senza barra in basso, Profilo legato alla sessione (Accedi/Crea un account/Esci,
+    "sessione scaduta"). Il selettore del ruolo di debug di M0.4 è stato tolto. Password: minimo 12 in unità UTF-16
+    (come `@Size` di Java), massimo 72 byte UTF-8 (`auth/data/PasswordRules`). Gli errori per campo del server
+    arrivano al form con messaggi italiani nostri; 401 sul login = "Email o password non corretti".
+  - Test: `SessionManagerTest` (17), `AuthViewModelsTest` (10), `PasswordRulesTest` (3), con il backend finto di
+    `SessionTestSupport`. Verificati anche rompendo apposta `clearToken` e il controllo dei token già rinnovati.
+- Checkpoint (contro il backend locale, utenti del seed, emulatore `Medium_Phone`, 02/10):
+  - [x] login di `hiker@geosentinel.dev` → barra da `HIKER` (Mappa, Rifugi, Profilo); con `rescuer@` compare
+    "Allerte".
+  - [x] password sbagliata 11 volte → "Troppe richieste. Riprova tra 67 secondi." (429 con `Retry-After`).
+  - [x] dopo il logout la sessione locale è vuota (file della sessione a 0 byte) e si torna ospiti. Da loggati il file
+    è di 468 byte cifrati, senza stringhe leggibili né JWT.
+  - [ ] il token push non è più registrato dopo il logout: si verifica in M7, quando le push esistono.
 
 **M2.3 Profilo e cancellazione dell'account**
 - `getMyProfile`, `updateMyProfile` (nome visualizzato), `changeMyPassword` (salva i token nuovi che restituisce),

@@ -35,9 +35,9 @@ kotlin {
         withHostTest {
             isIncludeAndroidResources = true
         }
-        withDeviceTestBuilder {
-            sourceSetTreeName = "test"
-        }.configure {
+        // Albero separato da commonTest: i test comuni girano già sulla JVM e su iOS, e i loro nomi con gli
+        // spazi non passano da D8 sotto Android 11 (minSdk 24)
+        withDeviceTestBuilder {}.configure {
             instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
     }
@@ -88,6 +88,12 @@ kotlin {
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.turbine)
             implementation(libs.ktor.client.mock)
+        }
+        // test sull'emulatore: ./gradlew :shared:connectedAndroidDeviceTest (Keystore vero, M2.1)
+        getByName("androidDeviceTest").dependencies {
+            implementation(libs.kotlin.testJunit)
+            implementation(libs.androidx.testRunner)
+            implementation(libs.androidx.testExt.junit)
         }
     }
 }

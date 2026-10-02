@@ -9,8 +9,10 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 sull'emulatore contro il backend locale), tema "foresta" chiaro/scuro selezionabile, navigazione per ruolo, Koin,
 safe area, CI con Dependabot. Checkpoint aperti: Accessibility Scanner (M0.4), job verdi su una PR di prova e
 simulatore iPhone (M0.5). iOS si compila per la prima volta nella CI.
-M1.1 fatta: modulo `:apiClient` con il client generato da `api/openapi.json` (allineato al backend), usato da
-`shared`; resta da vedere il job `ios` verde. Prossimo: M1.2 (`HttpClient` condiviso, con la decisione sugli enum).
+M1 fatta (client generato, `HttpClient` condiviso, `ApiError`). M2.1 e M2.2 fatte: `SecureTokenStore` (Keystore +
+DataStore cifrato, Keychain), `SessionManager` con login, registrazione, logout e refresh unico, schermate di accesso
+e Profilo legato alla sessione, verificati sull'emulatore contro il backend locale. Restano il job `ios` verde e il
+Keychain sul simulatore. Prossimo: M2.3 (profilo e cancellazione dell'account).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -37,12 +39,12 @@ M1.1 fatta: modulo `:apiClient` con il client generato da `api/openapi.json` (al
 | Stile | Tema "foresta" minimale, uguale su Android e iOS (§2 del piano): token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
 | Architettura | Package per feature in `shared`, ognuna con `data` (repository) e `ui` (Screen + ViewModel). Niente strato `domain` vuoto |
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
-| Rete | Client generato da openapi-generator 7.14 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
+| Rete | Client generato da openapi-generator 7.14 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Enum generati con un ultimo caso `unknown_default_open_api` (template `apiClient/templates/data_class.mustache`, da ripatchare quando si aggiorna il generatore). Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
 | Errori | `sealed interface ApiError` costruito dallo slug (`type`) del `ProblemDetail`, mai da `title` o `detail` |
 | DI | Koin, avviato una volta per processo con `initKoin(config, preferencesPath)`: in `GeoSentinelApplication` (Android) e in `MainViewController` (iOS), mai in `MainActivity` |
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
 | Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox; DataStore per le preferenze |
-| Sessione | `SecureTokenStore` expect/actual: Keystore su Android, Keychain su iOS |
+| Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS. Token in `AuthTokens`, il cui `toString` non li stampa |
 | Mappa | MapLibre Compose con tile OpenFreeMap |
 | Piattaforma | Posizione, ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
@@ -80,7 +82,8 @@ shared/src/
 - **`Idempotency-Key` per azione dell'utente**, salvata nell'outbox prima della richiesta e cancellata solo con una
   risposta definitiva (2xx o 4xx non ritentabile).
 - **Dispatcher:** sul main thread solo la UI; rete e database su `Dispatchers.IO` (`Default` dove IO non esiste).
-- **Enum:** un valore nuovo dal server non deve far crashare l'app.
+- **Enum:** un valore nuovo dal server non deve far crashare l'app: arriva come `unknown_default_open_api` e i `when` lo gestiscono.
+- **Token:** il bearer va solo a schema, host e porta di `apiBaseUrl`; su `/auth/login`, `/auth/register`, `/auth/refresh` e verso altri host il plugin `Auth` è spento (`AuthScope`). Un solo `HttpClient` autenticato; il refresh token vale una volta sola, quindi un refresh alla volta in tutta l'app (`Mutex` nel repository). La sessione si svuota solo su un 401 del refresh, mai per un errore di rete.
 - **Interfaccia:**
   - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezione: `EmergencyRed`);
   - il rosso solo per SOS e pericoli `CRITICAL`; gli errori usano il ruolo `error` del tema (prugna);
@@ -99,6 +102,7 @@ shared/src/
 ```bash
 ./gradlew :androidApp:assembleDebug        # build Android
 ./gradlew :shared:testAndroidHostTest      # test di shared sulla JVM
+./gradlew :shared:connectedAndroidDeviceTest  # test sull'emulatore acceso (Keystore vero), nomi senza spazi
 ./gradlew :shared:clean                    # se dopo aver tolto stringhe la build dà "Unresolved reference _collect..."
 ./gradlew :apiClient:checkApiContract      # il contratto in api/ è ancora uguale a quello del backend?
 ./gradlew :apiClient:openApiGenerate       # rigenera il client a mano (di solito parte da solo con la build)

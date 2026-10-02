@@ -27,6 +27,12 @@ val generateApiClient = tasks.named<GenerateTask>("openApiGenerate") {
             "sourceFolder" to "src/commonMain/kotlin",
         ),
     )
+    // ogni enum ha un ultimo caso unknown_default_open_api per i valori nuovi del server (M1.2)
+    additionalProperties.set(mapOf("enumUnknownDefaultCase" to "true"))
+    // data_class.mustache di openapi-generator 7.14.0 con il serializer per il caso sconosciuto anche in
+    // multiplatform (il template originale lo mette solo con kotlinx_serialization). Quando si aggiorna il
+    // generatore va ricopiato dal jar nuovo e ripatchato: i due blocchi sono marcati "GeoSentinel"
+    templateDir.set(layout.projectDirectory.dir("templates").asFile.path)
     // kotlinx.datetime.Instant è deprecato da datetime 0.7: le date-ora usano kotlin.time.Instant
     typeMappings.set(mapOf("DateTime" to "kotlin.time.Instant"))
     // solo il codice: niente test, documentazione o file di progetto generati

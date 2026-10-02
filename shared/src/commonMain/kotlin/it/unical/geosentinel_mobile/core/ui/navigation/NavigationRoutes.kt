@@ -24,6 +24,9 @@ sealed interface Route {
     @Serializable data object Management : Route
     @Serializable data object Profile : Route
     @Serializable data object SosEmergency : Route
+    // "spinte" sopra il Profilo, senza barra in basso
+    @Serializable data object Login : Route
+    @Serializable data object Register : Route
 }
 
 data class BottomNavItem(
