@@ -4,11 +4,12 @@
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
 > **Stato (02/10/2026):** il backend è completo (da M0 a M7, `./mvnw clean verify` verde due volte, 42 unit + 104 IT).
-> App: **M0.1–M0.4 completate** (convenzioni e dipendenze l'01/10; configurazione per ambiente, tema, navigazione e
-> Koin il 02/10). Di M0.4 resta aperto solo il passaggio con Accessibility Scanner. L'app ha la shell completa:
-> tema "foresta" chiaro/scuro selezionabile, barra in basso per ruolo, pulsante SOS, schermate segnaposto.
-> Parte iOS scritta ma non ancora compilata (serve il Mac o la CI di M0.5).
-> Prossimo task: M0.5 (CI); la generazione del client (M1.1) dopo la chiusura di M0.
+> App: **M0.1–M0.5 scritte** (convenzioni e dipendenze l'01/10; configurazione per ambiente, tema, navigazione,
+> Koin e CI il 02/10). L'app ha la shell completa: tema "foresta" chiaro/scuro selezionabile, barra in basso per
+> ruolo, pulsante SOS, schermate segnaposto, safe area anche in orizzontale. Checkpoint ancora aperti di M0:
+> Accessibility Scanner (M0.4), job verdi su una PR di prova e verifica sul simulatore iPhone (M0.5). La parte iOS
+> si compila per la prima volta nel job `ios` della CI.
+> Prossimo: aprire la PR di prova per chiudere M0.5, poi la catena di review di M0 (§6) e M1.1.
 
 ---
 
@@ -137,6 +138,9 @@ mentre è aperta la scheda Mappa resta attiva. Per l'ospite la schermata propone
 ```
 GeoSentinel-Mobile/
 ├── CLAUDE.md                     # regole del progetto (M0.1)
+├── .github/
+│   ├── workflows/ci.yml          # job android, ios, secrets (M0.5)
+│   └── dependabot.yml            # aggiornamenti settimanali di Gradle e GitHub Actions (M0.5)
 ├── api/openapi.json              # copia del contratto del backend (M1.1)
 ├── apiClient/                    # client generato (M1.1), mai modificato a mano
 ├── docs/MASTER_PLAN.md
@@ -295,10 +299,34 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
   Gradle 9.5, si usa la CLI (jar) da uno script e si committa l'output in `:apiClient`.
 - Controlla cosa genera per gli enum (`role`, `status`...), per `availableBedsPerNight` (mappa data → posti),
   `formFields` (oggetto libero), i `PagedModel*` e `ProblemDetail`.
+- Fatto il 02/10:
+  - **Generazione:** plugin `org.openapi.generator` 7.14.0, compatibile con Gradle 9.5 e con la configuration cache.
+    Il codice si genera in `apiClient/build/generated/openapi` a ogni build, quando il contratto cambia, e **non si
+    committa**. `openApiGenerate` parte da solo prima della compilazione. `inputSpec` è un URI `file:///`: su Windows
+    il percorso `C:\...` viene letto come un URI non valido. Il modulo compila solo `src/commonMain/kotlin`; il
+    `build.gradle.kts` generato (Ktor 3.1, datetime 0.6) si ignora e valgono le versioni del catalogo.
+  - **Contratto:** la copia in `api/` era già uguale a quella del backend nel contenuto (59 operazioni, 47 schemi,
+    OpenAPI 3.1); cambiano solo i fine riga.
+  - **Cosa genera** (12 classi `*Api`, 47 modelli):
+    - date-ora: `kotlin.time.Instant` (con `typeMappings`: `kotlinx.datetime.Instant` è deprecato da datetime 0.7);
+      date: `kotlinx.datetime.LocalDate`;
+    - `availableBedsPerNight`: `Map<String, Int>`, con la data come stringa (va convertita nel repository, M5);
+    - `formFields`: `Map<String, String>`;
+    - `PagedModel*`: `content` + `page: PageMetadata`, dove `size` diventa `propertySize`;
+    - `ProblemDetail`: `type: String` (lo slug), `errors: List<FieldError>?`, `traceId`;
+    - header: `Idempotency-Key` e `If-Match` sono parametri dei metodi;
+    - ogni `*Api` ha un costruttore `(baseUrl, httpClient)`: in M1.2 si passa il client condiviso;
+    - **enum rigidi** (es. `UserProfileResponse.Role`): un valore nuovo fa fallire la deserializzazione. L'opzione
+      `enumUnknownDefaultCase` è ignorata dal template `multiplatform`. Da decidere in M1.2.
+  - `shared` dipende da `:apiClient`: la CI compila così il client per Android e `iosSimulatorArm64`.
 - Checkpoint:
-  - [ ] `:apiClient` compila per Android e per `iosSimulatorArm64` (in CI).
-  - [ ] i campi `required` del contratto non sono nullable nelle classi generate (es. `TrailSummaryResponse.name`).
-  - [ ] uno script o un task Gradle segnala se `api/openapi.json` è diverso da quello del backend.
+  - [ ] `:apiClient` compila per Android e per `iosSimulatorArm64` (in CI). Android verde in locale (02/10); iOS si
+    vede nel job `ios`.
+  - [x] i campi `required` del contratto non sono nullable nelle classi generate (es. `TrailSummaryResponse.name:
+    String`, verificato il 02/10).
+  - [x] uno script o un task Gradle segnala se `api/openapi.json` è diverso da quello del backend:
+    `./gradlew :apiClient:checkApiContract` (confronta il JSON, non i byte; senza il backend accanto non fa nulla).
+    Provato allineato e con una differenza simulata (02/10).
 
 **M1.2 `HttpClient` condiviso**
 ```kotlin
@@ -306,8 +334,15 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
 fun createHttpClient(config: AppConfig, session: SessionManager, engine: HttpClientEngine): HttpClient
 ```
 - `ContentNegotiation` con `Json { ignoreUnknownKeys = true; explicitNulls = false }`.
-- Se gli enum generati falliscono su un valore sconosciuto: `coerceInputValues = true` più un valore di riserva, oppure
-  enum come stringhe nel generatore. Si decide guardando l'output di M1.1.
+- Gli enum generati falliscono su un valore sconosciuto (M1.1), e `enumUnknownDefaultCase` non ha effetto con il
+  template `multiplatform`. `coerceInputValues` da solo non basta: i campi `required` non hanno un valore di default
+  a cui ripiegare. Le due strade:
+  - un template personalizzato (`apiClient/templates/`) che aggiunge a ogni enum un valore `UNKNOWN` e un serializer
+    che ci ripiega;
+  - `typeMappings` / `schemaMappings` per avere gli enum come `String`, e la mappatura a enum dell'app fatta a mano
+    nei repository.
+
+  La prima tiene i tipi, la seconda è più semplice. Si decide qui, con un test che deserializza un valore inventato.
 - `Auth` / `bearer`: `loadTokens` dal `SecureTokenStore`; `refreshTokens` chiama l'operazione `refreshTokens` con
   `markAsRefreshTokenRequest()` e salva la coppia nuova; se il refresh risponde 401 svuota la sessione e porta al login.
   Il token si manda anche sulle GET pubbliche (`sendWithoutRequest`): il rate limit conta per utente, lo dice la guida.

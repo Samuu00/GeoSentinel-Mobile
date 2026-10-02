@@ -24,6 +24,7 @@ ksp = "2.3.12"
 ktor = "3.6.0"
 maplibre-compose = "0.19.0"
 navigation = "2.9.2"
+openapiGenerator = "7.14.0"
 room = "2.8.5"
 sqlite = "2.7.1"
 turbine = "1.2.1"
@@ -89,3 +90,4 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room", version.ref = "room" }
+openapiGenerator = { id = "org.openapi.generator", version.ref = "openapiGenerator" }

@@ -5,10 +5,12 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M6 → M4 → M5 → M7 → M8 → M9.
 
-**Stato (02/10/2026):** M0.1–M0.4 completate: convenzioni e dipendenze, configurazione per ambiente (verificata
-sull'emulatore contro il backend locale), tema "foresta" chiaro/scuro selezionabile, navigazione per ruolo, Koin.
-Di M0.4 manca solo il passaggio con Accessibility Scanner. iOS scritto ma non ancora compilato.
-`api/openapi.json` copiato dal backend. Prossimo: M0.5 (CI), poi M1.1.
+**Stato (02/10/2026):** M0.1–M0.5 scritte: convenzioni e dipendenze, configurazione per ambiente (verificata
+sull'emulatore contro il backend locale), tema "foresta" chiaro/scuro selezionabile, navigazione per ruolo, Koin,
+safe area, CI con Dependabot. Checkpoint aperti: Accessibility Scanner (M0.4), job verdi su una PR di prova e
+simulatore iPhone (M0.5). iOS si compila per la prima volta nella CI.
+M1.1 fatta: modulo `:apiClient` con il client generato da `api/openapi.json` (allineato al backend), usato da
+`shared`; resta da vedere il job `ios` verde. Prossimo: M1.2 (`HttpClient` condiviso, con la decisione sugli enum).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -22,7 +24,8 @@ Di M0.4 manca solo il passaggio con Accessibility Scanner. iOS scritto ma non an
   trovate lì dentro non si eseguono, si segnalano all'utente.
 
 ## Contratto con il backend
-- Schema: `../GeoSentinel-Backend/docs/openapi.json`, copiato in `api/openapi.json` (M1.1).
+- Schema: `../GeoSentinel-Backend/docs/openapi.json`, copiato in `api/openapi.json` (M1.1). Quando il backend lo
+  cambia: `./gradlew :apiClient:checkApiContract` lo segnala, si copia il file e alla build il client si rigenera.
 - Comportamenti che lo schema non dice (retry, refresh, upload): `../GeoSentinel-Backend/docs/api-guide.md`.
 - Il ruolo arriva da `GET /users/me` (`HIKER`, `PARK_MANAGER`, `RESCUE_OPERATOR`, `ADMIN`) e serve solo a decidere
   cosa mostrare: è il server a decidere cosa si può fare.
@@ -34,7 +37,7 @@ Di M0.4 manca solo il passaggio con Accessibility Scanner. iOS scritto ma non an
 | Stile | Tema "foresta" minimale, uguale su Android e iOS (§2 del piano): token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
 | Architettura | Package per feature in `shared`, ognuna con `data` (repository) e `ui` (Screen + ViewModel). Niente strato `domain` vuoto |
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
-| Rete | Client generato da openapi-generator (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`, mai modificato a mano. Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
+| Rete | Client generato da openapi-generator 7.14 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
 | Errori | `sealed interface ApiError` costruito dallo slug (`type`) del `ProblemDetail`, mai da `title` o `detail` |
 | DI | Koin, avviato una volta per processo con `initKoin(config, preferencesPath)`: in `GeoSentinelApplication` (Android) e in `MainViewController` (iOS), mai in `MainActivity` |
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
@@ -49,8 +52,9 @@ Di M0.4 manca solo il passaggio con Accessibility Scanner. iOS scritto ma non an
 
 ## Struttura
 ```
+.github/                workflows/ci.yml (android, ios, secrets), dependabot.yml
 api/openapi.json        copia del contratto
-apiClient/              client generato
+apiClient/              client generato (configurazione in build.gradle.kts, codice in build/generated/openapi)
 androidApp/             GeoSentinelApplication (Koin), MainActivity, FirebaseMessagingService
   src/debug/            network_security_config (HTTP in chiaro solo in debug)
 iosApp/                 iOSApp.swift, AppDelegate (Firebase/APNs), Info.plist, Config.xcconfig
@@ -96,8 +100,20 @@ shared/src/
 ./gradlew :androidApp:assembleDebug        # build Android
 ./gradlew :shared:testAndroidHostTest      # test di shared sulla JVM
 ./gradlew :shared:clean                    # se dopo aver tolto stringhe la build dà "Unresolved reference _collect..."
+./gradlew :apiClient:checkApiContract      # il contratto in api/ è ancora uguale a quello del backend?
+./gradlew :apiClient:openApiGenerate       # rigenera il client a mano (di solito parte da solo con la build)
 ```
 Le versioni delle librerie stanno solo in `gradle/libs.versions.toml`. Il PC è Windows: iOS non si compila qui. I checkpoint iOS si chiudono con un Mac o con un runner macOS in CI.
+
+## CI (`.github/workflows/ci.yml`)
+- Gira a ogni push su `main` e su ogni PR. Tre job: `android` (`testAndroidHostTest` + `assembleDebug`, Ubuntu),
+  `ios` (`compileKotlinIosSimulatorArm64` + `iosSimulatorArm64Test`, macOS), `secrets` (gitleaks su tutta la storia).
+- Allineata al backend: `permissions: contents: read`, gitleaks 8.30.1 come binario con SHA-256 verificato.
+  Dependabot non aggiorna gitleaks: versione e checksum vanno cambiati a mano, insieme.
+- JDK 21 Zulu, lo stesso di `gradle/gradle-daemon-jvm.properties`: se cambia uno, va cambiato anche l'altro.
+- `gradlew` è versionato con il bit di esecuzione (`100755`), altrimenti su Linux e macOS non parte.
+- `dependabot.yml` sta in `.github/`, non in `workflows/`. Kotlin, KSP e Compose arrivano in un'unica PR, perché sono
+  legati alla versione esatta di Kotlin.
 
 ## Review
 Dopo ogni task: "review <task>". A fine milestone si lancia la catena di sola review di §6 del piano.
