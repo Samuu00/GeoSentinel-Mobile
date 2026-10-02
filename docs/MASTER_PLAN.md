@@ -3,10 +3,12 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (01/10/2026):** il backend è completo (da M0 a M7, `./mvnw clean verify` verde due volte, 42 unit + 104 IT).
-> App: **M0.1 e M0.2 completate l'01/10** (`CLAUDE.md`, `.gitignore`, dipendenze nel catalogo, build Android e test host
-> verdi), `api/openapi.json` già copiato dal backend. Il codice è ancora quello del template (`App.kt` con il saluto).
-> Prossimo task: M0.3; la generazione del client (M1.1) dopo la chiusura di M0.
+> **Stato (02/10/2026):** il backend è completo (da M0 a M7, `./mvnw clean verify` verde due volte, 42 unit + 104 IT).
+> App: **M0.1–M0.4 completate** (convenzioni e dipendenze l'01/10; configurazione per ambiente, tema, navigazione e
+> Koin il 02/10). Di M0.4 resta aperto solo il passaggio con Accessibility Scanner. L'app ha la shell completa:
+> tema "foresta" chiaro/scuro selezionabile, barra in basso per ruolo, pulsante SOS, schermate segnaposto.
+> Parte iOS scritta ma non ancora compilata (serve il Mac o la CI di M0.5).
+> Prossimo task: M0.5 (CI); la generazione del client (M1.1) dopo la chiusura di M0.
 
 ---
 
@@ -53,6 +55,9 @@ Il caso d'uso che conta più di tutti è l'SOS con poca rete. Tutto il resto si 
 | A14 | **Errori come `sealed interface ApiError`** costruito dallo slug del `ProblemDetail` | Il client decide solo sullo slug (`type`), mai su `title` o `detail`. I messaggi per l'utente sono in italiano, nelle risorse. |
 | A15 | **Stringhe in `composeResources`**, italiano come lingua base | L'app è italiana; l'inglese si aggiunge dopo senza toccare il codice. |
 | A16 | **Configurazione per ambiente passata dalla piattaforma**: `BuildConfig` su Android, `Info.plist` (da `Config.xcconfig`) su iOS, letti in un `AppConfig` | Niente plugin Gradle in più per due valori (URL dell'API e ambiente). |
+| A17 | **Stile visivo "foresta", minimale, uguale su Android e iOS** (02/10): palette nebbia/bosco di notte con accento verde pino/salvia, card morbide, illustrazione di montagne e pini disegnata con i colori del tema, barra in basso fluttuante | Scelto dopo tre giri di prova sull'emulatore (Material 3 Expressive e stile iOS scartati). Un'identità legata alla montagna, poche decorazioni, nessuna immagine da caricare. |
+| A18 | **Tema scelto dall'utente** (Sistema/Chiaro/Scuro) salvato in DataStore (`ThemeSettings`), con le barre di sistema allineate (`SystemBarsAppearance`, expect/actual) | Al sole serve il chiaro, di notte e con la batteria scarica lo scuro: la scelta non può dipendere solo dal sistema. |
+| A19 | **Errori in prugna** (ruolo `error` del tema), non in rosso | Il rosso resta solo a SOS e `CRITICAL` (§2). La prugna si distingue dal rosso anche con la protanopia. |
 
 ### Vincolo dell'ambiente di sviluppo
 Il PC è **Windows**: Android si compila e si prova sull'emulatore, **iOS no**. Per iOS servono un Mac con Xcode
@@ -77,11 +82,23 @@ Non sono bug del backend, sono cose che l'app vorrebbe e l'API oggi non dà:
 
 L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a tratti. Le scelte grafiche vengono da lì.
 
-- **Material 3** con un tema proprio, chiaro e scuro (lo scuro segue il sistema). Il template usa
-  `material3 1.12.0-alpha03`: in M0 si passa all'ultima stabile compatibile con Compose Multiplatform 1.12.
-- **Colori:** primario verde bosco, secondario grigio roccia. Il **rosso è riservato all'SOS e ai pericoli
-  `CRITICAL`**, così il pulsante di emergenza non si confonde con nient'altro. Stato dei sentieri: `OPEN` verde,
-  `WARNING` ambra, `CLOSED` rosso, sempre con un'icona o un'etichetta oltre al colore (per chi non distingue i colori).
+- **Material 3** (1.9.0, ultima stabile) come base dei componenti, con un tema proprio "foresta" (A17), chiaro e
+  scuro. Il tema lo sceglie l'utente nel Profilo: Sistema (default), Chiaro o Scuro (A18).
+- **Dove stanno i token:** `core/ui/theme/` (`Color.kt`, `Theme.kt`). I componenti leggono i colori da
+  `MaterialTheme.colorScheme`, mai valori esadecimali; unica eccezione `EmergencyRed`, uguale nei due temi.
+  Ruoli usati: `background` sfondo, `surfaceContainerLowest` card, `surfaceContainer` barra in basso,
+  `surfaceContainerHigh` menu, `surfaceContainerHighest` binari (es. selettore del tema), `primaryContainer`
+  "muschio", `onSurfaceVariant` testo secondario, `outlineVariant` separatori.
+- **Colori:** nebbia `F3F5F0` e bosco di notte `0E1612` come sfondi, accento verde pino `1F5B3F` (chiaro) e salvia
+  `8FD4A8` (scuro). Il **rosso (`D32F2F`) è riservato all'SOS e ai pericoli `CRITICAL`**, così il pulsante di
+  emergenza non si confonde con nient'altro; gli **errori** (form, rete) usano la **prugna** del ruolo `error` (A19).
+  Stato dei sentieri: `OPEN` verde, `WARNING` ambra (`B45309`), `CLOSED` rosso, sempre con un'icona o un'etichetta
+  oltre al colore (per chi non distingue i colori).
+- **Forme e testo:** card a 20 dp, illustrazioni e barra a 28 dp; titoli SemiBold, corpo 15–17 sp. Le illustrazioni
+  sono disegnate in Compose con i colori del tema (`ForestIllustration`), così cambiano da sole con chiaro e scuro.
+- **Movimento:** cambio di scheda con una dissolvenza breve; le schermate "spinte" (es. SOS) entrano da destra e la
+  schermata sotto scivola via in parallasse. Ogni schermata ha uno **sfondo pieno**, altrimenti durante la
+  transizione si vedono entrambe.
 - **Contrasto alto** (almeno WCAG AA, AAA sul testo della mappa e sull'SOS): sotto il sole i grigi chiari spariscono.
 - **Bersagli grandi:** minimo 48 dp, 72 dp per le azioni principali. Il pulsante SOS si tiene premuto 3 secondi con un
   anello che si riempie, così non parte un SOS dalla tasca.
@@ -90,8 +107,10 @@ L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a t
   Lunghezze in km con un decimale, distanze in metri.
 - **Offline visibile:** un banner quando non c'è rete, la data dell'ultimo aggiornamento sui dati in cache, le azioni
   in coda mostrate come "in invio".
-- **Accessibilità:** `contentDescription` su ogni icona, testo scalabile senza tagli fino al 200%, l'SOS annunciato
-  da TalkBack e VoiceOver.
+- **Accessibilità:** `contentDescription` su ogni icona che porta un significato da sola (es. i simboli del
+  selettore del tema); `null` sulle icone decorative accanto a un testo che dice già la stessa cosa (barra in basso,
+  stati vuoti), altrimenti TalkBack legge due volte. Testo scalabile senza tagli fino al 200%, l'SOS annunciato da
+  TalkBack e VoiceOver.
 
 ### Navigazione
 Barra in basso, con le voci che dipendono dal ruolo:
@@ -104,8 +123,12 @@ Barra in basso, con le voci che dipendono dal ruolo:
 | Gestione (segnalazioni, ticket, rifugi) | `PARK_MANAGER`, `ADMIN` |
 | Profilo (o "Accedi" per l'ospite) | Tutti |
 
-Il pulsante SOS è un FAB rosso sopra la mappa, sempre visibile per `HIKER`. Per l'ospite apre una schermata con
-"Chiama 112" e "Accedi".
+La barra è fluttuante (capsula staccata dai bordi), con la voce attiva su una pillola color muschio; al massimo 5
+voci, che vede tutte solo `ADMIN`.
+
+Il pulsante SOS è una capsula rossa con la scritta "SOS" (72 dp) sopra la mappa, visibile a tutti. Apre la
+schermata SOS, che si "spinge" sopra la mappa e ha il suo pulsante Indietro (su iPhone non c'è quello di sistema);
+mentre è aperta la scheda Mappa resta attiva. Per l'ospite la schermata propone "Chiama 112" e "Accedi" (M6).
 
 ---
 
@@ -118,20 +141,24 @@ GeoSentinel-Mobile/
 ├── apiClient/                    # client generato (M1.1), mai modificato a mano
 ├── docs/MASTER_PLAN.md
 ├── gradle/libs.versions.toml
-├── androidApp/                   # MainActivity, FirebaseMessagingService, network_security_config
-├── iosApp/                       # iOSApp.swift, AppDelegate per Firebase/APNs, Info.plist
+├── androidApp/                   # GeoSentinelApplication (Koin), MainActivity, FirebaseMessagingService
+│   └── src/debug/                # network_security_config: HTTP in chiaro solo in debug
+├── iosApp/                       # iOSApp.swift, AppDelegate per Firebase/APNs, Info.plist, Config.xcconfig
 └── shared/src/
     ├── commonMain/kotlin/it/unical/geosentinel_mobile/
-    │   ├── App.kt                # tema + NavHost
+    │   ├── App.kt                # tema + Scaffold (barra, SOS) + NavHost
     │   ├── core/
     │   │   ├── config/           # AppConfig
     │   │   ├── network/          # HttpClientFactory, ApiError, RetryPolicy
-    │   │   ├── session/          # SessionManager, SecureTokenStore (expect)
+    │   │   ├── session/          # UserRole; SessionManager, SecureTokenStore (expect)
     │   │   ├── db/               # AppDatabase (Room), OutboxDao
     │   │   ├── location/         # LocationProvider (expect)
     │   │   ├── push/             # PushTokenSink, PushEvent
-    │   │   ├── ui/               # tema, componenti comuni, stati di caricamento ed errore
-    │   │   └── di/               # moduli Koin
+    │   │   ├── ui/
+    │   │   │   ├── theme/        # Color, Theme (GeoSentinelTheme), ThemeSettings, SystemBars (expect)
+    │   │   │   ├── navigation/   # Route, BottomNavItems
+    │   │   │   └── ...           # ForestIllustration, schermate segnaposto, componenti comuni
+    │   │   └── di/               # KoinModules (initKoin)
     │   ├── auth/  trail/  hazard/  media/  refuge/  sos/  rescue/  staff/  profile/
     │   │   ├── data/             # <Feature>Repository
     │   │   └── ui/               # <Schermata>Screen + <Schermata>ViewModel
@@ -201,7 +228,8 @@ codice scritto a mano.
 // core/config/AppConfig.kt
 data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
 ```
-- Android: `buildConfigField` per `API_BASE_URL` (debug: `http://10.0.2.2:8080`), passato a Koin da `MainActivity`.
+- Android: `buildConfigField` per `API_BASE_URL` (debug: `http://10.0.2.2:8080`), passato a Koin da
+  `GeoSentinelApplication` (da M0.4; vedi sotto).
 - iOS: chiave `API_BASE_URL` in `Info.plist`, letta in `MainViewController`.
 - HTTP in chiaro **solo in debug**: Android con un `network_security_config` che permette `10.0.2.2` e l'IP del PC,
   iOS con `NSAllowsLocalNetworking`. In release solo HTTPS.
@@ -219,9 +247,25 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
 **M0.4 Tema, navigazione e DI**
 - `GeoSentinelTheme` (chiaro e scuro, colori di §2), `NavHost` con rotte tipizzate e barra in basso, `startKoin`.
 - Schermate vuote per ogni voce della barra.
+- Fatto il 02/10:
+  - **DI:** Koin parte una volta per processo, in `GeoSentinelApplication` (Android; in `MainActivity` andrebbe in
+    crash a ogni rotazione) e in `MainViewController` (iOS). `initKoin(config, preferencesPath)` restituisce `Unit`
+    (`androidApp` non dipende da Koin); il modulo registra `AppConfig`, il DataStore delle preferenze e
+    `ThemeSettings`. Il file delle preferenze sta in `filesDir` (Android) e in Documents (iOS).
+  - **Navigazione:** `Route` sealed con `@Serializable`, `BottomNavItems` con la visibilità per ruolo
+    (`UserRole`, con `GUEST` per l'utente non loggato). La voce attiva si riconosce con `hierarchy`/`hasRoute`.
+  - **Tema:** stile "foresta" (A17), schema colori completo (i ruoli lasciati ai default di Material 3 sono viola),
+    errori in prugna (A19), tema scelto dall'utente in DataStore (A18) con un test host su `ThemeSettings`
+    (default, persistenza, valore sconosciuto → Sistema).
+  - **UI:** barra in basso fluttuante; pulsante SOS a capsula sopra la mappa, con vibrazione; schermate segnaposto con
+    illustrazione e simbolo della sezione; Profilo con copertina, avatar, selettore del tema a capsula (auto/sole/luna
+    con cursore a molla) e, solo in debug, il selettore del ruolo. Schermata SOS "spinta" con Indietro proprio.
+  - **Icone** da `material-icons-core` 1.7.3 (ultima pubblicata); i simboli del tema sono disegnati a mano.
+  - **Stringhe** tutte in `composeResources/values/strings.xml`.
 - Checkpoint:
-  - [ ] la barra cambia voci simulando i quattro ruoli (anteprima o flag di debug).
-  - [ ] tema chiaro e scuro con contrasto AA (Accessibility Scanner su Android).
+  - [x] la barra cambia voci simulando i quattro ruoli (flag di debug nel Profilo; verificato sull'emulatore il 02/10).
+  - [ ] tema chiaro e scuro con contrasto AA (Accessibility Scanner su Android). Contrasti calcolati a mano, manca il
+    passaggio con Accessibility Scanner.
 
 **M0.5 CI**
 - GitHub Actions: job `android` (`assembleDebug` e test host) su Ubuntu, job `ios` (`compileKotlinIosSimulatorArm64` e

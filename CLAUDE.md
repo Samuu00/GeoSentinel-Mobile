@@ -5,8 +5,10 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M6 → M4 → M5 → M7 → M8 → M9.
 
-**Stato (01/10/2026):** M0.1 e M0.2 completate (convenzioni, `.gitignore`, dipendenze; build Android e test host
-verdi). `api/openapi.json` copiato dal backend. Prossimo: M0.3 (configurazione per ambiente), poi M0.4, M0.5 e M1.1.
+**Stato (02/10/2026):** M0.1–M0.4 completate: convenzioni e dipendenze, configurazione per ambiente (verificata
+sull'emulatore contro il backend locale), tema "foresta" chiaro/scuro selezionabile, navigazione per ruolo, Koin.
+Di M0.4 manca solo il passaggio con Accessibility Scanner. iOS scritto ma non ancora compilato.
+`api/openapi.json` copiato dal backend. Prossimo: M0.5 (CI), poi M1.1.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -28,12 +30,13 @@ verdi). `api/openapi.json` copiato dal backend. Prossimo: M0.3 (configurazione p
 ## Stack (decisioni prese, dettagli in §1 del piano)
 | Area | Scelta |
 |---|---|
-| Base | Kotlin 2.4.20, Compose Multiplatform 1.12.1, Material 3 1.9.0 (ultima stabile), AGP 9.1, Gradle 9.5. UI tutta in Compose; Swift solo per l'ingresso iOS e Firebase |
+| Base | Kotlin 2.4.20, Compose Multiplatform 1.12.1, Material 3 1.9.0 (ultima stabile), `material-icons-core` 1.7.3, AGP 9.1, Gradle 9.5. UI tutta in Compose; Swift solo per l'ingresso iOS e Firebase |
+| Stile | Tema "foresta" minimale, uguale su Android e iOS (§2 del piano): token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
 | Architettura | Package per feature in `shared`, ognuna con `data` (repository) e `ui` (Screen + ViewModel). Niente strato `domain` vuoto |
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
 | Rete | Client generato da openapi-generator (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`, mai modificato a mano. Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
 | Errori | `sealed interface ApiError` costruito dallo slug (`type`) del `ProblemDetail`, mai da `title` o `detail` |
-| DI | Koin |
+| DI | Koin, avviato una volta per processo con `initKoin(config, preferencesPath)`: in `GeoSentinelApplication` (Android) e in `MainViewController` (iOS), mai in `MainActivity` |
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
 | Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox; DataStore per le preferenze |
 | Sessione | `SecureTokenStore` expect/actual: Keystore su Android, Keychain su iOS |
@@ -48,12 +51,16 @@ verdi). `api/openapi.json` copiato dal backend. Prossimo: M0.3 (configurazione p
 ```
 api/openapi.json        copia del contratto
 apiClient/              client generato
-androidApp/             MainActivity, FirebaseMessagingService, network_security_config
-iosApp/                 iOSApp.swift, AppDelegate (Firebase/APNs), Info.plist
+androidApp/             GeoSentinelApplication (Koin), MainActivity, FirebaseMessagingService
+  src/debug/            network_security_config (HTTP in chiaro solo in debug)
+iosApp/                 iOSApp.swift, AppDelegate (Firebase/APNs), Info.plist, Config.xcconfig
 shared/src/
   commonMain/kotlin/it/unical/geosentinel_mobile/
-    App.kt              tema + NavHost
+    App.kt              tema + Scaffold (barra in basso, SOS) + NavHost
     core/               config, network, session, db, location, push, ui, di
+      ui/theme/         Color, Theme, ThemeSettings, SystemBars (expect)
+      ui/navigation/    Route, BottomNavItems
+      ui/               ForestIllustration, schermate segnaposto (sostituite milestone per milestone)
     auth/ trail/ hazard/ media/ refuge/ sos/ rescue/ staff/ profile/   ognuna con data/ e ui/
   commonMain/composeResources/   stringhe e icone
   androidMain/ iosMain/          gli actual
@@ -70,8 +77,14 @@ shared/src/
   risposta definitiva (2xx o 4xx non ritentabile).
 - **Dispatcher:** sul main thread solo la UI; rete e database su `Dispatchers.IO` (`Default` dove IO non esiste).
 - **Enum:** un valore nuovo dal server non deve far crashare l'app.
-- **Interfaccia:** il rosso solo per SOS e pericoli `CRITICAL`; contrasto almeno WCAG AA; bersagli da 48 dp (72 per le
-  azioni principali); `contentDescription` su ogni icona.
+- **Interfaccia:**
+  - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezione: `EmergencyRed`);
+  - il rosso solo per SOS e pericoli `CRITICAL`; gli errori usano il ruolo `error` del tema (prugna);
+  - contrasto almeno WCAG AA, verificato in chiaro e in scuro;
+  - bersagli da 48 dp (72 per le azioni principali);
+  - `contentDescription` sulle icone che hanno un significato da sole, `null` su quelle decorative accanto a un testo;
+  - ogni schermata ha uno sfondo pieno (altrimenti nelle transizioni trasparisce quella sotto);
+  - le schermate "spinte" hanno un pulsante Indietro proprio, perché su iPhone non c'è quello di sistema.
 - **Commenti in italiano, nomi in inglese.**
 - **Mai tracciati da git:** `local.properties`, `google-services.json`, `GoogleService-Info.plist`, `*.jks`.
 
@@ -79,6 +92,7 @@ shared/src/
 ```bash
 ./gradlew :androidApp:assembleDebug        # build Android
 ./gradlew :shared:testAndroidHostTest      # test di shared sulla JVM
+./gradlew :shared:clean                    # se dopo aver tolto stringhe la build dà "Unresolved reference _collect..."
 ```
 Le versioni delle librerie stanno solo in `gradle/libs.versions.toml`. Il PC è Windows: iOS non si compila qui. I checkpoint iOS si chiudono con un Mac o con un runner macOS in CI.
 

@@ -1,2 +1,47 @@
 <resources>
+    <!-- Barra in basso -->
+    <string name="nav_map">Mappa</string>
+    <string name="nav_refuges">Rifugi</string>
+    <string name="nav_alerts">Allerte</string>
+    <string name="nav_management">Gestione</string>
+    <string name="nav_profile">Profilo</string>
+
+    <!-- Comuni -->
+    <string name="back">Indietro</string>
+
+    <!-- SOS -->
+    <string name="sos_button">SOS</string>
+    <string name="sos_button_description">SOS, richiedi soccorso</string>
+
+    <!-- Schermate segnaposto, sostituite milestone per milestone -->
+    <string name="placeholder_map_title">Mappa dei sentieri</string>
+    <string name="placeholder_map_body">Qui compariranno sentieri, punti di interesse e la tua posizione.</string>
+    <string name="placeholder_refuges_title">Rifugi e prenotazioni</string>
+    <string name="placeholder_refuges_body">Qui potrai vedere i posti liberi e prenotare una notte.</string>
+    <string name="placeholder_alerts_title">Allerte SOS</string>
+    <string name="placeholder_alerts_body">Qui compariranno le richieste di soccorso attive.</string>
+    <string name="placeholder_management_title">Gestione del parco</string>
+    <string name="placeholder_management_body">Qui potrai verificare le segnalazioni e gestire sentieri, ticket e rifugi.</string>
+    <string name="placeholder_profile_title">Profilo</string>
+    <string name="placeholder_profile_body">Accesso e account arriveranno presto.</string>
+    <string name="placeholder_sos_title">Richiesta di soccorso</string>
+    <string name="placeholder_sos_body">In caso di pericolo immediato chiama subito il 112.</string>
+
+    <!-- Ruoli -->
+    <string name="role_guest">Ospite</string>
+    <string name="role_hiker">Escursionista</string>
+    <string name="role_park_manager">Gestore del parco</string>
+    <string name="role_rescue_operator">Operatore di soccorso</string>
+    <string name="role_admin">Amministratore</string>
+
+    <!-- Aspetto -->
+    <string name="theme_section">Aspetto</string>
+    <string name="theme_title">Tema</string>
+    <string name="theme_system">Sistema</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_dark">Scuro</string>
+
+    <!-- Solo debug -->
+    <string name="debug_section">Simula un ruolo</string>
+    <string name="debug_role_hint">Solo nelle build di debug: cambia le voci della barra in basso.</string>
 </resources>
