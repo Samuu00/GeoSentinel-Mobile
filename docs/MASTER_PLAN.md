@@ -3,15 +3,21 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (02/10/2026):** il backend è completo (da M0 a M7, `./mvnw clean verify` verde due volte, 42 unit + 104 IT).
+> **Stato (02/10/2026):** il backend è completo (da M0 a M7) più il periodo di grazia del refresh token (ADR-0019,
+> migration V10, 02/10): `./mvnw clean verify` verde, 42 unit + 108 IT.
 > App: **M0.1–M0.5 scritte** (convenzioni e dipendenze l'01/10; configurazione per ambiente, tema, navigazione,
 > Koin e CI il 02/10). L'app ha la shell completa: tema "foresta" chiaro/scuro selezionabile, barra in basso per
 > ruolo, pulsante SOS, schermate segnaposto, safe area anche in orizzontale. Checkpoint ancora aperti di M0:
 > Accessibility Scanner (M0.4), job verdi su una PR di prova e verifica sul simulatore iPhone (M0.5). La parte iOS
 > si compila per la prima volta nel job `ios` della CI.
-> **M1 fatta** (02/10): client generato in `:apiClient`, enum tolleranti ai valori nuovi, `HttpClient` condiviso
-> con refresh, retry e log, `ApiError` dallo slug con i messaggi in `strings.xml`; 22 test con `MockEngine`.
-> Prossimo: la catena di review di M1 (§6), poi M2.
+> **M1 fatta e revisionata** (02/10): client generato in `:apiClient`, enum tolleranti ai valori nuovi, `HttpClient`
+> condiviso con refresh, retry e log, `ApiError` dallo slug con i messaggi in `strings.xml`. Catena di review di M1
+> (§6) eseguita e correzioni applicate (`AuthScope`, redirect, log, eccezioni senza dati personali).
+> **M2.1 e M2.2 fatte** (02/10): token cifrati (Keystore + DataStore, Keychain), `SessionManager`, schermate di
+> accesso e registrazione, Profilo legato alla sessione; verificate sull'emulatore contro il backend locale.
+> 70 test host + 1 test sull'emulatore.
+> Aperti: test iOS in CI (dopo la correzione dei nomi), Keychain sul simulatore, token push al logout (M7).
+> Prossimo: M2.3 (profilo e cancellazione dell'account), poi la catena di review di M2.
 
 ---
 
@@ -110,8 +116,17 @@ L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a t
 - **Movimento:** cambio di scheda con una dissolvenza breve; le schermate "spinte" (es. SOS) entrano da destra e la
   schermata sotto scivola via in parallasse. Ogni schermata ha uno **sfondo pieno**, altrimenti durante la
   transizione si vedono entrambe.
+- **Form** (M2.2, `core/ui/FormControls.kt`): campi come piccole card (`surfaceContainerLowest`, angoli da 20 dp)
+  con un bordo sottile `outlineVariant` che diventa `primary` (2 dp) col focus ed `error` con un errore; etichetta
+  sempre visibile, messaggio sotto il campo; errore generale in un riquadro `errorContainer` annunciato dagli screen
+  reader; invio con `PrimaryPillButton` (capsula). Nel Profilo da ospite due capsule compatte affiancate: "Accedi"
+  piena e "Registrati" solo bordo (`outline`, così il bordo si vede). I form nuovi (M2.3, M4) riusano questi
+  controlli.
 - **Contrasto alto** (almeno WCAG AA, AAA sul testo della mappa e sull'SOS): sotto il sole i grigi chiari spariscono.
-- **Bersagli grandi:** minimo 48 dp, 72 dp per le azioni principali. Il pulsante SOS si tiene premuto 3 secondi con un
+- **Bersagli grandi** (regola precisata il 02/10): **72 dp per le azioni d'emergenza** (pulsante SOS, "Chiama 112"),
+  **56 dp per il pulsante d'invio dei form**, **48 dp minimo per tutto il resto** (es. le capsule Accedi/Registrati
+  del Profilo). Prima la regola diceva "72 dp per le azioni principali", troppo vago: nei form dava pulsanti
+  sproporzionati. Il pulsante SOS si tiene premuto 3 secondi con un
   anello che si riempie, così non parte un SOS dalla tasca.
 - **Etichette di montagna:** difficoltà con la scala CAI che il backend già documenta (`EASY` = T, `MODERATE` = E,
   `DIFFICULT` = EE, `EXPERT` = EEA); pericoli e POI con nomi italiani (frana, albero caduto, bivacco, sorgente...).
@@ -163,23 +178,26 @@ GeoSentinel-Mobile/
     │   ├── App.kt                # tema + Scaffold (barra, SOS) + NavHost
     │   ├── core/
     │   │   ├── config/           # AppConfig
-    │   │   ├── network/          # HttpClientFactory, ApiError, RetryPolicy
-    │   │   ├── session/          # UserRole; SessionManager, SecureTokenStore (expect)
+    │   │   ├── network/          # HttpClientFactory (+ AuthScope), RetryPolicy, ApiCall, ApiError, HttpEngine (expect)
+    │   │   ├── session/          # UserRole, SessionManager, SecureTokenStore, TokenCodec, SessionModels
     │   │   ├── db/               # AppDatabase (Room), OutboxDao
     │   │   ├── location/         # LocationProvider (expect)
     │   │   ├── push/             # PushTokenSink, PushEvent
     │   │   ├── ui/
     │   │   │   ├── theme/        # Color, Theme (GeoSentinelTheme), ThemeSettings, SystemBars (expect)
     │   │   │   ├── navigation/   # Route, BottomNavItems
-    │   │   │   └── ...           # ForestIllustration, schermate segnaposto, componenti comuni
+    │   │   │   └── ...           # ForestIllustration, FormControls, UiMessage, schermate segnaposto
     │   │   └── di/               # KoinModules (initKoin)
-    │   ├── auth/  trail/  hazard/  media/  refuge/  sos/  rescue/  staff/  profile/
+    │   ├── auth/                 # data/PasswordRules; ui/ Login e Register (Screen + ViewModel)
+    │   ├── trail/  hazard/  media/  refuge/  sos/  rescue/  staff/  profile/
     │   │   ├── data/             # <Feature>Repository
     │   │   └── ui/               # <Schermata>Screen + <Schermata>ViewModel
     │   └── composeResources/     # stringhe (values/strings.xml), icone
-    ├── androidMain/              # actual: SecureTokenStore, LocationProvider, ImageEncoder, driver Room
-    ├── iosMain/                  # actual: Keychain, CLLocationManager, UIImage in JPEG, driver Room
-    └── commonTest/               # test con MockEngine, Turbine, Room in memoria
+    ├── androidMain/              # actual: Keystore + DataStore, OkHttp, LocationProvider, ImageEncoder, driver Room
+    ├── iosMain/                  # actual: Keychain, Darwin, CLLocationManager, UIImage in JPEG, driver Room
+    ├── commonTest/               # test con MockEngine (backend finto in SessionTestSupport), Room in memoria
+    ├── androidHostTest/          # test sulla JVM che usano API Android (DataStore, cifratura)
+    └── androidDeviceTest/        # test sull'emulatore (Keystore vero); albero separato, nomi senza spazi
 ```
 
 Il client generato vive nel modulo `:apiClient`, che `shared` usa come dipendenza: così una rigenerazione non tocca il
@@ -330,8 +348,9 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
       `enumUnknownDefaultCase` è ignorata dal template `multiplatform`. Da decidere in M1.2.
   - `shared` dipende da `:apiClient`: la CI compila così il client per Android e `iosSimulatorArm64`.
 - Checkpoint:
-  - [ ] `:apiClient` compila per Android e per `iosSimulatorArm64` (in CI). Android verde in locale (02/10); iOS si
-    vede nel job `ios`.
+  - [x] `:apiClient` compila per Android e per `iosSimulatorArm64` (in CI): nel job `ios` del 02/10 compilano
+    `:apiClient` e tutto `:shared` (Keychain compreso). Lo stesso job falliva solo sui test: Kotlin/Native non accetta
+    la virgola nei nomi tra backtick (10 nomi corretti).
   - [x] i campi `required` del contratto non sono nullable nelle classi generate (es. `TrailSummaryResponse.name:
     String`, verificato il 02/10).
   - [x] uno script o un task Gradle segnala se `api/openapi.json` è diverso da quello del backend:
@@ -531,6 +550,9 @@ class SessionManager(store: SecureTokenStore, authApi: AuthApi, usersApi: UsersA
     "sessione scaduta"). Il selettore del ruolo di debug di M0.4 è stato tolto. Password: minimo 12 in unità UTF-16
     (come `@Size` di Java), massimo 72 byte UTF-8 (`auth/data/PasswordRules`). Gli errori per campo del server
     arrivano al form con messaggi italiani nostri; 401 sul login = "Email o password non corretti".
+  - Stile: dopo due giri di prova, form con `FormControls` (§2) e Profilo da ospite con le capsule affiancate.
+    "Crea un account" del Profilo si chiama ora "Registrati"; i form si collegano tra loro ("Non hai un account?
+    Registrati" / "Hai già un account? Accedi"); la data di nascita si sceglie toccando tutto il campo.
   - Test: `SessionManagerTest` (17), `AuthViewModelsTest` (10), `PasswordRulesTest` (3), con il backend finto di
     `SessionTestSupport`. Verificati anche rompendo apposta `clearToken` e il controllo dei token già rinnovati.
 - Checkpoint (contro il backend locale, utenti del seed, emulatore `Medium_Phone`, 02/10):
@@ -779,7 +801,7 @@ perché scriverebbero il codice al posto tuo.
 | # | Milestone | Chain |
 |---|---|---|
 | 0 | Fondamenta | `ecc:kotlin-build-resolver,ecc:kotlin-reviewer` |
-| 1 | Client e rete | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 1 | Client e rete | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita il 02/10: nessun CRITICAL/HIGH; correzioni in §M1.2 e §M1.3, note per M2 in §M2.1 e §M2.2, periodo di grazia nel backend) |
 | 2 | Sessione e account | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 | 3 | Mappa e catalogo | `ecc:kotlin-reviewer,ecc:code-reviewer` |
 | 4 | Segnalazioni e foto | `ecc:kotlin-reviewer,ecc:security-reviewer` |

@@ -71,7 +71,7 @@ class ApiErrorTest {
     }
 
     @Test
-    fun `ogni slug della guida ha un messaggio proprio, non quello generico`() {
+    fun `ogni slug della guida ha un messaggio proprio - non quello generico`() {
         val generic = setOf(Res.string.error_generic, Res.string.error_conflict)
         for ((slug, _, error) in guide) {
             if (slug == "conflict") continue // il 409 generico usa proprio il messaggio generico dei conflitti

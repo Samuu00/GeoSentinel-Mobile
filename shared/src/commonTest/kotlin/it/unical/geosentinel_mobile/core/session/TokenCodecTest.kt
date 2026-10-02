@@ -11,7 +11,7 @@ class TokenCodecTest {
     private val tokens = AuthTokens("access-segreto", "refresh-segreto", Instant.fromEpochMilliseconds(1_759_400_000_123))
 
     @Test
-    fun `i token salvati si rileggono uguali, scadenza al millisecondo compresa`() {
+    fun `i token salvati si rileggono uguali - scadenza al millisecondo compresa`() {
         assertEquals(tokens, decodeAuthTokens(tokens.encode()))
     }
 

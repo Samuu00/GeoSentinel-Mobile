@@ -235,7 +235,7 @@ class HttpClientTest {
     }
 
     @Test
-    fun `un errore di rete si ritenta su una GET e su una POST con Idempotency-Key, non su una POST senza`() = runTest {
+    fun `un errore di rete si ritenta su una GET e su una POST con Idempotency-Key - non su una POST senza`() = runTest {
         var calls = 0
         val client = client {
             calls++

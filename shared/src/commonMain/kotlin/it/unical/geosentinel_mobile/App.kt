@@ -303,7 +303,7 @@ private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Un
 private fun SosButton(onClick: () -> Unit) {
     val description = stringResource(Res.string.sos_button_description)
     val haptics = LocalHapticFeedback.current
-    // Capsula con la scritta "SOS": si capisce subito, anche al sole. 72 dp = azione principale (§2).
+    // Capsula con la scritta "SOS": si capisce subito, anche al sole. 72 dp = azione d'emergenza (§2).
     // La pressione lunga di 3 secondi arriva in M6.
     Surface(
         onClick = {

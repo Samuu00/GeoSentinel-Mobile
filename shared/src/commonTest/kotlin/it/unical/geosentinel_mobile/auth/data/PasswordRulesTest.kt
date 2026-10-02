@@ -13,7 +13,7 @@ class PasswordRulesTest {
     }
 
     @Test
-    fun `il massimo si conta in byte UTF-8, non in caratteri`() {
+    fun `il massimo si conta in byte UTF-8 - non in caratteri`() {
         assertNull(passwordProblem("a".repeat(72)))
         assertEquals(PasswordProblem.TOO_LONG, passwordProblem("a".repeat(73)))
         // 40 caratteri accentati = 80 byte: troppi anche se i caratteri sono meno di 72
@@ -22,7 +22,7 @@ class PasswordRulesTest {
     }
 
     @Test
-    fun `il minimo si conta come il server, in unita UTF-16`() {
+    fun `il minimo si conta come il server - in unita UTF-16`() {
         // 6 emoji = 12 unità UTF-16 (come String.length in Java) e 24 byte: valida, come per il backend
         assertNull(passwordProblem("🏔".repeat(6)))
     }

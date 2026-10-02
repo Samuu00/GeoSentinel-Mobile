@@ -74,7 +74,7 @@ class SessionManagerTest {
     }
 
     @Test
-    fun `password sbagliata, 401 e nessuna sessione`() = runTest {
+    fun `password sbagliata - 401 e nessuna sessione`() = runTest {
         val (session, _) = sessionWith(backend, store)
         session.restore()
 
@@ -87,7 +87,7 @@ class SessionManagerTest {
     }
 
     @Test
-    fun `dopo logout e login di un altro utente parte il bearer nuovo, non quello in cache nel client`() = runTest {
+    fun `dopo logout e login di un altro utente parte il bearer nuovo - non quello in cache nel client`() = runTest {
         val (session, _) = sessionWith(backend, store)
         session.restore()
         session.login("hiker@test.dev", "password-giusta-1")
@@ -101,7 +101,7 @@ class SessionManagerTest {
     }
 
     @Test
-    fun `dopo una sessione scaduta il nuovo login usa i token nuovi, non quelli rimasti nel client`() = runTest {
+    fun `dopo una sessione scaduta il nuovo login usa i token nuovi - non quelli rimasti nel client`() = runTest {
         store.tokens = backend.issueFor("hiker@test.dev")
         val (session, _) = sessionWith(backend, store)
         session.restore() // il plugin Auth carica a1 e lo tiene in memoria

@@ -9,10 +9,10 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 sull'emulatore contro il backend locale), tema "foresta" chiaro/scuro selezionabile, navigazione per ruolo, Koin,
 safe area, CI con Dependabot. Checkpoint aperti: Accessibility Scanner (M0.4), job verdi su una PR di prova e
 simulatore iPhone (M0.5). iOS si compila per la prima volta nella CI.
-M1 fatta (client generato, `HttpClient` condiviso, `ApiError`). M2.1 e M2.2 fatte: `SecureTokenStore` (Keystore +
+M1 fatta e revisionata (catena di review del 02/10, correzioni applicate). M2.1 e M2.2 fatte: `SecureTokenStore` (Keystore +
 DataStore cifrato, Keychain), `SessionManager` con login, registrazione, logout e refresh unico, schermate di accesso
 e Profilo legato alla sessione, verificati sull'emulatore contro il backend locale. Restano il job `ios` verde e il
-Keychain sul simulatore. Prossimo: M2.3 (profilo e cancellazione dell'account).
+Keychain sul simulatore. Backend: periodo di grazia di 60 s sul refresh token (ADR-0019). Prossimo: M2.3 (profilo e cancellazione dell'account).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -50,7 +50,7 @@ Keychain sul simulatore. Prossimo: M2.3 (profilo e cancellazione dell'account).
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
 | Stringhe | `composeResources/values/strings.xml`, italiano come lingua base |
 | Log | Kermit |
-| Test | `commonTest` con `ktor-client-mock`, Turbine, kotlinx-coroutines-test, Room in memoria |
+| Test | `commonTest` con `ktor-client-mock` (backend finto in `SessionTestSupport`), kotlinx-coroutines-test, Room in memoria; `androidHostTest` per le API Android sulla JVM; `androidDeviceTest` sull'emulatore (albero separato, nomi senza spazi per D8). Nomi dei test tra backtick senza `, . ; : / < > [ ]`: Kotlin/Native (job `ios`) non li accetta, la JVM sì |
 
 ## Struttura
 ```
@@ -66,11 +66,12 @@ shared/src/
     core/               config, network, session, db, location, push, ui, di
       ui/theme/         Color, Theme, ThemeSettings, SystemBars (expect)
       ui/navigation/    Route, BottomNavItems
-      ui/               ForestIllustration, schermate segnaposto (sostituite milestone per milestone)
-    auth/ trail/ hazard/ media/ refuge/ sos/ rescue/ staff/ profile/   ognuna con data/ e ui/
+      ui/               ForestIllustration, FormControls, UiMessage, schermate segnaposto (sostituite milestone per milestone)
+    auth/               data/PasswordRules, ui/ Login e Register (Screen + ViewModel)
+    trail/ hazard/ media/ refuge/ sos/ rescue/ staff/ profile/   ognuna con data/ e ui/
   commonMain/composeResources/   stringhe e icone
   androidMain/ iosMain/          gli actual
-  commonTest/
+  commonTest/ androidHostTest/ androidDeviceTest/
 ```
 
 ## Vincoli (valgono per ogni task)
@@ -88,7 +89,8 @@ shared/src/
   - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezione: `EmergencyRed`);
   - il rosso solo per SOS e pericoli `CRITICAL`; gli errori usano il ruolo `error` del tema (prugna);
   - contrasto almeno WCAG AA, verificato in chiaro e in scuro;
-  - bersagli da 48 dp (72 per le azioni principali);
+  - bersagli: 72 dp per le azioni d'emergenza (SOS, Chiama 112), 56 dp per l'invio dei form, 48 dp minimo per il resto;
+  - form con i controlli di `core/ui/FormControls.kt` (campi a card, capsule, `FormErrorBanner`);
   - `contentDescription` sulle icone che hanno un significato da sole, `null` su quelle decorative accanto a un testo;
   - ogni schermata ha uno sfondo pieno (altrimenti nelle transizioni trasparisce quella sotto);
   - le schermate "spinte" hanno un pulsante Indietro proprio, perché su iPhone non c'è quello di sistema;

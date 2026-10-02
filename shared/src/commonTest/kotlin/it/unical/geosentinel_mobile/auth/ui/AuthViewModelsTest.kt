@@ -48,7 +48,7 @@ class AuthViewModelsTest {
     // ---- accesso --------------------------------------------------------------------------------------------
 
     @Test
-    fun `accesso riuscito, la password non resta nello stato`() = runTest {
+    fun `accesso riuscito - la password non resta nello stato`() = runTest {
         val session = session()
         session.restore()
         val viewModel = LoginViewModel(session)
@@ -64,7 +64,7 @@ class AuthViewModelsTest {
     }
 
     @Test
-    fun `password sbagliata mostra credenziali errate, non sessione scaduta`() = runTest {
+    fun `password sbagliata mostra credenziali errate - non sessione scaduta`() = runTest {
         val viewModel = LoginViewModel(session())
 
         viewModel.onEmailChange("hiker@test.dev")
