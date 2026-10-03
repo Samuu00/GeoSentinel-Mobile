@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -23,6 +24,7 @@ import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -69,6 +71,7 @@ import geosentinel_mobile.shared.generated.resources.auth_register_link
 import geosentinel_mobile.shared.generated.resources.auth_register_title
 import geosentinel_mobile.shared.generated.resources.auth_show_password
 import it.unical.geosentinel_mobile.core.ui.BackButton
+import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormTextField
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
@@ -92,7 +95,15 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Un
         onBack = onBack,
         title = Res.string.auth_login_title,
         body = Res.string.auth_login_body,
-        footer = { FooterLink(Res.string.auth_no_account, Res.string.auth_register_link, onRegister) },
+        actions = {
+            PrimaryPillButton(
+                text = stringResource(Res.string.auth_login_button),
+                onClick = viewModel::submit,
+                enabled = state.canSubmit,
+                loading = state.submitting,
+            )
+            FooterLink(Res.string.auth_no_account, Res.string.auth_register_link, onRegister)
+        },
     ) {
         FormTextField(
             value = state.email,
@@ -102,13 +113,6 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Un
         )
         PasswordField(value = state.password, onValueChange = viewModel::onPasswordChange, onDone = viewModel::submit)
         FormErrorBanner(state.error?.resolve())
-        Spacer(Modifier.size(4.dp))
-        PrimaryPillButton(
-            text = stringResource(Res.string.auth_login_button),
-            onClick = viewModel::submit,
-            enabled = state.canSubmit,
-            loading = state.submitting,
-        )
     }
 }
 
@@ -124,7 +128,14 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
         onBack = onBack,
         title = Res.string.auth_register_title,
         body = Res.string.auth_register_body,
-        footer = { FooterLink(Res.string.auth_have_account, Res.string.auth_login_link, onLogin) },
+        actions = {
+            PrimaryPillButton(
+                text = stringResource(Res.string.auth_register_button),
+                onClick = viewModel::submit,
+                loading = state.submitting,
+            )
+            FooterLink(Res.string.auth_have_account, Res.string.auth_login_link, onLogin)
+        },
     ) {
         FormTextField(
             value = state.displayName,
@@ -153,12 +164,6 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
             onClick = { pickingDate = true },
         )
         FormErrorBanner(state.error?.resolve())
-        Spacer(Modifier.size(4.dp))
-        PrimaryPillButton(
-            text = stringResource(Res.string.auth_register_button),
-            onClick = viewModel::submit,
-            loading = state.submitting,
-        )
     }
 
     if (pickingDate) {
@@ -181,45 +186,51 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
     }
 }
 
-// Sfondo pieno, Indietro proprio (su iPhone non c'è quello di sistema), contenuto scorrevole e largo al massimo
-// 480 dp. La tastiera la gestisce lo Scaffold di App: safeDrawing comprende anche WindowInsets.ime.
+// Struttura dei form, secondo gli standard per mobile:
+// - in alto la testata con il paesaggio (sotto la barra di stato) e il tondo Indietro (su iPhone non c'è quello di sistema);
+// - al centro titolo, testo e campi, che scorrono;
+// - in fondo, fissa, l'azione principale con il link alternativo sotto: sempre visibile e a portata di pollice.
+//   Con la tastiera aperta sale sopra la tastiera: lo Scaffold di App applica safeDrawing, che comprende WindowInsets.ime.
+// Contenuto largo al massimo 480 dp.
 @Composable
 private fun FormScaffold(
     onBack: () -> Unit,
     title: StringResource,
     body: StringResource,
-    footer: @Composable () -> Unit,
+    actions: @Composable ColumnScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        BackButton(onBack)
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Column(Modifier.widthIn(max = 480.dp).fillMaxWidth()) {
-                Spacer(Modifier.size(16.dp))
-                Text(
-                    stringResource(title),
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.semantics { heading() },
-                )
-                Spacer(Modifier.size(8.dp))
-                Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.size(32.dp))
-                Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
-                Spacer(Modifier.size(24.dp))
-                footer()
-                Spacer(Modifier.size(24.dp))
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                ForestHeader(Modifier.fillMaxWidth().height(200.dp))
+                Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp)) {
+                    Text(stringResource(title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+                    Spacer(Modifier.size(8.dp))
+                    Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.size(28.dp))
+                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
+                    Spacer(Modifier.size(24.dp))
+                }
             }
+            // azioni in fondo, su un filo che le separa dal contenuto che scorre
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+            Column(
+                Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
+                content = actions,
+            )
         }
+        BackButton(onBack, Modifier.align(Alignment.TopStart))
     }
 }
 
 // "Non hai un account? Registrati": la domanda in grigio, il link in verde. Va a capo con il testo grande.
+// È l'azione alternativa sotto quella principale, qui e nel Profilo da ospite.
 @Composable
-private fun FooterLink(question: StringResource, link: StringResource, onClick: () -> Unit) {
+internal fun FooterLink(question: StringResource, link: StringResource, onClick: () -> Unit) {
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.Center,

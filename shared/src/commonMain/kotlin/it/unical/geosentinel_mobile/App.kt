@@ -8,6 +8,7 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +22,8 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.calculateEndPadding
+import androidx.compose.foundation.layout.calculateStartPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
@@ -54,11 +57,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -152,7 +157,13 @@ fun App() {
             NavHost(
                 navController = navController,
                 startDestination = Route.Map,
-                modifier = Modifier.padding(innerPadding),
+                // niente margine in alto: le testate (ForestHeader) arrivano sotto la barra di stato, e ogni
+                // schermata sposta il suo contenuto con WindowInsets.safeDrawing.only(Top)
+                modifier = Modifier.padding(
+                    start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
+                    end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
+                    bottom = innerPadding.calculateBottomPadding(),
+                ),
                 // cambio di scheda: dissolvenza breve, niente movimento
                 enterTransition = { fadeIn(tween(150)) },
                 exitTransition = { fadeOut(tween(100)) },
@@ -231,7 +242,8 @@ fun App() {
     }
 }
 
-// Barra in basso fluttuante: una capsula staccata dai bordi, la voce attiva su una pillola color muschio
+// Barra in basso fluttuante: una capsula staccata dai bordi, la voce attiva su una pillola color muschio.
+// Si stacca dallo sfondo con un filo di bordo e un'ombra appena accennata, come le card.
 @Composable
 private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Route) -> Unit) {
     Box(
@@ -247,9 +259,14 @@ private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Ro
             modifier = Modifier.widthIn(max = 560.dp),
             shape = MaterialTheme.shapes.large,
             color = MaterialTheme.colorScheme.surfaceContainer,
-            shadowElevation = 8.dp,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+            shadowElevation = 3.dp,
         ) {
-            Row(Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 6.dp).selectableGroup()) {
+            // voci centrate in altezza: con l'allineamento di default (in alto) la pillola toccava il bordo
+            Row(
+                Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 6.dp).selectableGroup(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 BottomNavItems.filter { it.isVisible(role) }.forEach { item ->
                     TabBarItem(
                         item = item,
@@ -313,14 +330,16 @@ private fun SosButton(onClick: () -> Unit) {
         shape = CircleShape,
         color = EmergencyRed,
         contentColor = EmergencyOnRed,
-        shadowElevation = 6.dp,
+        shadowElevation = 4.dp,
         modifier = Modifier.semantics { contentDescription = description },
     ) {
         Box(Modifier.heightIn(min = 72.dp).widthIn(min = 96.dp), contentAlignment = Alignment.Center) {
+            // lettere da cartello, un po' spaziate: si leggono da lontano
             Text(
                 text = stringResource(Res.string.sos_button),
                 style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
+                letterSpacing = 1.5.sp,
                 modifier = Modifier.padding(horizontal = 24.dp),
             )
         }

@@ -2,42 +2,44 @@ package it.unical.geosentinel_mobile.core.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Palette "foresta": nebbia del mattino in chiaro, bosco di notte in scuro.
-// Pochi colori: un verde pino come accento, neutri con una punta di verde, il rosso solo per l'emergenza.
+// Palette "carta topografica": i colori di una carta escursionistica e del bosco che descrive.
+// Chiaro = carta color pietra con l'inchiostro verde abete; scuro = bosco di notte con il lichene come accento.
+// Le superfici si separano con un passo di tono e un filo di bordo, non con le ombre.
+// Il rosso resta solo all'emergenza.
 
-// Accento: verde pino (chiaro) e salvia (scuro)
-val PineLight = Color(0xFF1F5B3F)                 // 8:1 sulle card bianche
-val OnPineLight = Color(0xFFFFFFFF)
-val SageDark = Color(0xFF8FD4A8)                  // 9:1 sulle card scure
-val OnSageDark = Color(0xFF0B2817)
+// Accento: verde abete (chiaro) e lichene (scuro)
+val FirLight = Color(0xFF1F4535)                  // 10:1 sulle card
+val OnFirLight = Color(0xFFFFFFFF)
+val LichenDark = Color(0xFFA9D3B6)                // 10:1 sulle card scure
+val OnLichenDark = Color(0xFF0F2A1D)
 
-// Muschio: contenitori morbidi (avatar, illustrazioni, scheda attiva)
-val MossLight = Color(0xFFDCE9D5)
-val OnMossLight = Color(0xFF10301F)
-val MossDark = Color(0xFF1F3D2C)
-val OnMossDark = Color(0xFFC8EBD3)
+// Muschio: contenitori morbidi (avatar, scheda attiva)
+val MossLight = Color(0xFFDAE6D3)
+val OnMossLight = Color(0xFF12301F)
+val MossDark = Color(0xFF223A2C)
+val OnMossDark = Color(0xFFCBE8D4)
 
 // Sfondi
-val MistLight = Color(0xFFF3F5F0)                 // nebbia
-val NightForestDark = Color(0xFF0E1612)           // bosco di notte (non nero puro: più caldo, sempre scuro sugli OLED)
+val StoneLight = Color(0xFFEDF0E9)                // carta color pietra, appena verde
+val NightForestDark = Color(0xFF0D1411)           // bosco di notte (non nero puro: sempre scuro sugli OLED)
 
-// Card, barre e menu
-val CardLight = Color(0xFFFCFDFA)
-val CardDark = Color(0xFF17211B)
+// Card, barre e menu: un passo sopra lo sfondo
+val CardLight = Color(0xFFFAFBF7)
+val CardDark = Color(0xFF151E19)
 val MenuLight = Color(0xFFFFFFFF)
-val MenuDark = Color(0xFF1F2B24)
-val TrackLight = Color(0xFFE4EADF)                // binario del selettore del tema
-val TrackDark = Color(0xFF24302A)
+val MenuDark = Color(0xFF1C2721)
+val TrackLight = Color(0xFFE2E7DD)                // binario del selettore del tema
+val TrackDark = Color(0xFF222D27)
 
 // Testo
-val InkLight = Color(0xFF14231B)
-val InkDark = Color(0xFFE7EEE9)
-val InkSecondaryLight = Color(0xFF55665B)         // 5,5:1 sulla nebbia
-val InkSecondaryDark = Color(0xFFA3B3A8)          // 7,3:1 sulle card scure
+val InkLight = Color(0xFF13201A)
+val InkDark = Color(0xFFE5ECE7)
+val InkSecondaryLight = Color(0xFF4E5D54)         // 6:1 sulla pietra
+val InkSecondaryDark = Color(0xFFA0B0A6)          // 7:1 sulle card scure
 
-// Separatori
-val LineLight = Color(0xFFDDE3DA)
-val LineDark = Color(0xFF2A362F)
+// Fili: bordi delle card e curve di livello
+val LineLight = Color(0xFFD3DBD0)
+val LineDark = Color(0xFF29352E)
 
 // Emergenza: riservato a SOS e pericoli CRITICAL. Bianco sopra a 5:1, e si stacca da entrambi gli sfondi.
 val EmergencyRed = Color(0xFFD32F2F)

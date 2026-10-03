@@ -64,7 +64,7 @@ Il caso d'uso che conta più di tutti è l'SOS con poca rete. Tutto il resto si 
 | A14 | **Errori come `sealed interface ApiError`** costruito dallo slug del `ProblemDetail` | Il client decide solo sullo slug (`type`), mai su `title` o `detail`. I messaggi per l'utente sono in italiano, nelle risorse. |
 | A15 | **Stringhe in `composeResources`**, italiano come lingua base | L'app è italiana; l'inglese si aggiunge dopo senza toccare il codice. |
 | A16 | **Configurazione per ambiente passata dalla piattaforma**: `BuildConfig` su Android, `Info.plist` (da `Config.xcconfig`) su iOS, letti in un `AppConfig` | Niente plugin Gradle in più per due valori (URL dell'API e ambiente). |
-| A17 | **Stile visivo "foresta", minimale, uguale su Android e iOS** (02/10): palette nebbia/bosco di notte con accento verde pino/salvia, card morbide, illustrazione di montagne e pini disegnata con i colori del tema, barra in basso fluttuante | Scelto dopo tre giri di prova sull'emulatore (Material 3 Expressive e stile iOS scartati). Un'identità legata alla montagna, poche decorazioni, nessuna immagine da caricare. |
+| A17 | **Stile visivo "foresta", minimale, uguale su Android e iOS** (02/10): palette nebbia/bosco di notte con accento verde pino/salvia, card morbide, illustrazione di montagne e pini disegnata con i colori del tema, barra in basso fluttuante. **Rivisto il 03/10 in "carta topografica"**: curve di livello al posto dell'illustrazione, palette pietra/abete/lichene, superfici separate da tono e filo di bordo invece che da ombre, due font OFL (Barlow Semi Condensed per i titoli, Atkinson Hyperlegible Next per il testo) | Scelto dopo tre giri di prova sull'emulatore (Material 3 Expressive e stile iOS scartati). La prima versione risultava grossolana (pini a triangoli, font di sistema, card invisibili sullo sfondo): le carte dei sentieri danno un'identità di montagna più precisa e minimale, sempre senza immagini da caricare. |
 | A18 | **Tema scelto dall'utente** (Sistema/Chiaro/Scuro) salvato in DataStore (`ThemeSettings`), con le barre di sistema allineate (`SystemBarsAppearance`, expect/actual) | Al sole serve il chiaro, di notte e con la batteria scarica lo scuro: la scelta non può dipendere solo dal sistema. |
 | A19 | **Errori in prugna** (ruolo `error` del tema), non in rosso | Il rosso resta solo a SOS e `CRITICAL` (§2). La prugna si distingue dal rosso anche con la protanopia. |
 
@@ -106,13 +106,23 @@ L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a t
   Ruoli usati: `background` sfondo, `surfaceContainerLowest` card, `surfaceContainer` barra in basso,
   `surfaceContainerHigh` menu, `surfaceContainerHighest` binari (es. selettore del tema), `primaryContainer`
   "muschio", `onSurfaceVariant` testo secondario, `outlineVariant` separatori.
-- **Colori:** nebbia `F3F5F0` e bosco di notte `0E1612` come sfondi, accento verde pino `1F5B3F` (chiaro) e salvia
-  `8FD4A8` (scuro). Il **rosso (`D32F2F`) è riservato all'SOS e ai pericoli `CRITICAL`**, così il pulsante di
+- **Colori** (03/10): pietra `EDF0E9` e bosco di notte `0D1411` come sfondi, card un passo sopra (`FAFBF7` / `151E19`)
+  con un filo di bordo `outlineVariant`, accento verde abete `1F4535` (chiaro) e lichene `A9D3B6` (scuro). Il **rosso (`D32F2F`) è riservato all'SOS e ai pericoli `CRITICAL`**, così il pulsante di
   emergenza non si confonde con nient'altro; gli **errori** (form, rete) usano la **prugna** del ruolo `error` (A19).
   Stato dei sentieri: `OPEN` verde, `WARNING` ambra (`B45309`), `CLOSED` rosso, sempre con un'icona o un'etichetta
   oltre al colore (per chi non distingue i colori).
-- **Forme e testo:** card a 20 dp, illustrazioni e barra a 28 dp; titoli SemiBold, corpo 15–17 sp. Le illustrazioni
-  sono disegnate in Compose con i colori del tema (`ForestIllustration`), così cambiano da sole con chiaro e scuro.
+- **Forme e testo:** card a 20 dp, barra a 28 dp. Titoli (`headline*`) in Barlow Semi Condensed SemiBold, il semi-condensato
+  dei cartelli; tutto il resto in Atkinson Hyperlegible Next (corpo 15–17 sp), leggibile al sole. Tutti i ruoli di
+  `Typography` sono definiti, così nessun testo ricade su Roboto/SF. Ombre quasi assenti (barra 3 dp, SOS 4 dp).
+- **Testata `ForestHeader`** (03/10, secondo giro): paesaggio a strati di carta che arriva sotto la barra di stato.
+  Cielo color muschio con le curve di livello appena accennate (`contourPaths`: rilievo inventato tagliato con marching
+  squares, una direttrice ogni cinque), due creste più chiare con la distanza, una fascia fitta di abeti (il colore più
+  scuro) e il "terreno" nel colore dello sfondo, su cui poggia il contenuto. In chiaro gli strati scuriscono verso il verde
+  abete, in scuro verso il nero. In cima a stati vuoti, Profilo e form; mai sulla schermata SOS. Per questo il `NavHost`
+  non ha margine in alto: ogni schermata usa `WindowInsets.safeDrawing.only(Top)` per il suo contenuto.
+- **Pulsanti** (03/10): una sola azione evidente per schermata, a tutta larghezza a capsula (`PrimaryPillButton`), e
+  l'alternativa come link sotto ("Non hai un account? Registrati", `FooterLink`): niente due pulsanti grandi in competizione. Nei form l'azione principale e il link alternativo stanno in
+  fondo, fissi, sopra la tastiera (zona del pollice). Indietro è un tondo da 48 dp in alto a sinistra.
 - **Movimento:** cambio di scheda con una dissolvenza breve; le schermate "spinte" (es. SOS) entrano da destra e la
   schermata sotto scivola via in parallasse. Ogni schermata ha uno **sfondo pieno**, altrimenti durante la
   transizione si vedono entrambe.
@@ -186,7 +196,7 @@ GeoSentinel-Mobile/
     │   │   ├── ui/
     │   │   │   ├── theme/        # Color, Theme (GeoSentinelTheme), ThemeSettings, SystemBars (expect)
     │   │   │   ├── navigation/   # Route, BottomNavItems
-    │   │   │   └── ...           # ForestIllustration, FormControls, UiMessage, schermate segnaposto
+    │   │   │   └── ...           # ContourLines, FormControls, UiMessage, schermate segnaposto
     │   │   └── di/               # KoinModules (initKoin)
     │   ├── auth/                 # data/PasswordRules; ui/ Login e Register (Screen + ViewModel)
     │   ├── trail/  hazard/  media/  refuge/  sos/  rescue/  staff/  profile/

@@ -6,13 +6,14 @@ import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -32,9 +33,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -59,7 +58,6 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.back
@@ -67,7 +65,8 @@ import geosentinel_mobile.shared.generated.resources.profile_account_section
 import geosentinel_mobile.shared.generated.resources.profile_guest_body
 import geosentinel_mobile.shared.generated.resources.profile_login
 import geosentinel_mobile.shared.generated.resources.profile_logout
-import geosentinel_mobile.shared.generated.resources.profile_register
+import geosentinel_mobile.shared.generated.resources.auth_no_account
+import geosentinel_mobile.shared.generated.resources.auth_register_link
 import geosentinel_mobile.shared.generated.resources.profile_session_expired
 import geosentinel_mobile.shared.generated.resources.role_admin
 import geosentinel_mobile.shared.generated.resources.role_guest
@@ -79,6 +78,7 @@ import geosentinel_mobile.shared.generated.resources.theme_light
 import geosentinel_mobile.shared.generated.resources.theme_section
 import geosentinel_mobile.shared.generated.resources.theme_system
 import geosentinel_mobile.shared.generated.resources.theme_title
+import it.unical.geosentinel_mobile.auth.ui.FooterLink
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
@@ -92,10 +92,11 @@ import kotlin.math.sin
 
 // Schermate provvisorie di M0.4: ognuna sparisce con la milestone che la implementa.
 // Ogni schermata ha uno sfondo pieno: durante le transizioni non deve trasparire quella sotto.
+// Le testate (ForestHeader) arrivano sotto la barra di stato; il resto del contenuto parte sotto (safeDrawing, Top).
 
 private val ContentMaxWidth = 600.dp
 
-// Stato vuoto: paesaggio con il simbolo della sezione, titolo, testo secondario.
+// Stato vuoto: il paesaggio in testata, poi titolo "da cartello" e testo, allineati a sinistra sul "terreno".
 // emergency = true solo per la schermata SOS: niente paesaggio, simbolo rosso (l'unico rosso oltre al pulsante).
 @Composable
 fun PlaceholderScreen(
@@ -105,68 +106,55 @@ fun PlaceholderScreen(
     emergency: Boolean = false,
     onBack: (() -> Unit)? = null,
 ) {
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        if (onBack != null) BackButton(onBack)
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(32.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center,
-        ) {
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
             if (emergency) {
-                Icon(icon, contentDescription = null, tint = EmergencyRed, modifier = Modifier.size(64.dp))
+                Spacer(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).height(88.dp))
+                Icon(icon, contentDescription = null, tint = EmergencyRed, modifier = Modifier.padding(horizontal = 28.dp).size(56.dp))
+                Spacer(Modifier.size(20.dp))
             } else {
-                Box(contentAlignment = Alignment.BottomCenter) {
-                    ForestIllustration(
-                        Modifier.padding(bottom = 28.dp).size(width = 240.dp, height = 140.dp).clip(MaterialTheme.shapes.large),
-                    )
-                    // simbolo della sezione su una "medaglia" a cavallo del bordo; il titolo lo dice già
-                    Box(
-                        modifier = Modifier
-                            .size(56.dp)
-                            .background(MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape)
-                            .border(4.dp, MaterialTheme.colorScheme.background, CircleShape),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(26.dp))
-                    }
-                }
+                ForestHeader(Modifier.fillMaxWidth().height(340.dp))
             }
-            Spacer(Modifier.size(20.dp))
-            Text(
-                text = stringResource(title),
-                style = MaterialTheme.typography.headlineSmall,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.size(8.dp))
-            Text(
-                text = stringResource(body),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.widthIn(max = 320.dp),
-            )
+            Column(Modifier.padding(horizontal = 28.dp).widthIn(max = 480.dp)) {
+                Text(
+                    text = stringResource(title),
+                    style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.semantics { heading() },
+                )
+                Spacer(Modifier.size(10.dp))
+                Text(
+                    text = stringResource(body),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.size(32.dp))
+            }
         }
+        if (onBack != null) BackButton(onBack, Modifier.align(Alignment.TopStart))
     }
 }
 
-// Le schermate "spinte" (es. SOS, accesso) hanno il loro Indietro: su iPhone non c'è un tasto di sistema
+// Indietro delle schermate "spinte": un tondo da 48 dp con la freccia, in alto a sinistra sotto la barra di stato.
+// Su iPhone non c'è un tasto di sistema; su Android il gesto Indietro funziona comunque.
+// Sta sopra la testata, quindi ha un fondo pieno e un filo di bordo per staccarsi dal cielo.
 @Composable
-internal fun BackButton(onBack: () -> Unit) {
-    Row(
-        modifier = Modifier
-            .heightIn(min = 48.dp)
-            .clickable(role = Role.Button, onClick = onBack)
-            .padding(start = 4.dp, end = 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
+internal fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier) {
+    val label = stringResource(Res.string.back)
+    Surface(
+        onClick = onBack,
+        shape = CircleShape,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        modifier = modifier
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
+            .padding(start = 16.dp, top = 8.dp)
+            .size(48.dp)
+            .semantics { contentDescription = label },
     ) {
-        Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowLeft,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.size(32.dp),
-        )
-        Text(stringResource(Res.string.back), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.primary)
+        Box(contentAlignment = Alignment.Center) {
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = null, modifier = Modifier.size(28.dp))
+        }
     }
 }
 
@@ -184,50 +172,40 @@ fun ProfilePlaceholderScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp),
+            .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth()) {
-            Spacer(Modifier.size(8.dp))
-            // Copertina con l'avatar a cavallo del bordo inferiore
-            Box {
-                ForestIllustration(Modifier.fillMaxWidth().height(148.dp).clip(MaterialTheme.shapes.large))
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .offset(x = 20.dp, y = 36.dp)
-                        .size(80.dp)
-                        .background(MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape)
-                        .border(4.dp, MaterialTheme.colorScheme.background, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
-                }
+        ForestHeader(Modifier.fillMaxWidth().height(240.dp))
+        Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
+            // Chi sei: iniziale e nome, sotto ruolo ed email (o cosa si guadagna accedendo)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Monogram(profile?.displayName)
+                Spacer(Modifier.size(16.dp))
+                Text(
+                    text = profile?.displayName ?: stringResource(session.role.label()),
+                    style = MaterialTheme.typography.headlineLarge,
+                    modifier = Modifier.semantics { heading() },
+                )
             }
-            Spacer(Modifier.size(48.dp))
-            // Loggato: nome, poi ruolo ed email. Ospite: "Ospite" e cosa si guadagna accedendo.
-            Text(
-                text = profile?.displayName ?: stringResource(session.role.label()),
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(horizontal = 4.dp).semantics { heading() },
-            )
-            Text(
-                text = when {
-                    profile != null -> stringResource(profile.role.label()) + " · " + profile.email
-                    session is SessionState.LoggedIn -> "" // profilo non ancora letto (offline)
-                    session is SessionState.Expired -> stringResource(Res.string.profile_session_expired)
-                    else -> stringResource(Res.string.profile_guest_body)
-                },
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp),
-            )
+            val subtitle = when {
+                profile != null -> stringResource(profile.role.label()) + " · " + profile.email
+                session is SessionState.LoggedIn -> null // profilo non ancora letto (offline)
+                session is SessionState.Expired -> stringResource(Res.string.profile_session_expired)
+                else -> stringResource(Res.string.profile_guest_body)
+            }
+            if (subtitle != null) {
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 12.dp),
+                )
+            }
 
             if (session is SessionState.LoggedIn) {
                 SectionHeader(Res.string.profile_account_section)
                 Card {
-                    // Riga come quella del tema; "Esci" è un'uscita, non un errore: verde pino, non prugna
+                    // "Esci" è un'uscita, non un errore: verde, non prugna
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -239,39 +217,18 @@ fun ProfilePlaceholderScreen(
                         Text(
                             stringResource(Res.string.profile_logout),
                             style = MaterialTheme.typography.bodyLarge,
-                            fontWeight = FontWeight.Medium,
+                            fontWeight = FontWeight.SemiBold,
                             color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
             } else {
-                // Ospite: due capsule compatte affiancate, l'azione principale piena e la secondaria solo bordo.
-                // FlowRow: con il testo ingrandito la seconda va a capo invece di tagliarsi.
-                Spacer(Modifier.size(20.dp))
-                FlowRow(
-                    modifier = Modifier.padding(horizontal = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp),
-                ) {
-                    Button(
-                        onClick = onLogin,
-                        shape = CircleShape,
-                        contentPadding = PaddingValues(horizontal = 28.dp),
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) {
-                        Text(stringResource(Res.string.profile_login), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    }
-                    OutlinedButton(
-                        onClick = onRegister,
-                        shape = CircleShape,
-                        // outline e non outlineVariant: il bordo di un pulsante deve vedersi (3:1)
-                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline),
-                        contentPadding = PaddingValues(horizontal = 28.dp),
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) {
-                        Text(stringResource(Res.string.profile_register), style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
-                    }
-                }
+                // Ospite: una sola azione evidente (Accedi, a tutta larghezza) e l'alternativa come link sotto,
+                // come nei form: niente due pulsanti grandi in competizione.
+                Spacer(Modifier.size(28.dp))
+                PrimaryPillButton(stringResource(Res.string.profile_login), onClick = onLogin)
+                Spacer(Modifier.size(4.dp))
+                FooterLink(Res.string.auth_no_account, Res.string.auth_register_link, onRegister)
             }
 
             SectionHeader(Res.string.theme_section)
@@ -292,14 +249,32 @@ fun ProfilePlaceholderScreen(
 
 // ---- Mattoncini ----
 
+// Card: un passo di tono sopra lo sfondo e un filo di bordo, senza ombra
 @Composable
 private fun Card(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier) { content() }
+    }
+}
+
+// Iniziale del nome su un tondo color muschio; per l'ospite una sagoma. Decorativo: il nome è scritto sotto.
+@Composable
+private fun Monogram(name: String?, modifier: Modifier = Modifier) {
+    val initial = name?.trim()?.firstOrNull()?.uppercaseChar()
+    Box(
+        modifier = modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics { },
+        contentAlignment = Alignment.Center,
+    ) {
+        if (initial != null) {
+            Text(initial.toString(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+        } else {
+            Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
+        }
     }
 }
 

@@ -36,7 +36,7 @@ Keychain sul simulatore. Backend: periodo di grazia di 60 s sul refresh token (A
 | Area | Scelta |
 |---|---|
 | Base | Kotlin 2.4.20, Compose Multiplatform 1.12.1, Material 3 1.9.0 (ultima stabile), `material-icons-core` 1.7.3, AGP 9.1, Gradle 9.5. UI tutta in Compose; Swift solo per l'ingresso iOS e Firebase |
-| Stile | Tema "foresta" minimale, uguale su Android e iOS (§2 del piano): token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
+| Stile | Tema "foresta" in stile carta topografica, uguale su Android e iOS (§2 del piano): testata `ForestHeader` (cielo con curve di livello, creste, abeti), titoli Barlow Semi Condensed e testo Atkinson Hyperlegible Next (`composeResources/font`, licenze OFL in `files/`), token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
 | Architettura | Package per feature in `shared`, ognuna con `data` (repository) e `ui` (Screen + ViewModel). Niente strato `domain` vuoto |
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
 | Rete | Client generato da openapi-generator 7.14 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Enum generati con un ultimo caso `unknown_default_open_api` (template `apiClient/templates/data_class.mustache`, da ripatchare quando si aggiorna il generatore). Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
@@ -66,7 +66,7 @@ shared/src/
     core/               config, network, session, db, location, push, ui, di
       ui/theme/         Color, Theme, ThemeSettings, SystemBars (expect)
       ui/navigation/    Route, BottomNavItems
-      ui/               ForestIllustration, FormControls, UiMessage, schermate segnaposto (sostituite milestone per milestone)
+      ui/               ForestHeader, ContourLines, FormControls, UiMessage, schermate segnaposto (sostituite milestone per milestone)
     auth/               data/PasswordRules, ui/ Login e Register (Screen + ViewModel)
     trail/ hazard/ media/ refuge/ sos/ rescue/ staff/ profile/   ognuna con data/ e ui/
   commonMain/composeResources/   stringhe e icone
@@ -90,10 +90,12 @@ shared/src/
   - il rosso solo per SOS e pericoli `CRITICAL`; gli errori usano il ruolo `error` del tema (prugna);
   - contrasto almeno WCAG AA, verificato in chiaro e in scuro;
   - bersagli: 72 dp per le azioni d'emergenza (SOS, Chiama 112), 56 dp per l'invio dei form, 48 dp minimo per il resto;
-  - form con i controlli di `core/ui/FormControls.kt` (campi a card, capsule, `FormErrorBanner`);
+  - form con i controlli di `core/ui/FormControls.kt` (campi a card, capsula `PrimaryPillButton`, `FormErrorBanner`;
+    l'alternativa è un link `FooterLink`); l'azione principale dei form sta in fondo, fissa sopra la tastiera;
   - `contentDescription` sulle icone che hanno un significato da sole, `null` su quelle decorative accanto a un testo;
   - ogni schermata ha uno sfondo pieno (altrimenti nelle transizioni trasparisce quella sotto);
-  - le schermate "spinte" hanno un pulsante Indietro proprio, perché su iPhone non c'è quello di sistema;
+  - le schermate "spinte" hanno un pulsante Indietro proprio (`BackButton`, tondo da 48 dp in alto a sinistra), perché su
+    iPhone non c'è quello di sistema;
   - **safe area:** si disegna fino ai bordi (`ignoresSafeArea` su iOS, `enableEdgeToEdge` su Android) e i margini li
     dà `WindowInsets.safeDrawing` (barre, indicatore Home, tacca e Dynamic Island anche in orizzontale), mai
     `systemBars` da solo. Nei form, dalla M2, anche `WindowInsets.ime` per la tastiera.
