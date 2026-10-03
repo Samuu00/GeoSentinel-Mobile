@@ -6,10 +6,12 @@ import io.ktor.client.plugins.auth.providers.BearerAuthProvider
 import it.unical.geosentinel_mobile.api.AuthenticationApi
 import it.unical.geosentinel_mobile.api.DevicesApi
 import it.unical.geosentinel_mobile.api.UserProfileApi
+import it.unical.geosentinel_mobile.api.model.ChangePasswordRequest
 import it.unical.geosentinel_mobile.api.model.LoginRequest
 import it.unical.geosentinel_mobile.api.model.RefreshRequest
 import it.unical.geosentinel_mobile.api.model.RegisterRequest
 import it.unical.geosentinel_mobile.api.model.TokenResponse
+import it.unical.geosentinel_mobile.api.model.UpdateProfileRequest
 import it.unical.geosentinel_mobile.api.model.UserProfileResponse
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
@@ -96,6 +98,29 @@ class SessionManager(
             endSession(SessionState.Anonymous)
         }
     }
+
+    // ---- profilo e account (M2.3): stanno qui perché cambiano la sessione ----
+
+    // Il profilo restituito dal server prende il posto di quello in sessione: il Profilo mostra subito il nome nuovo
+    suspend fun updateDisplayName(displayName: String): Result<Unit> =
+        apiCall { usersApi.updateMyProfile(UpdateProfileRequest(displayName.trim())) }.map { profile ->
+            if (_state.value is SessionState.LoggedIn) _state.value = SessionState.LoggedIn(profile.toUserProfile())
+        }
+
+    // Il server ruota i token e invalida quelli degli altri dispositivi (che al primo 401 tornano al login).
+    // Qui si salvano i nuovi e si svuota la cache del plugin Auth: con il refresh token vecchio, già sostituito,
+    // il server vedrebbe un riuso e revocherebbe anche questa sessione. Password attuale errata: 422 business-rule.
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> =
+        apiCall { usersApi.changeMyPassword(ChangePasswordRequest(currentPassword, newPassword)) }.map { response ->
+            store.write(response.toAuthTokens())
+            clearClientTokens()
+        }
+
+    // Solo per HIKER: il personale riceve 409 account-managed e la sessione resta com'è.
+    // Il server annulla prenotazioni future e SOS attivo, toglie i dispositivi e revoca tutti i token:
+    // qui basta chiudere la sessione locale.
+    suspend fun deleteAccount(): Result<Unit> =
+        apiCall { usersApi.deleteMyAccount() }.map { endSession(SessionState.Anonymous) }
 
     override suspend fun getTokens(): AuthTokens? = store.read()
 

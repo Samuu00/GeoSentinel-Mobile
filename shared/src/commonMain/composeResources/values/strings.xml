@@ -69,13 +69,49 @@
     <string name="error_field_display_name">Il nome deve avere da 2 a 100 caratteri.</string>
     <string name="error_field_birth_date">Inserisci la data di nascita.</string>
 
+    <!-- Mappa e posizione (M3.1) -->
+    <string name="map_zoom_in">Aumenta lo zoom</string>
+    <string name="map_zoom_out">Riduci lo zoom</string>
+    <string name="map_my_location">La mia posizione</string>
+    <string name="map_type_button">Tipo di mappa</string>
+    <string name="map_type_title">Tipo di mappa</string>
+    <string name="map_type_streets">Stradale</string>
+    <string name="map_type_satellite">Satellite</string>
+    <string name="location_rationale_title">Mostrare dove sei?</string>
+    <string name="location_rationale_body">La posizione serve a mostrarti sulla mappa e a trovare i sentieri vicini. GeoSentinel la usa solo mentre l'app è aperta.</string>
+    <string name="location_rationale_allow">Continua</string>
+    <string name="location_denied_title">Posizione non consentita</string>
+    <string name="location_denied_body">Hai negato l'accesso alla posizione. Puoi consentirlo dalle impostazioni dell'app.</string>
+    <string name="location_open_settings">Apri impostazioni</string>
+
     <!-- Profilo -->
     <string name="profile_guest_body">Accedi per segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
     <string name="profile_session_expired">La sessione è scaduta: accedi di nuovo.</string>
     <string name="profile_account_section">Account</string>
     <string name="profile_login">Accedi</string>
-    <string name="profile_register">Registrati</string>
     <string name="profile_logout">Esci</string>
+    <string name="profile_name">Nome</string>
+    <string name="profile_change_password">Cambia password</string>
+    <string name="profile_delete_account">Elimina account</string>
+    <string name="profile_deleting">Eliminazione in corso…</string>
+
+    <!-- Profilo: nome, password, cancellazione (M2.3) -->
+    <string name="edit_name_title">Il tuo nome</string>
+    <string name="edit_name_body">È il nome con cui compari nell'app.</string>
+    <string name="edit_name_button">Salva</string>
+    <string name="change_password_title">Cambia password</string>
+    <string name="change_password_body">Su questo telefono resti connesso. Sugli altri dispositivi dovrai accedere di nuovo.</string>
+    <string name="change_password_current">Password attuale</string>
+    <string name="change_password_new">Nuova password</string>
+    <string name="change_password_button">Cambia password</string>
+    <string name="error_field_current_password">Inserisci la password attuale.</string>
+    <string name="error_current_password_wrong">La password attuale non è corretta.</string>
+    <string name="delete_dialog_title">Eliminare l'account?</string>
+    <string name="delete_dialog_body">Le prenotazioni future e un eventuale SOS attivo verranno annullati e le tue foto cancellate. Non potrai più accedere con questo account.</string>
+    <string name="delete_dialog_continue">Continua</string>
+    <string name="delete_confirm_title">Confermi l'eliminazione?</string>
+    <string name="delete_confirm_body">L'operazione non si può annullare.</string>
+    <string name="delete_confirm_button">Elimina definitivamente</string>
 
     <!-- Errori dell'API (M1.3): uno per slug della guida all'API, mai il title o il detail del server -->
     <string name="error_network">Nessuna connessione. Controlla la rete e riprova.</string>

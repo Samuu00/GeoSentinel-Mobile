@@ -11,6 +11,10 @@ import it.unical.geosentinel_mobile.core.session.SessionManager
 import it.unical.geosentinel_mobile.core.session.SecureTokenStore
 import it.unical.geosentinel_mobile.core.session.createSecureTokenStore
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeSettings
+import it.unical.geosentinel_mobile.profile.ui.ChangePasswordViewModel
+import it.unical.geosentinel_mobile.profile.ui.EditNameViewModel
+import it.unical.geosentinel_mobile.profile.ui.ProfileViewModel
+import it.unical.geosentinel_mobile.trail.data.MapSettings
 import okio.Path.Companion.toPath
 import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.viewModel
@@ -21,6 +25,7 @@ fun coreModule(config: AppConfig, filesDir: String) = module {
     // un solo DataStore per file: due istanze sullo stesso file lanciano un'eccezione
     single { PreferenceDataStoreFactory.createWithPath(produceFile = { "$filesDir/$PREFERENCES_FILE_NAME".toPath() }) }
     single { ThemeSettings(get()) }
+    single { MapSettings(get()) }
     // i token hanno un file tutto loro (Android), escluso dal backup; su iOS stanno nel Keychain
     single<SecureTokenStore> { createSecureTokenStore(filesDir) }
 
@@ -31,6 +36,9 @@ fun coreModule(config: AppConfig, filesDir: String) = module {
 
     viewModel { LoginViewModel(get()) }
     viewModel { RegisterViewModel(get()) }
+    viewModel { ProfileViewModel(get()) }
+    viewModel { EditNameViewModel(get()) }
+    viewModel { ChangePasswordViewModel(get()) }
 }
 
 // Una sola volta per processo: Application.onCreate su Android, MainViewController su iOS.

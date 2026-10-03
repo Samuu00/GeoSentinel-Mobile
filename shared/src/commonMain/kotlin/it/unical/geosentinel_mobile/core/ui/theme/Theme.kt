@@ -8,6 +8,11 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -141,6 +146,13 @@ private val AppShapes = Shapes(
     extraLarge = RoundedCornerShape(32.dp),
 )
 
+/**
+ * Uno schermo che disegna lui sotto la barra di stato (la mappa) dice qui se quello sfondo è scuro (true) o chiaro
+ * (false), così le icone di stato restano leggibili anche quando non seguono il tema. null = seguono il tema.
+ * Chi lo imposta lo rimette a null quando lascia lo schermo.
+ */
+val LocalStatusBarOverDark = staticCompositionLocalOf<MutableState<Boolean?>> { mutableStateOf(null) }
+
 // Niente colori dinamici di Android 12+: il verde e il rosso dell'SOS devono restare questi
 @Composable
 fun GeoSentinelTheme(
@@ -152,11 +164,14 @@ fun GeoSentinelTheme(
         ThemeMode.LIGHT -> false
         ThemeMode.DARK -> true
     }
-    SystemBarsAppearance(mode, darkTheme)
-    MaterialTheme(
-        colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
-        typography = appTypography(),
-        shapes = AppShapes,
-        content = content,
-    )
+    val statusBarOverDark = remember { mutableStateOf<Boolean?>(null) }
+    SystemBarsAppearance(mode, statusBarOverDark.value ?: darkTheme)
+    CompositionLocalProvider(LocalStatusBarOverDark provides statusBarOverDark) {
+        MaterialTheme(
+            colorScheme = if (darkTheme) DarkColorScheme else LightColorScheme,
+            typography = appTypography(),
+            shapes = AppShapes,
+            content = content,
+        )
+    }
 }

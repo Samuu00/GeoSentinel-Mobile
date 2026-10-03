@@ -27,7 +27,12 @@ sealed interface Route {
     // "spinte" sopra il Profilo, senza barra in basso
     @Serializable data object Login : Route
     @Serializable data object Register : Route
+    @Serializable data object EditName : Route
+    @Serializable data object ChangePassword : Route
 }
+
+// Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
+val FormRoutes = setOf(Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class)
 
 data class BottomNavItem(
     val route: Route,

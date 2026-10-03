@@ -17,7 +17,12 @@
 > accesso e registrazione, Profilo legato alla sessione; verificate sull'emulatore contro il backend locale.
 > 70 test host + 1 test sull'emulatore.
 > Aperti: test iOS in CI (dopo la correzione dei nomi), Keychain sul simulatore, token push al logout (M7).
-> Prossimo: M2.3 (profilo e cancellazione dell'account), poi la catena di review di M2.
+> **M2.3 fatta** (03/10): nome, cambio password e cancellazione dell'account in `SessionManager` (niente
+> `ProfileRepository`), schermate del Profilo; checkpoint verificati contro il backend locale. 86 test host.
+> Restyling "carta topografica" dell'interfaccia (03/10, §2).
+> **M3.1 fatta** (03/10): mappa MapLibre/OpenFreeMap sulla Sila, posizione dal modulo `location` di MapLibre (niente
+> `expect class LocationProvider`), permesso solo quando serve. 92 test host.
+> Prossimo: la catena di review di M2 (§6), poi M3.2.
 
 ---
 
@@ -58,7 +63,7 @@ Il caso d'uso che conta più di tutti è l'SOS con poca rete. Tutto il resto si 
 | A8 | **Room KMP** (driver SQLite bundled) per cache del catalogo e **outbox** delle azioni da ritentare; **DataStore** per le preferenze | L'SOS e la prenotazione devono sopravvivere alla chiusura dell'app con la loro `Idempotency-Key` (ADR-0012 del backend). |
 | A9 | **Token in un `SecureTokenStore` expect/actual**: Keystore su Android, Keychain su iOS | Lo chiede la guida all'API. Mai in DataStore in chiaro né nei log. |
 | A10 | **Mappa con MapLibre Compose** (`maplibre-compose`) e tile vettoriali di **OpenFreeMap** | Funziona su Android e iOS, non serve una chiave Google, le tile OSM vanno bene per i sentieri. In M3 va verificata la policy d'uso delle tile. |
-| A11 | **Posizione expect/actual**: `FusedLocationProviderClient` su Android, `CLLocationManager` su iOS | Serve una sola funzione (posizione corrente più aggiornamenti mentre l'SOS è attivo): una libreria in più non vale la pena. |
+| A11 | **Posizione dal modulo `location` di MapLibre Compose** (03/10, al posto dell'expect/actual): `LocationManager` di sistema su Android (niente Google Play), `CLLocationManager` su iOS, con stato e richiesta del permesso. Sopra, in `core/location/Location.kt`: `GeoPoint`, conversioni da/verso `Position` e `current()`/`positions()` | È già una dipendenza della mappa (non una libreria in più) e copre permessi, ciclo di vita e piattaforme. Il provider si crea nella UI (`rememberLocationState`/`rememberDefaultLocationProvider`): su Android il permesso si chiede solo con l'Activity. |
 | A12 | **Push con gli SDK Firebase nativi**: `FirebaseMessagingService` su Android, Firebase via Swift Package Manager su iOS. Lo `shared` riceve solo il token e il payload | Il payload contiene solo `type` e `alertId` (ADR-0016 del backend): l'app rilegge i dettagli dall'API. |
 | A13 | **Foto dai picker di sistema** (Photo Picker su Android, `PHPickerViewController` su iOS), **ricodificate in JPEG** nel codice di piattaforma | Il backend accetta solo JPEG, PNG e WebP fino a 10 MB: l'HEIC dell'iPhone va convertito qui. La ricodifica toglie anche gli EXIF, compresa la posizione GPS. |
 | A14 | **Errori come `sealed interface ApiError`** costruito dallo slug del `ProblemDetail` | Il client decide solo sullo slug (`type`), mai su `title` o `detail`. I messaggi per l'utente sono in italiano, nelle risorse. |
@@ -191,7 +196,7 @@ GeoSentinel-Mobile/
     │   │   ├── network/          # HttpClientFactory (+ AuthScope), RetryPolicy, ApiCall, ApiError, HttpEngine (expect)
     │   │   ├── session/          # UserRole, SessionManager, SecureTokenStore, TokenCodec, SessionModels
     │   │   ├── db/               # AppDatabase (Room), OutboxDao
-    │   │   ├── location/         # LocationProvider (expect)
+    │   │   ├── location/         # Location.kt: GeoPoint, lon/lat, current() e positions() sul provider di MapLibre
     │   │   ├── push/             # PushTokenSink, PushEvent
     │   │   ├── ui/
     │   │   │   ├── theme/        # Color, Theme (GeoSentinelTheme), ThemeSettings, SystemBars (expect)
@@ -203,7 +208,7 @@ GeoSentinel-Mobile/
     │   │   ├── data/             # <Feature>Repository
     │   │   └── ui/               # <Schermata>Screen + <Schermata>ViewModel
     │   └── composeResources/     # stringhe (values/strings.xml), icone
-    ├── androidMain/              # actual: Keystore + DataStore, OkHttp, LocationProvider, ImageEncoder, driver Room
+    ├── androidMain/              # actual: Keystore + DataStore, OkHttp, ImageEncoder, driver Room
     ├── iosMain/                  # actual: Keychain, Darwin, CLLocationManager, UIImage in JPEG, driver Room
     ├── commonTest/               # test con MockEngine (backend finto in SessionTestSupport), Room in memoria
     ├── androidHostTest/          # test sulla JVM che usano API Android (DataStore, cifratura)
@@ -578,26 +583,76 @@ class SessionManager(store: SecureTokenStore, authApi: AuthApi, usersApi: UsersA
   `deleteMyAccount` con doppia conferma.
 - Per il personale `deleteMyAccount` risponde 409 `account-managed`: messaggio "contatta l'amministratore".
 - La cancellazione si fa tutta dall'app: è un requisito di App Store e Google Play.
-- Checkpoint:
-  - [ ] dopo il cambio password l'app resta loggata, un altro dispositivo viene disconnesso al primo 401.
-  - [ ] dopo la cancellazione si torna ospiti e il login con le vecchie credenziali fallisce.
+- Fatto il 03/10 (contratto cambiato):
+  - **Niente `ProfileRepository`.** L'interfaccia scritta per M2.3 restituiva il DTO generato e non poteva toccare
+    la sessione, ma tutte e tre le operazioni la cambiano: il cambio password ruota i token (vanno salvati e va
+    svuotata la cache del plugin `Auth`), la cancellazione chiude la sessione, il nome nuovo va nel profilo di
+    `SessionState`. Stanno quindi in `SessionManager`: `updateDisplayName(name)`, `changePassword(current, new)`,
+    `deleteAccount()`, tutte `Result<Unit>`. `profile/` ha solo `ui/` (niente strato vuoto, A2).
+  - UI: `ProfileScreen` (sostituisce il segnaposto) con le righe Nome, Cambia password, Esci e, in una card a parte e
+    in prugna, Elimina account con doppia conferma (cosa succede: prenotazioni future e SOS attivo annullati, foto
+    cancellate; poi "Elimina definitivamente"). Form `EditNameScreen` e `ChangePasswordScreen` (rotte `EditName`,
+    `ChangePassword`, senza barra in basso). `FormScaffold`, `FooterLink` e `PasswordField` spostati in
+    `core/ui/FormControls.kt`. ViewModel in `profile/ui/ProfileViewModels.kt`.
+  - Errori: password attuale errata (422 `business-rule`) sul campo; personale (409 `account-managed`) con il
+    messaggio "tramite l'amministratore" e la sessione intatta.
+  - Test: 6 in `SessionManagerTest` (backend finto esteso con PATCH/DELETE `/users/me` e `/users/me/password`) e 8 in
+    `ProfileViewModelsTest`; 86 test host in tutto. Verificato anche rompendo apposta `clearToken` dopo il cambio
+    password: il test fallisce.
+- Checkpoint (backend locale, emulatore `Medium_Phone`, 03/10):
+  - [x] dopo il cambio password l'app resta loggata (anche dopo un riavvio), un altro dispositivo riceve 401 e la
+    vecchia password non vale più. Password attuale sbagliata: errore sul campo.
+  - [x] dopo la cancellazione (account di prova registrato dall'app) si torna ospiti, il file della sessione è vuoto e
+    il login con le vecchie credenziali risponde 401. `rescuer@`: 409 `account-managed`.
+  - [x] in più: con il refresh revocato dal server il Profilo mostra "La sessione è scaduta", non "Ospite".
 
 ### Milestone 3: mappa e catalogo
 
 **M3.1 Mappa e posizione**
 ```kotlin
-expect class LocationProvider {
-    suspend fun current(): GeoPoint?                       // null se il permesso è negato o non c'è un fix
-    fun updates(intervalMillis: Long): Flow<GeoPoint>
-}
+// core/location/Location.kt, sopra org.maplibre.compose.location.LocationProvider (A11)
 data class GeoPoint(val lat: Double, val lon: Double)
+fun GeoPoint.toPosition(): Position                         // Position(longitude, latitude)
+suspend fun LocationProvider.current(timeout: Duration = 10.seconds): GeoPoint?   // null: niente permesso o fix
+fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
 ```
 - Il permesso di posizione si chiede **quando serve** (primo "vicino a me" o primo SOS), con una spiegazione prima del
   dialogo di sistema. Senza permesso la mappa funziona lo stesso, partendo da un'area di default.
 - MapLibre con lo stile OpenFreeMap, pallino della posizione, controlli di zoom grandi.
 - Checkpoint:
-  - [ ] con il permesso negato nessun crash, la mappa si apre sull'area di default.
-  - [ ] la posizione dell'emulatore impostata in Sila compare nel punto giusto.
+- Fatto il 03/10 (contratto cambiato):
+  - **Niente `expect class LocationProvider`.** Quella scritta per M3.1 non aveva `actual` (la build non compilava) e
+    un `expect class` senza costruttore non può ricevere il `Context`/l'Activity che Android vuole per il permesso.
+    Il modulo `location` di MapLibre Compose fa già tutto (A11); in `Location.kt` restano `GeoPoint`, le conversioni
+    lon/lat e `current()`/`positions()` per sentieri vicini (M3.2) e SOS (M6).
+  - `trail/ui/MapScreen.kt` sostituisce il segnaposto: stile OpenFreeMap `liberty` (chiaro) o `fiord` (scuro: `dark` era troppo nero), partenza
+    sulla Sila (39,33 / 16,55, zoom 9,5), pallino `LocationIndicatorLayer`, controlli da 56 dp a destra (zoom e "La mia
+    posizione", simboli disegnati: `material-icons-core` non ha il "meno" né il mirino). Overlay di default di MapLibre
+    (scala, bussola, attribuzione OSM) senza il logo MapLibre; la "i" dell'attribuzione in basso a sinistra, nei colori del tema. La mappa arriva sotto la barra di stato e lascia spazio all'SOS in basso.
+  - Permesso solo al tocco su "La mia posizione": spiegazione, poi dialogo di sistema; se negato per sempre, rimando
+    alle impostazioni. Manifest: `ACCESS_COARSE/FINE_LOCATION` (solo primo piano); iOS: `NSLocationWhenInUseUsageDescription`.
+  - **Motore di MapLibre su Android:** da aggiungere a mano (`maplibre-native-ffi-runtime-opengl`, stessa versione di
+    `maplibre-native-ffi`): senza, la mappa va in crash all'apertura (`libmaplibre-native-c.so` mancante). Su iOS il
+    runtime Metal arriva da solo con maplibre-compose (niente SPM in Xcode, da confermare nel job `ios`).
+  - Test: `LocationTest` (6): regressione lon/lat sulla Sila, primo fix, niente permesso, timeout, piattaforma senza
+    provider, `positions`. 92 test host.
+- Checkpoint (emulatore `Medium_Phone`, 03/10):
+  - [x] con il permesso negato nessun crash, la mappa si apre sull'area di default (Sila).
+  - [x] la posizione dell'emulatore impostata in Sila (Camigliatello, 39,3311 / 16,4497) compare nel punto giusto e
+    "La mia posizione" ci centra la mappa.
+  - [ ] (con il Mac) mappa e permesso sul simulatore iPhone.
+- Tipi di mappa (03/10, richiesta dopo M3.1): selettore "Tipo di mappa" (pulsante livelli, foglio dal basso, scelta
+  salvata in DataStore da `trail/data/MapSettings`). Stili in `composeResources/files/map`, generati da
+  `tools/map-styles/build_map_styles.py`, tutti gratuiti e senza chiave:
+  - **Stradale**: `liberty` di OpenFreeMap ricolorato con una palette tipo Google Maps, chiaro e scuro;
+  - **Satellite**: Sentinel-2 cloudless 2016 di EOX (CC BY 4.0, 10 m, nitido fino allo zoom 15) con strade,
+    sentieri ed etichette sopra;
+  - **Topografica tolta** (03/10): OpenTopoMap serve tile PNG, che il motore di maplibre-compose 0.19 su Android
+    scarica ma non disegna in modo affidabile (né direttamente, né convertite in JPEG con un `MapResourceProvider`:
+    spariva dopo un cambio di tema o un riavvio). Da riprovare con una versione nuova del motore.
+  - Aperto: con il tema scuro dell'app e una mappa chiara le icone della barra di stato restano chiare.
+  - Nota per M3.2/M6: su Android il primo fix è l'ultima posizione nota, che può essere vecchia (sull'emulatore era
+    ancora a Roma). Per "vicino a me" e per l'SOS conviene guardare `measuredAt` e aspettare un fix recente.
 
 **M3.2 Sentieri e POI**
 - `findTrailsInBoundingBox` quando la mappa si ferma (debounce di 400 ms, bbox nel formato del backend),
@@ -825,7 +880,7 @@ perché scriverebbero il codice al posto tuo.
 /ecc:orchestrate custom "ecc:kotlin-build-resolver,ecc:kotlin-reviewer" "[Plan: docs/MASTER_PLAN.md#step-0] Review only, do not write feature code: KMP Gradle setup (libs.versions.toml with Ktor 3, Koin, Room KMP + KSP, Navigation Compose, MapLibre Compose, stable Material 3), AppConfig per platform, debug-only cleartext (network_security_config, NSAllowsLocalNetworking), theme and role-based bottom bar, CI android+ios jobs; Acceptance: assembleDebug and host tests green; release manifest has no cleartext; local.properties untracked"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-1] Review only: generated OpenAPI multiplatform client module, shared Ktor HttpClient (Auth bearer with single-flight refresh, retry only on 429, 409 resource-busy, 503 with Retry-After, timeouts, debug-only logging with Authorization redacted), ProblemDetail slug to sealed ApiError mapping; Acceptance: parallel 401s trigger one refresh; 422 never retried; no token in logs"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-2] Review only: expect/actual SecureTokenStore (Android Keystore AES-GCM + DataStore, iOS Keychain ThisDeviceOnly), SessionManager login/register/logout order (unregister device, logout, local clear), password byte-length check, profile update, change password storing new tokens, account deletion with 409 account-managed; Acceptance: no plaintext tokens on disk; logout clears local session offline; deletion returns to guest"
-/ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:code-reviewer" "[Plan: docs/MASTER_PLAN.md#step-3] Review only: MapLibre Compose map with bbox debounce, trail/POI repositories with Room cache and ETag If-None-Match handling, GeoJSON [lon,lat] to Position conversion, LocationProvider expect/actual with just-in-time permission, signed media URL refresh; Acceptance: lon/lat regression test passes; cached trail visible offline; 304 updates timestamp only"
+/ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:code-reviewer" "[Plan: docs/MASTER_PLAN.md#step-3] Review only: MapLibre Compose map with bbox debounce, trail/POI repositories with Room cache and ETag If-None-Match handling, GeoJSON [lon,lat] to Position conversion, MapLibre location module with just-in-time permission, signed media URL refresh; Acceptance: lon/lat regression test passes; cached trail visible offline; 304 updates timestamp only"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-4] Review only: hazard report form, ImageEncoder expect/actual (HEIC to JPEG, resize, EXIF stripped), MediaUploader presigned POST flow (separate HttpClient without bearer, formFields then file last, Content-Length, confirm, restart after expiresAt); Acceptance: upload reaches READY; no bearer sent to storage; no GPS EXIF in uploaded file"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:code-reviewer" "[Plan: docs/MASTER_PLAN.md#step-5] Review only: refuges nearby and nightly availability, booking through Room outbox with Idempotency-Key persisted before the request and removed only on a final response, paged my-bookings, cancellation; Acceptance: app killed mid-request creates no duplicate; capacity-exceeded leaves no pending action"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-6] Review only: SosController state machine, 3 s long-press trigger, outbox retry across restarts with one Idempotency-Key, location fix timeout and fallback, foreground-only location updates, status polling, cancel, always-visible 112 dialer fallback, no medical notes or position in logs; Acceptance: offline SOS delivers exactly one alert when back online; logged-out user is offered 112; no PII logged"

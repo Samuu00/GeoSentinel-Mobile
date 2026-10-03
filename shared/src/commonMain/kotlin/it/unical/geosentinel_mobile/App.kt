@@ -91,14 +91,18 @@ import it.unical.geosentinel_mobile.core.session.SessionManager
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.PlaceholderScreen
-import it.unical.geosentinel_mobile.core.ui.ProfilePlaceholderScreen
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItems
+import it.unical.geosentinel_mobile.core.ui.navigation.FormRoutes
 import it.unical.geosentinel_mobile.core.ui.navigation.Route
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyOnRed
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
 import it.unical.geosentinel_mobile.core.ui.theme.GeoSentinelTheme
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeSettings
+import it.unical.geosentinel_mobile.profile.ui.ChangePasswordScreen
+import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
+import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
+import it.unical.geosentinel_mobile.trail.ui.MapScreen
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -137,8 +141,8 @@ fun App() {
             // che in orizzontale stanno di lato. Vale per contenuto e pulsante SOS.
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
-                // nei form di accesso la barra non serve, e con la tastiera aperta ruberebbe spazio
-                if (destination?.hasRoute<Route.Login>() == true || destination?.hasRoute<Route.Register>() == true) return@Scaffold
+                // nei form la barra non serve, e con la tastiera aperta ruberebbe spazio
+                if (FormRoutes.any { route -> destination?.hasRoute(route) == true }) return@Scaffold
                 TabBar(role, destination) { route ->
                     navController.navigate(route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -179,7 +183,7 @@ fun App() {
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
-                    PlaceholderScreen(Icons.Filled.Place, Res.string.placeholder_map_title, Res.string.placeholder_map_body)
+                    MapScreen()
                 }
                 composable<Route.Refuges> {
                     PlaceholderScreen(Icons.Filled.Home, Res.string.placeholder_refuges_title, Res.string.placeholder_refuges_body)
@@ -191,12 +195,12 @@ fun App() {
                     PlaceholderScreen(Icons.Filled.Build, Res.string.placeholder_management_title, Res.string.placeholder_management_body)
                 }
                 composable<Route.Profile> {
-                    ProfilePlaceholderScreen(
+                    ProfileScreen(
                         session = sessionState,
                         onLogin = { navController.navigate(Route.Login) },
                         onRegister = { navController.navigate(Route.Register) },
-                        // la pulizia locale avviene comunque, anche se la composizione sparisce (NonCancellable)
-                        onLogout = { scope.launch { session.logout() } },
+                        onEditName = { navController.navigate(Route.EditName) },
+                        onChangePassword = { navController.navigate(Route.ChangePassword) },
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
                     )
@@ -221,6 +225,18 @@ fun App() {
                         onLogin = { navController.navigate(Route.Login) { popUpTo<Route.Register> { inclusive = true } } },
                         onRegistered = { navController.popBackStack<Route.Profile>(inclusive = false) },
                     )
+                }
+                composable<Route.EditName>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    EditNameScreen(onBack = { navController.popBackStack() }, onSaved = { navController.popBackStack() })
+                }
+                composable<Route.ChangePassword>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    ChangePasswordScreen(onBack = { navController.popBackStack() }, onChanged = { navController.popBackStack() })
                 }
                 // Schermata "spinta" sopra la mappa: entra da destra e copre tutto (ha uno sfondo pieno)
                 composable<Route.SosEmergency>(

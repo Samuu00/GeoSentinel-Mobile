@@ -6,6 +6,8 @@
 	<true/>
 	<key>API_BASE_URL</key>
 	<string>$(API_BASE_URL)</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>La posizione serve a mostrarti sulla mappa, a trovare i sentieri vicini e a inviarla ai soccorsi con un SOS. GeoSentinel la usa solo mentre l'app è aperta.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

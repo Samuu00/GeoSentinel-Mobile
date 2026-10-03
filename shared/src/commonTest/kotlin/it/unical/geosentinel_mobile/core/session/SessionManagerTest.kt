@@ -5,6 +5,7 @@ import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -238,5 +239,90 @@ class SessionManagerTest {
         session.restore()
 
         assertEquals(SessionState.Anonymous, session.state.value)
+    }
+
+    // ---- profilo e account (M2.3) ---------------------------------------------------------------------------
+
+    private suspend fun TestScope.loggedIn(email: String = "hiker@test.dev", password: String = "password-giusta-1"): SessionManager {
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+        assertTrue(session.login(email, password).isSuccess)
+        return session
+    }
+
+    @Test
+    fun `il cambio del nome aggiorna il profilo in sessione`() = runTest {
+        val session = loggedIn()
+
+        assertTrue(session.updateDisplayName("  Anna  ").isSuccess)
+
+        assertEquals("Anna", assertIs<SessionState.LoggedIn>(session.state.value).profile?.displayName)
+        assertEquals("Anna", backend.names["hiker@test.dev"], "il nome si manda senza spazi ai lati")
+    }
+
+    @Test
+    fun `cambio password - token nuovi salvati e le richieste dopo usano il bearer nuovo`() = runTest {
+        val session = loggedIn() // a1 / r1
+
+        assertTrue(session.changePassword("password-giusta-1", "nuova-password-123").isSuccess)
+        assertEquals("a2", store.tokens?.accessToken)
+
+        // senza clearToken il plugin manderebbe ancora a1, già revocato: un 401 in più (che refreshTokens poi
+        // assorbe perché i token salvati sono già cambiati) e il token vecchio di nuovo in rete
+        assertTrue(session.updateDisplayName("Anna").isSuccess)
+        assertEquals(listOf("PATCH /api/v1/users/me Bearer a2"), backend.requests.filter { it.startsWith("PATCH") })
+        assertEquals(0, refreshCalls())
+        assertIs<SessionState.LoggedIn>(session.state.value)
+    }
+
+    @Test
+    fun `cambio password - un altro dispositivo torna al login al primo 401`() = runTest {
+        val otherStore = FakeSecureTokenStore(backend.issueFor("hiker@test.dev"))
+        val session = loggedIn()
+
+        assertTrue(session.changePassword("password-giusta-1", "nuova-password-123").isSuccess)
+
+        val (other, _) = sessionWith(backend, otherStore)
+        other.restore()
+        assertEquals(SessionState.Expired, other.state.value)
+        assertNull(otherStore.tokens)
+        assertIs<SessionState.LoggedIn>(session.state.value, "questo telefono resta connesso")
+    }
+
+    @Test
+    fun `password attuale sbagliata - 422 business-rule e i token restano`() = runTest {
+        val session = loggedIn()
+        val before = store.tokens
+
+        val result = session.changePassword("password-sbagliata", "nuova-password-123")
+
+        val error = assertIs<ApiError.BusinessRule>(assertIs<ApiException>(result.exceptionOrNull()).error)
+        assertEquals("business-rule", error.slug)
+        assertEquals(before, store.tokens)
+        assertIs<SessionState.LoggedIn>(session.state.value)
+    }
+
+    @Test
+    fun `cancellazione - si torna ospiti e le vecchie credenziali non valgono piu`() = runTest {
+        val session = loggedIn()
+
+        assertTrue(session.deleteAccount().isSuccess)
+
+        assertEquals(SessionState.Anonymous, session.state.value)
+        assertNull(store.tokens)
+        val login = session.login("hiker@test.dev", "password-giusta-1")
+        assertIs<ApiError.Unauthorized>(assertIs<ApiException>(login.exceptionOrNull()).error)
+    }
+
+    @Test
+    fun `cancellazione del personale - 409 account-managed e la sessione resta`() = runTest {
+        val session = loggedIn("rescuer@test.dev", "password-giusta-2")
+
+        val result = session.deleteAccount()
+
+        val error = assertIs<ApiError.Conflict>(assertIs<ApiException>(result.exceptionOrNull()).error)
+        assertEquals("account-managed", error.slug)
+        assertEquals(UserRole.RESCUE_OPERATOR, session.state.value.role)
+        assertNotNull(store.tokens)
     }
 }

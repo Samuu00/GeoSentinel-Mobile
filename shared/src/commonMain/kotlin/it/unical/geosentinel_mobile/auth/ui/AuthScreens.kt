@@ -71,11 +71,15 @@ import geosentinel_mobile.shared.generated.resources.auth_register_link
 import geosentinel_mobile.shared.generated.resources.auth_register_title
 import geosentinel_mobile.shared.generated.resources.auth_show_password
 import it.unical.geosentinel_mobile.core.ui.BackButton
+import it.unical.geosentinel_mobile.core.ui.FooterLink
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
+import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
+import it.unical.geosentinel_mobile.core.ui.PasswordField
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
+import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.number
@@ -83,7 +87,6 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
-import kotlin.time.Instant
 
 @Composable
 fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Unit) {
@@ -184,94 +187,6 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
             DatePicker(pickerState)
         }
     }
-}
-
-// Struttura dei form, secondo gli standard per mobile:
-// - in alto la testata con il paesaggio (sotto la barra di stato) e il tondo Indietro (su iPhone non c'è quello di sistema);
-// - al centro titolo, testo e campi, che scorrono;
-// - in fondo, fissa, l'azione principale con il link alternativo sotto: sempre visibile e a portata di pollice.
-//   Con la tastiera aperta sale sopra la tastiera: lo Scaffold di App applica safeDrawing, che comprende WindowInsets.ime.
-// Contenuto largo al massimo 480 dp.
-@Composable
-private fun FormScaffold(
-    onBack: () -> Unit,
-    title: StringResource,
-    body: StringResource,
-    actions: @Composable ColumnScope.() -> Unit,
-    content: @Composable ColumnScope.() -> Unit,
-) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
-        Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Column(
-                modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                ForestHeader(Modifier.fillMaxWidth().height(200.dp))
-                Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp)) {
-                    Text(stringResource(title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-                    Spacer(Modifier.size(8.dp))
-                    Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.size(28.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
-                    Spacer(Modifier.size(24.dp))
-                }
-            }
-            // azioni in fondo, su un filo che le separa dal contenuto che scorre
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Column(
-                Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
-                content = actions,
-            )
-        }
-        BackButton(onBack, Modifier.align(Alignment.TopStart))
-    }
-}
-
-// "Non hai un account? Registrati": la domanda in grigio, il link in verde. Va a capo con il testo grande.
-// È l'azione alternativa sotto quella principale, qui e nel Profilo da ospite.
-@Composable
-internal fun FooterLink(question: StringResource, link: StringResource, onClick: () -> Unit) {
-    FlowRow(
-        modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
-        verticalArrangement = Arrangement.Center,
-        itemVerticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(stringResource(question), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = onClick, modifier = Modifier.heightIn(min = 48.dp)) {
-            Text(stringResource(link), style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold)
-        }
-    }
-}
-
-@Composable
-private fun PasswordField(
-    value: String,
-    onValueChange: (String) -> Unit,
-    onDone: () -> Unit,
-    error: String? = null,
-    hint: String? = null,
-) {
-    var visible by rememberSaveable { mutableStateOf(false) }
-    FormTextField(
-        value = value,
-        onValueChange = onValueChange,
-        label = stringResource(Res.string.auth_password),
-        error = error,
-        supporting = hint,
-        visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
-        // testo e non l'icona dell'occhio, che in material-icons-core non c'è; dice anche cosa fa
-        trailing = {
-            TextButton(onClick = { visible = !visible }, modifier = Modifier.heightIn(min = 48.dp).padding(end = 4.dp)) {
-                Text(
-                    stringResource(if (visible) Res.string.auth_hide_password else Res.string.auth_show_password),
-                    style = MaterialTheme.typography.labelLarge,
-                )
-            }
-        },
-        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, imeAction = ImeAction.Done),
-        keyboardActions = KeyboardActions(onDone = { onDone() }),
-    )
 }
 
 // Tutto il campo apre il calendario: niente formati di data da indovinare

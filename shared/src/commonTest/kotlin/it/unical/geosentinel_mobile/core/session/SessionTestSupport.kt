@@ -34,6 +34,7 @@ class FakeSecureTokenStore(var tokens: AuthTokens? = null) : SecureTokenStore {
 class FakeBackend {
     val users = mutableMapOf("hiker@test.dev" to "password-giusta-1", "rescuer@test.dev" to "password-giusta-2")
     val roles = mutableMapOf("hiker@test.dev" to "HIKER", "rescuer@test.dev" to "RESCUE_OPERATOR")
+    val names = mutableMapOf<String, String>() // nome visualizzato, se cambiato (altrimenti "Nome")
     var offline = false
     var refreshStatus = HttpStatusCode.OK
     var loginStatus: HttpStatusCode? = null // forza una risposta (es. 429)
@@ -78,15 +79,41 @@ class FakeBackend {
             request.method == HttpMethod.Post && path == "/api/v1/auth/logout" -> respond("", HttpStatusCode.NoContent)
             request.method == HttpMethod.Get && path == "/api/v1/users/me" -> {
                 val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
-                respond(
-                    """{"id":"id-$email","email":"$email","displayName":"Nome","role":"${roles.getValue(email)}","createdAt":"2026-10-02T10:00:00Z"}""",
-                    HttpStatusCode.OK,
-                    json,
-                )
+                respond(profileJson(email), HttpStatusCode.OK, json)
+            }
+            request.method == HttpMethod.Patch && path == "/api/v1/users/me" -> {
+                val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                names[email] = field(body, "displayName")
+                respond(profileJson(email), HttpStatusCode.OK, json)
+            }
+            // Come il backend: password attuale errata -> 422 business-rule; riuscito -> tutti i token dell'utente
+            // revocati (anche degli altri dispositivi) e una coppia nuova per chi ha cambiato la password
+            request.method == HttpMethod.Post && path == "/api/v1/users/me/password" -> {
+                val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                if (users[email] != field(body, "currentPassword")) return problem(HttpStatusCode.UnprocessableEntity, "business-rule")
+                users[email] = field(body, "newPassword")
+                revokeAll(email)
+                tokens(issueFor(email))
+            }
+            // Solo HIKER (il personale riceve 409 account-managed); dopo, l'account non esiste più
+            request.method == HttpMethod.Delete && path == "/api/v1/users/me" -> {
+                val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                if (roles[email] != "HIKER") return problem(HttpStatusCode.Conflict, "account-managed")
+                users.remove(email)
+                revokeAll(email)
+                respond("", HttpStatusCode.NoContent)
             }
             else -> problem(HttpStatusCode.NotFound, "not-found")
         }
     }
+
+    private fun revokeAll(email: String) {
+        owners.values.removeAll { it == email }
+        refreshOwners.values.removeAll { it == email }
+    }
+
+    private fun profileJson(email: String) =
+        """{"id":"id-$email","email":"$email","displayName":"${names[email] ?: "Nome"}","role":"${roles.getValue(email)}","createdAt":"2026-10-02T10:00:00Z"}"""
 
     private fun MockRequestHandleScope.tokens(tokens: AuthTokens) = respond(tokenJson(tokens), HttpStatusCode.OK, json)
 

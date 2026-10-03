@@ -47,6 +47,9 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
             implementation(libs.ktor.client.okhttp)
+            // Su Android il motore di MapLibre va scelto (OpenGL ES o Vulkan): senza, la mappa va in crash all'apertura
+            // (libmaplibre-native-c.so mancante). OpenGL ES: tutti i telefoni e l'emulatore. Su iOS arriva Metal da solo.
+            implementation(libs.maplibre.native.runtime.opengl)
         }
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)

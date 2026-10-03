@@ -12,7 +12,8 @@ simulatore iPhone (M0.5). iOS si compila per la prima volta nella CI.
 M1 fatta e revisionata (catena di review del 02/10, correzioni applicate). M2.1 e M2.2 fatte: `SecureTokenStore` (Keystore +
 DataStore cifrato, Keychain), `SessionManager` con login, registrazione, logout e refresh unico, schermate di accesso
 e Profilo legato alla sessione, verificati sull'emulatore contro il backend locale. Restano il job `ios` verde e il
-Keychain sul simulatore. Backend: periodo di grazia di 60 s sul refresh token (ADR-0019). Prossimo: M2.3 (profilo e cancellazione dell'account).
+Keychain sul simulatore. Backend: periodo di grazia di 60 s sul refresh token (ADR-0019). M2.3 fatta (03/10): nome, cambio password e cancellazione dell'account in `SessionManager` (niente `ProfileRepository`),
+schermate del Profilo in `profile/ui`, checkpoint verificati sull'emulatore. M3.1 fatta (03/10): mappa sulla Sila, posizione e permesso solo quando serve. Prossimo: catena di review di M2, poi M3.2.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -45,8 +46,8 @@ Keychain sul simulatore. Backend: periodo di grazia di 60 s sul refresh token (A
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
 | Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox; DataStore per le preferenze |
 | Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS. Token in `AuthTokens`, il cui `toString` non li stampa |
-| Mappa | MapLibre Compose con tile OpenFreeMap |
-| Piattaforma | Posizione, ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
+| Mappa | MapLibre Compose 0.19. Tipi Stradale (OpenFreeMap ricolorato tipo Google Maps, chiaro/scuro) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. Niente raster PNG (es. OpenTopoMap): il motore su Android non li disegna in modo affidabile. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
+| Piattaforma | Posizione dal modulo `location` di MapLibre Compose (provider creato nella UI con `rememberLocationState`; `core/location/Location.kt` per `GeoPoint` e `current()`). Ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
 | Stringhe | `composeResources/values/strings.xml`, italiano come lingua base |
 | Log | Kermit |
