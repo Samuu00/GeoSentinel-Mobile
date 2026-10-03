@@ -5,15 +5,13 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M6 → M4 → M5 → M7 → M8 → M9.
 
-**Stato (02/10/2026):** M0.1–M0.5 scritte: convenzioni e dipendenze, configurazione per ambiente (verificata
-sull'emulatore contro il backend locale), tema "foresta" chiaro/scuro selezionabile, navigazione per ruolo, Koin,
-safe area, CI con Dependabot. Checkpoint aperti: Accessibility Scanner (M0.4), job verdi su una PR di prova e
-simulatore iPhone (M0.5). iOS si compila per la prima volta nella CI.
-M1 fatta e revisionata (catena di review del 02/10, correzioni applicate). M2.1 e M2.2 fatte: `SecureTokenStore` (Keystore +
-DataStore cifrato, Keychain), `SessionManager` con login, registrazione, logout e refresh unico, schermate di accesso
-e Profilo legato alla sessione, verificati sull'emulatore contro il backend locale. Restano il job `ios` verde e il
-Keychain sul simulatore. Backend: periodo di grazia di 60 s sul refresh token (ADR-0019). M2.3 fatta (03/10): nome, cambio password e cancellazione dell'account in `SessionManager` (niente `ProfileRepository`),
-schermate del Profilo in `profile/ui`, checkpoint verificati sull'emulatore. M3.1 fatta (03/10): mappa sulla Sila, posizione e permesso solo quando serve. Prossimo: catena di review di M2, poi M3.2.
+**Stato (03/10/2026):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
+M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
+logout, refresh unico, nome, cambio password e cancellazione dell'account. M3.1 fatta: mappa (Stradale chiara/scura e
+Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate
+(store scritto sotto il mutex del refresh, operazioni sull'account non annullabili, errori dello store senza crash).
+Restano il job `ios` verde e le prove sul simulatore. Backend: periodo di grazia di 60 s sul refresh token
+(ADR-0019). Prossimo: M3.2 (sentieri e POI).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -87,7 +85,8 @@ shared/src/
 - **Enum:** un valore nuovo dal server non deve far crashare l'app: arriva come `unknown_default_open_api` e i `when` lo gestiscono.
 - **Token:** il bearer va solo a schema, host e porta di `apiBaseUrl`; su `/auth/login`, `/auth/register`, `/auth/refresh` e verso altri host il plugin `Auth` è spento (`AuthScope`). Un solo `HttpClient` autenticato; il refresh token vale una volta sola, quindi un refresh alla volta in tutta l'app (`Mutex` nel repository). La sessione si svuota solo su un 401 del refresh, mai per un errore di rete.
 - **Interfaccia:**
-  - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezione: `EmergencyRed`);
+  - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezioni: `EmergencyRed` e le
+    anteprime del selettore della mappa, che riproducono i colori degli stili);
   - il rosso solo per SOS e pericoli `CRITICAL`; gli errori usano il ruolo `error` del tema (prugna);
   - contrasto almeno WCAG AA, verificato in chiaro e in scuro;
   - bersagli: 72 dp per le azioni d'emergenza (SOS, Chiama 112), 56 dp per l'invio dei form, 48 dp minimo per il resto;

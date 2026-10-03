@@ -16,6 +16,7 @@ import it.unical.geosentinel_mobile.api.model.UserProfileResponse
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.network.apiCall
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.LocalDate
 
 sealed interface SessionState {
@@ -64,36 +67,47 @@ class SessionManager(
 
     // Il refresh token vale una volta sola: un refresh alla volta in tutta l'app, non solo dentro il client
     private val refreshMutex = Mutex()
+    private val restoreMutex = Mutex()
+    // Cambi password in corso (letto e scritto solo con refreshMutex preso)
+    private var passwordChanges = 0
 
     private val _state = MutableStateFlow<SessionState>(SessionState.Loading)
     val state: StateFlow<SessionState> = _state.asStateFlow()
 
-    // All'avvio. Una seconda chiamata (es. Activity ricreata) non fa nulla.
-    suspend fun restore() {
-        if (_state.value != SessionState.Loading) return
-        if (store.read() == null) {
+    // All'avvio. Una seconda chiamata (es. Activity ricreata), anche in parallelo, non fa nulla.
+    suspend fun restore() = restoreMutex.withLock {
+        if (_state.value != SessionState.Loading) return@withLock
+        if (readTokens() == null) {
             _state.value = SessionState.Anonymous
-            return
+            return@withLock
         }
         _state.value = SessionState.LoggedIn(null)
         loadProfile()
     }
 
     suspend fun login(email: String, password: String): Result<Unit> =
-        apiCall { authApi.login(LoginRequest(email.trim(), password)) }.map { startSession(it) }
+        apiCall { authApi.login(LoginRequest(email.trim(), password)) }.andThen { startSession(it) }
 
     // La soglia di età la controlla il server (422 age-requirement-not-met)
     suspend fun register(form: RegisterForm): Result<Unit> =
         apiCall {
             authApi.register(RegisterRequest(form.birthDate, form.displayName.trim(), form.email.trim(), form.password))
-        }.map { startSession(it) }
+        }.andThen { startSession(it) }
 
     // Nell'ordine del contratto: unregisterDevice, logout, pulizia locale. La pulizia locale avviene comunque,
     // anche senza rete o con la coroutine annullata.
     suspend fun logout() {
         try {
             pushToken()?.let { token -> apiCall { devicesApi.unregisterDevice(token) } }
-            store.read()?.let { tokens -> apiCall { authApi.logout(RefreshRequest(tokens.refreshToken)) } }
+            // Letto adesso, non prima: unregisterDevice può aver rinnovato i token. Se è /auth/logout a prendere 401,
+            // il plugin rinnova e reinvia lo stesso corpo con il token vecchio: allora si revoca anche quello nuovo.
+            val sent = readTokens()?.refreshToken
+            if (sent != null) {
+                apiCall { authApi.logout(RefreshRequest(sent)) }
+                readTokens()?.refreshToken?.takeIf { it != sent }?.let { renewed ->
+                    apiCall { authApi.logout(RefreshRequest(renewed)) }
+                }
+            }
         } finally {
             endSession(SessionState.Anonymous)
         }
@@ -110,45 +124,79 @@ class SessionManager(
     // Il server ruota i token e invalida quelli degli altri dispositivi (che al primo 401 tornano al login).
     // Qui si salvano i nuovi e si svuota la cache del plugin Auth: con il refresh token vecchio, già sostituito,
     // il server vedrebbe un riuso e revocherebbe anche questa sessione. Password attuale errata: 422 business-rule.
-    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> =
-        apiCall { usersApi.changeMyPassword(ChangePasswordRequest(currentPassword, newPassword)) }.map { response ->
-            store.write(response.toAuthTokens())
-            clearClientTokens()
+    // Non annullabile: se l'utente lascia la schermata a metà, i token ruotati vanno salvati lo stesso.
+    // Il mutex non può avvolgere la richiesta (il plugin vi chiama refreshTokens: deadlock). Un refresh partito con il
+    // token vecchio mentre la richiesta è in volo prende 401 perché il server li ha appena revocati: finché il cambio è
+    // in corso quel 401 non chiude la sessione (vedi refreshTokens), e i token nuovi arrivano con la risposta.
+    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> = withContext(NonCancellable) {
+        refreshMutex.withLock { passwordChanges++ }
+        try {
+            apiCall { usersApi.changeMyPassword(ChangePasswordRequest(currentPassword, newPassword)) }.andThen { response ->
+                refreshMutex.withLock {
+                    when {
+                        _state.value !is SessionState.LoggedIn -> Result.failure(SessionEndedException())
+                        !saveTokens(response.toAuthTokens()) -> Result.failure(TokenStorageException())
+                        else -> Result.success(clearClientTokens())
+                    }
+                }
+            }
+        } finally {
+            refreshMutex.withLock { passwordChanges-- }
         }
+    }
 
     // Solo per HIKER: il personale riceve 409 account-managed e la sessione resta com'è.
     // Il server annulla prenotazioni future e SOS attivo, toglie i dispositivi e revoca tutti i token:
-    // qui basta chiudere la sessione locale.
-    suspend fun deleteAccount(): Result<Unit> =
+    // qui basta chiudere la sessione locale, anche se l'utente lascia la schermata a metà.
+    suspend fun deleteAccount(): Result<Unit> = withContext(NonCancellable) {
         apiCall { usersApi.deleteMyAccount() }.map { endSession(SessionState.Anonymous) }
+    }
 
-    override suspend fun getTokens(): AuthTokens? = store.read()
+    override suspend fun getTokens(): AuthTokens? = readTokens()
 
+    // Tiene il mutex per tutta la richiesta: login, logout, cambio password e cancellazione scrivono lo store prima o
+    // dopo, mai a metà di un refresh (niente sessione riscritta dopo un logout, né una nuova chiusa da un 401 vecchio).
     override suspend fun refreshTokens(refreshToken: String): AuthTokens? = refreshMutex.withLock {
-        val stored = store.read() ?: return@withLock null // logout nel frattempo
+        val stored = readTokens() ?: return@withLock null // logout nel frattempo
         // già rinnovati da un'altra chiamata (o da un login): niente richiesta, il token vecchio non vale più
         if (stored.refreshToken != refreshToken) return@withLock stored
 
-        apiCall { authApi.refreshTokens(RefreshRequest(refreshToken)) }.fold(
-            onSuccess = { response -> response.toAuthTokens().also { store.write(it) } },
+        // Con i retry su 429/503 la richiesta può durare minuti, e intanto logout e login aspettano il mutex: oltre
+        // RefreshTimeout si lascia perdere come per un errore di rete (se il server aveva già ruotato, vale ADR-0019)
+        val result = withTimeoutOrNull(RefreshTimeout) { apiCall { authApi.refreshTokens(RefreshRequest(refreshToken)) } }
+            ?: return@withLock null
+        result.fold(
+            // non salvati (disco pieno, Keychain): la richiesta fallisce, la sessione resta quella di prima
+            onSuccess = { response -> response.toAuthTokens().takeIf { saveTokens(it) } },
             onFailure = { failure ->
                 // Solo un 401 chiude la sessione. Rete, 429 o 5xx: i token restano e il plugin riproverà
                 // (il backend riaccetta il refresh token per 60 s se la risposta si è persa, ADR-0019).
                 // Il client non si tocca qui: siamo dentro il suo refresh, che con null non usa più i token.
-                if ((failure as? ApiException)?.error is ApiError.Unauthorized) {
-                    endSession(SessionState.Expired, clearClient = false)
+                // Durante un cambio password il 401 viene dalla revoca appena fatta dal server: la sessione la tiene in
+                // piedi la risposta del cambio. Se il cambio fallisce, il refresh successivo riprende 401 e la chiude.
+                if ((failure as? ApiException)?.error is ApiError.Unauthorized && passwordChanges == 0) {
+                    endSessionLocked(SessionState.Expired, clearClient = false)
                 }
                 null
             },
         )
     }
 
-    private suspend fun startSession(response: TokenResponse) {
-        store.write(response.toAuthTokens())
-        // Il plugin Auth tiene in memoria i token: senza questo partirebbero quelli della sessione precedente
-        clearClientTokens()
-        _state.value = SessionState.LoggedIn(null)
+    private suspend fun startSession(response: TokenResponse): Result<Unit> {
+        val saved = withContext(NonCancellable) {
+            refreshMutex.withLock {
+                saveTokens(response.toAuthTokens()).also { saved ->
+                    if (saved) {
+                        // Il plugin Auth tiene in memoria i token: senza questo partirebbero quelli della sessione precedente
+                        clearClientTokens()
+                        _state.value = SessionState.LoggedIn(null)
+                    }
+                }
+            }
+        }
+        if (!saved) return Result.failure(TokenStorageException())
         loadProfile()
+        return Result.success(Unit)
     }
 
     // Il ruolo per la UI arriva da /users/me, non dal JWT. Se fallisce (es. rete) resta LoggedIn(null).
@@ -158,16 +206,62 @@ class SessionManager(
         }
     }
 
-    private suspend fun endSession(next: SessionState, clearClient: Boolean = true) = withContext(NonCancellable) {
-        store.clear()
+    private suspend fun endSession(next: SessionState) = withContext(NonCancellable) {
+        refreshMutex.withLock { endSessionLocked(next, clearClient = true) }
+    }
+
+    // Da chiamare con refreshMutex già preso
+    private suspend fun endSessionLocked(next: SessionState, clearClient: Boolean) = withContext(NonCancellable) {
+        // Un secondo tentativo per un errore momentaneo. Se fallisce ancora la sessione si chiude lo stesso in memoria,
+        // ma i token restano su disco e al prossimo avvio si riaprirebbe: ponytail: raro (disco o Keychain guasti),
+        // un flag "sessione chiusa" letto da restore() se mai succede davvero.
+        for (attempt in 1..2) {
+            try {
+                store.clear()
+                break
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+            }
+        }
         if (clearClient) clearClientTokens()
         _state.value = next
+    }
+
+    // Lo store può fallire (file danneggiato, disco pieno, Keychain non disponibile): un errore, mai un crash
+    private suspend fun readTokens(): AuthTokens? = try {
+        store.read()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        null
+    }
+
+    private suspend fun saveTokens(tokens: AuthTokens): Boolean = try {
+        store.write(tokens)
+        true
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        false
     }
 
     private fun clearClientTokens() {
         client.authProvider<BearerAuthProvider>()?.clearToken()
     }
 }
+
+// Oltre questo tempo un refresh si considera fallito per rete: i token restano e si riproverà
+private val RefreshTimeout = 20.seconds
+
+// I token non si sono potuti salvare: per la UI è un errore generico
+private class TokenStorageException : Exception("Sessione non salvata")
+
+// Un refresh rifiutato ha chiuso la sessione mentre la richiesta era in corso
+private class SessionEndedException : Exception("Sessione chiusa")
+
+private inline fun <T> Result<T>.andThen(next: (T) -> Result<Unit>): Result<Unit> =
+    fold(onSuccess = next, onFailure = { Result.failure(it) })
 
 private fun TokenResponse.toAuthTokens() = AuthTokens(accessToken, refreshToken, accessExpiresAt)
 

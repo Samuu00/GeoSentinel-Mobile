@@ -3,9 +3,13 @@ package it.unical.geosentinel_mobile.core.session
 import io.ktor.http.HttpStatusCode
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.advanceUntilIdle
+import kotlinx.io.IOException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -324,5 +328,124 @@ class SessionManagerTest {
         assertEquals("account-managed", error.slug)
         assertEquals(UserRole.RESCUE_OPERATOR, session.state.value.role)
         assertNotNull(store.tokens)
+    }
+
+    // ---- concorrenza, annullamento, store che fallisce ---------------------------------------------------------
+
+    @Test
+    fun `un logout durante un refresh non fa rivivere la sessione`() = runTest {
+        store.tokens = backend.issueFor("hiker@test.dev")
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+
+        val refresh = async { session.refreshTokens("r1") }
+        testScheduler.runCurrent() // il refresh è in volo
+        session.logout()
+        refresh.await()
+
+        assertNull(store.tokens)
+        assertEquals(SessionState.Anonymous, session.state.value)
+    }
+
+    @Test
+    fun `un 401 di un refresh vecchio non chiude la sessione aperta dopo con un login`() = runTest {
+        store.tokens = backend.issueFor("hiker@test.dev")
+        backend.refreshStatus = HttpStatusCode.Unauthorized
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+
+        val refresh = async { session.refreshTokens("r1") }
+        testScheduler.runCurrent()
+        assertTrue(session.login("rescuer@test.dev", "password-giusta-2").isSuccess)
+        refresh.await()
+
+        assertEquals(UserRole.RESCUE_OPERATOR, session.state.value.role)
+        assertNotNull(store.tokens)
+    }
+
+    @Test
+    fun `cambio password annullato a metà salva comunque i token nuovi`() = runTest {
+        val session = loggedIn()
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { session.changePassword("password-giusta-1", "password-nuova-1") }
+        job.cancel() // es. Indietro durante l'invio
+        advanceUntilIdle()
+
+        assertEquals("r2", store.tokens?.refreshToken)
+        assertIs<SessionState.LoggedIn>(session.state.value)
+    }
+
+    @Test
+    fun `cancellazione annullata a metà chiude comunque la sessione locale`() = runTest {
+        val session = loggedIn()
+
+        val job = launch(start = CoroutineStart.UNDISPATCHED) { session.deleteAccount() }
+        job.cancel()
+        advanceUntilIdle()
+
+        assertNull(store.tokens)
+        assertEquals(SessionState.Anonymous, session.state.value)
+    }
+
+    @Test
+    fun `token non salvabili - il login fallisce senza crash e si resta ospiti`() = runTest {
+        val (session, _) = sessionWith(backend, FailingStore())
+        session.restore()
+
+        val result = session.login("hiker@test.dev", "password-giusta-1")
+
+        assertTrue(result.isFailure)
+        assertEquals(SessionState.Anonymous, session.state.value)
+    }
+
+    @Test
+    fun `store illeggibile all'avvio - si parte da ospite senza crash`() = runTest {
+        val (session, _) = sessionWith(backend, FailingStore())
+
+        session.restore()
+
+        assertEquals(SessionState.Anonymous, session.state.value)
+    }
+
+    @Test
+    fun `restore chiamato due volte in parallelo legge il profilo una volta sola`() = runTest {
+        store.tokens = backend.issueFor("hiker@test.dev")
+        val (session, _) = sessionWith(backend, store)
+
+        listOf(async { session.restore() }, async { session.restore() }).awaitAll()
+
+        assertEquals(1, backend.requests.count { it.startsWith("GET /api/v1/users/me") })
+    }
+
+    @Test
+    fun `un refresh rifiutato durante il cambio password non chiude la sessione`() = runTest {
+        val session = loggedIn()
+
+        val change = async { session.changePassword("password-giusta-1", "password-nuova-1") }
+        testScheduler.runCurrent() // il cambio password è in volo
+        backend.refreshStatus = HttpStatusCode.Unauthorized // il server ha revocato i token vecchi
+        assertNull(session.refreshTokens("r1"))
+
+        assertTrue(change.await().isSuccess)
+        assertIs<SessionState.LoggedIn>(session.state.value)
+        assertEquals("r2", store.tokens?.refreshToken)
+    }
+
+    @Test
+    fun `fuori da un cambio password un 401 del refresh chiude ancora la sessione`() = runTest {
+        val session = loggedIn()
+        session.changePassword("password-sbagliata", "password-nuova-1") // finito: il contatore torna a zero
+        backend.refreshStatus = HttpStatusCode.Unauthorized
+
+        session.refreshTokens("r1")
+
+        assertEquals(SessionState.Expired, session.state.value)
+    }
+
+    // Disco pieno, file danneggiato o Keychain non disponibile
+    private class FailingStore : SecureTokenStore {
+        override suspend fun read(): AuthTokens? = throw IOException("store illeggibile")
+        override suspend fun write(tokens: AuthTokens) = throw IOException("disco pieno")
+        override suspend fun clear() = throw IOException("disco pieno")
     }
 }

@@ -2,7 +2,7 @@ package it.unical.geosentinel_mobile.core.location
 
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.filterIsInstance
-import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.withTimeoutOrNull
 import org.maplibre.compose.location.LocationEvent
@@ -34,7 +34,7 @@ fun Position.toGeoPoint(): GeoPoint = GeoPoint(lat = latitude, lon = longitude)
 suspend fun LocationProvider.current(timeout: Duration = 10.seconds): GeoPoint? {
     if (permission.value !is LocationPermission.Granted) return null
     return try {
-        withTimeoutOrNull(timeout) { fixes(LocationRequest()).first() }
+        withTimeoutOrNull(timeout) { fixes(LocationRequest()).firstOrNull() }
     } catch (_: IllegalStateException) {
         null // provider senza backend (es. piattaforma non supportata)
     }

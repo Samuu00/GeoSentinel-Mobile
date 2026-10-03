@@ -22,7 +22,11 @@
 > Restyling "carta topografica" dell'interfaccia (03/10, §2).
 > **M3.1 fatta** (03/10): mappa MapLibre/OpenFreeMap sulla Sila, posizione dal modulo `location` di MapLibre (niente
 > `expect class LocationProvider`), permesso solo quando serve. 92 test host.
-> Prossimo: la catena di review di M2 (§6), poi M3.2.
+> **Review e security review di M2 e M3.1** (03/10), correzioni applicate: `SessionManager` scrive e svuota lo
+> store sotto il mutex del refresh (niente sessione che rivive dopo un logout o chiusa da un 401 vecchio), cambio
+> password e cancellazione non annullabili, errori dello store senza crash, Keychain con update e pulizia dopo una
+> reinstallazione, database escluso dal backup, satellite bloccato sul livello EOX CC BY. 102 test host.
+> Prossimo: M3.2.
 
 ---
 
@@ -650,7 +654,11 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
   - **Topografica tolta** (03/10): OpenTopoMap serve tile PNG, che il motore di maplibre-compose 0.19 su Android
     scarica ma non disegna in modo affidabile (né direttamente, né convertite in JPEG con un `MapResourceProvider`:
     spariva dopo un cambio di tema o un riavvio). Da riprovare con una versione nuova del motore.
-  - Aperto: con il tema scuro dell'app e una mappa chiara le icone della barra di stato restano chiare.
+  - Barra di stato: sopra la mappa le icone seguono la mappa (chiare su satellite e stradale scura), non il tema
+    (`LocalStatusBarOverDark`). Solo Android: su iOS lo stile della barra dipende da tutta la finestra, da rifare
+    quando si prova sul simulatore.
+  - `MapStylesTest` (androidHostTest) blocca il satellite sul livello EOX 2016 (CC BY 4.0; dal 2018 è CC BY-NC-SA)
+    e controlla che nessuno stile usi chiavi.
   - Nota per M3.2/M6: su Android il primo fix è l'ultima posizione nota, che può essere vecchia (sull'emulatore era
     ancora a Roma). Per "vicino a me" e per l'SOS conviene guardare `measuredAt` e aspettare un fix recente.
 
@@ -843,6 +851,17 @@ sealed interface PushEvent {
 
 **M9.3 Privacy e store**
 - Testi dei permessi (posizione, foto, notifiche) chiari e in italiano, in `strings.xml` e in `Info.plist`.
+- Dalla review di sicurezza del 03/10 (rimandati qui):
+  - l'informativa dice che le tile della mappa arrivano da OpenFreeMap ed EOX, che vedono IP e zona guardata;
+  - EOX è un servizio gratuito senza garanzie: prima del rilascio un'alternativa (tile proprie o un altro fornitore);
+  - `NSAllowsLocalNetworking` è anche nella build Release di iOS: spostarlo in una Info.plist solo per Debug;
+  - il filtro dei log sulle query con posizione è una lista di nomi (lat, lon, bbox): un parametro nuovo con un altro
+    nome sfuggirebbe. Rivederlo a ogni endpoint geografico nuovo (M3.2, M4, M6);
+  - un logout senza rete (o con lo store illeggibile) lascia valido sul server il refresh token (fino a 30 giorni):
+    se diventa un requisito, accodare la revoca nell'outbox. Se lo store non si svuota nemmeno al secondo tentativo,
+    la sessione si chiude in memoria ma si riapre al riavvio (disco o Keychain guasti);
+  - `DELETE /users/me` si ritenta su errore di rete (DELETE è idempotente): se la prima è passata e la risposta si è
+    persa, l'utente vede un errore ma l'account è cancellato e la sessione si chiude al 401 successivo.
 - Informativa privacy raggiungibile dal profilo; scheda "Data safety" su Play e "Privacy nutrition label" su App Store:
   posizione, foto, email, nome, note mediche.
 - R8/ProGuard in release con le regole per kotlinx.serialization e Ktor; build firmata.

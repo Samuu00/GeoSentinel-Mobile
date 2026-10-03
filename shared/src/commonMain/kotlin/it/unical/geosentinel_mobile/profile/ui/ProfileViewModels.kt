@@ -170,7 +170,10 @@ private fun ChangePasswordUiState.withServerError(failure: Throwable): ChangePas
         is ApiError.Validation -> {
             val fields = buildMap {
                 if ("currentPassword" in error.fieldErrors) put(PasswordField.CURRENT, UiMessage(Res.string.error_field_current_password))
-                if ("newPassword" in error.fieldErrors) put(PasswordField.NEW, UiMessage(Res.string.error_field_password_short))
+                if ("newPassword" in error.fieldErrors) {
+                    val tooLong = passwordProblem(newPassword) == PasswordProblem.TOO_LONG
+                    put(PasswordField.NEW, UiMessage(if (tooLong) Res.string.error_field_password_long else Res.string.error_field_password_short))
+                }
             }
             copy(fieldErrors = fields, error = if (fields.isEmpty()) UiMessage(Res.string.error_validation) else null)
         }

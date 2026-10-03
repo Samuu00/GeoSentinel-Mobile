@@ -89,6 +89,7 @@ class FakeBackend {
             // Come il backend: password attuale errata -> 422 business-rule; riuscito -> tutti i token dell'utente
             // revocati (anche degli altri dispositivi) e una coppia nuova per chi ha cambiato la password
             request.method == HttpMethod.Post && path == "/api/v1/users/me/password" -> {
+                delay(200) // così un refresh può accavallarsi
                 val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
                 if (users[email] != field(body, "currentPassword")) return problem(HttpStatusCode.UnprocessableEntity, "business-rule")
                 users[email] = field(body, "newPassword")
@@ -134,7 +135,7 @@ class FakeBackend {
 }
 
 // SessionManager e client collegati come in Koin, con il motore finto sul dispatcher del test (tempo virtuale)
-fun TestScope.sessionWith(backend: FakeBackend, store: FakeSecureTokenStore = FakeSecureTokenStore()): Pair<SessionManager, HttpClient> {
+fun TestScope.sessionWith(backend: FakeBackend, store: SecureTokenStore = FakeSecureTokenStore()): Pair<SessionManager, HttpClient> {
     lateinit var client: HttpClient
     val manager = SessionManager(store, { client }, TEST_BASE_URL)
     val engine = MockEngine(MockEngineConfig().apply {

@@ -83,6 +83,13 @@ class LocationTest {
     }
 
     @Test
+    fun `current con aggiornamenti finiti senza un fix restituisce null`() = runTest {
+        val provider = FakeProvider { flowOf(LocationEvent.Unavailable(LocationUnavailableReason.ServicesDisabled)) }
+
+        assertNull(provider.current())
+    }
+
+    @Test
     fun `current su una piattaforma senza provider restituisce null`() = runTest {
         val provider = FakeProvider { throw IllegalStateException("nessun backend") }
 

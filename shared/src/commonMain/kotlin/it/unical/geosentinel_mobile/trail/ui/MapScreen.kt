@@ -83,11 +83,17 @@ import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
 import kotlin.math.max
+import kotlin.time.Duration.Companion.seconds
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import org.maplibre.compose.camera.CameraPosition
+import org.maplibre.compose.camera.CameraMoveReason
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.layers.LocationIndicatorLayer
 import org.maplibre.compose.location.LocationPermission
@@ -114,13 +120,23 @@ private const val MyLocationZoom = 14.0
 // con strade ed etichette sopra. Le attribuzioni stanno nelle sorgenti di ogni stile.
 // (Niente mappe raster PNG come OpenTopoMap: il motore di maplibre-compose 0.19 su Android non le disegna in modo
 // affidabile; la Topografica è stata tolta il 03/10.)
-private suspend fun loadStyle(type: MapType, dark: Boolean): BaseStyle {
+// Fuori dal main thread (centinaia di KB). File mancante o illeggibile: mappa vuota invece di un crash.
+private suspend fun loadStyle(type: MapType, dark: Boolean): BaseStyle = withContext(Dispatchers.Default) {
     val file = when (type) {
         MapType.STREETS -> if (dark) "streets_dark" else "streets_light"
         MapType.SATELLITE -> "satellite"
     }
-    return BaseStyle.Json(Res.readBytes("files/map/$file.json").decodeToString())
+    try {
+        BaseStyle.Json(Res.readBytes("files/map/$file.json").decodeToString())
+    } catch (e: CancellationException) {
+        throw e
+    } catch (_: Exception) {
+        BaseStyle.Empty
+    }
 }
+
+// Quanto si aspetta un fix dopo "La mia posizione" (posizione spenta, nessun segnale): poi la camera non salta più
+private val FixWait = 15.seconds
 
 // Cosa mostra il dialogo della posizione
 private enum class LocationPrompt { None, Rationale, Denied }
@@ -132,9 +148,12 @@ fun MapScreen() {
     // se c'è già, il pallino compare subito; se non c'è, la mappa funziona lo stesso dall'area di default.
     val location = rememberLocationState()
     val mapSettings = koinInject<MapSettings>()
-    val mapType by mapSettings.type.collectAsState(initial = MapType.STREETS)
+    // null finché non si è letta la scelta salvata: niente stradale caricata e subito sostituita dal satellite
+    val mapType by mapSettings.type.collectAsState(initial = null)
     // lo stile si legge dal file (pochi ms): fino ad allora la mappa è vuota
-    val style by produceState<BaseStyle>(BaseStyle.Empty, mapType, dark) { value = loadStyle(mapType, dark) }
+    val style by produceState<BaseStyle>(BaseStyle.Empty, mapType, dark) {
+        value = mapType?.let { loadStyle(it, dark) } ?: BaseStyle.Empty
+    }
     var choosingType by rememberSaveable { mutableStateOf(false) }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
     // Lasciando la mappa tornano a seguire il tema.
@@ -159,12 +178,21 @@ fun MapScreen() {
     LaunchedEffect(centerOnFix, location.lastLocation) {
         val fix = location.lastLocation ?: return@LaunchedEffect
         if (!centerOnFix) return@LaunchedEffect
+        // nello scope della schermata: centerOnFix = false cambia la chiave e annullerebbe un'animazione lanciata qui
+        scope.launch {
+            mapState.animateCamera(CameraUpdate(target = fix.position, zoom = max(mapState.cameraPosition.zoom, MyLocationZoom)))
+        }
         centerOnFix = false
-        mapState.animateCamera(CameraUpdate(target = fix.position, zoom = max(mapState.cameraPosition.zoom, MyLocationZoom)))
     }
-    // Permesso negato nel dialogo di sistema: non si aspetta più un fix
-    LaunchedEffect(location.permission) {
-        if (location.permission is LocationPermission.NotGranted) centerOnFix = false
+    // Si smette di aspettare il fix dopo FixWait (anche con il permesso negato nel dialogo di sistema)
+    // o appena l'utente sposta la mappa da sé: la camera non deve saltare dopo
+    LaunchedEffect(centerOnFix) {
+        if (!centerOnFix) return@LaunchedEffect
+        delay(FixWait)
+        centerOnFix = false
+    }
+    LaunchedEffect(mapState.isCameraMoving, mapState.cameraMoveReason) {
+        if (mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.GESTURE) centerOnFix = false
     }
 
     fun onMyLocation() {
@@ -233,7 +261,7 @@ fun MapScreen() {
 
     if (choosingType) {
         MapTypeSheet(
-            current = mapType,
+            current = mapType ?: MapType.STREETS,
             onSelect = { type ->
                 choosingType = false
                 scope.launch { mapSettings.setType(type) }

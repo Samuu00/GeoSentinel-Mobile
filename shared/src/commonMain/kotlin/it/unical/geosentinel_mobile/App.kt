@@ -88,6 +88,7 @@ import geosentinel_mobile.shared.generated.resources.sos_button_description
 import it.unical.geosentinel_mobile.auth.ui.LoginScreen
 import it.unical.geosentinel_mobile.auth.ui.RegisterScreen
 import it.unical.geosentinel_mobile.core.session.SessionManager
+import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.PlaceholderScreen
@@ -128,7 +129,10 @@ fun App() {
     // Sessione salvata letta una volta all'avvio (una seconda chiamata non fa nulla)
     LaunchedEffect(session) { session.restore() }
     // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa
-    LaunchedEffect(role, destination) {
+    // (non durante il caricamento: si vedrebbe GUEST e una scheda del personale ripristinata verrebbe chiusa)
+    val loading = sessionState == SessionState.Loading
+    LaunchedEffect(role, destination, loading) {
+        if (loading) return@LaunchedEffect
         val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
         if (tab != null && !tab.isVisible(role)) navController.navigate(Route.Map) { popUpTo(navController.graph.findStartDestination().id) }
     }
