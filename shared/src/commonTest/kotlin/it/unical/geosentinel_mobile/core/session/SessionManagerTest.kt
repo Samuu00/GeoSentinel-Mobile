@@ -8,7 +8,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.io.IOException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -369,7 +368,7 @@ class SessionManagerTest {
 
         val job = launch(start = CoroutineStart.UNDISPATCHED) { session.changePassword("password-giusta-1", "password-nuova-1") }
         job.cancel() // es. Indietro durante l'invio
-        advanceUntilIdle()
+        job.join() // finisce solo quando il lavoro non annullabile è concluso
 
         assertEquals("r2", store.tokens?.refreshToken)
         assertIs<SessionState.LoggedIn>(session.state.value)
@@ -381,7 +380,7 @@ class SessionManagerTest {
 
         val job = launch(start = CoroutineStart.UNDISPATCHED) { session.deleteAccount() }
         job.cancel()
-        advanceUntilIdle()
+        job.join()
 
         assertNull(store.tokens)
         assertEquals(SessionState.Anonymous, session.state.value)

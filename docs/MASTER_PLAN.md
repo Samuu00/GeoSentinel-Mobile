@@ -22,10 +22,13 @@
 > Restyling "carta topografica" dell'interfaccia (03/10, §2).
 > **M3.1 fatta** (03/10): mappa MapLibre/OpenFreeMap sulla Sila, posizione dal modulo `location` di MapLibre (niente
 > `expect class LocationProvider`), permesso solo quando serve. 92 test host.
-> **Review e security review di M2 e M3.1** (03/10), correzioni applicate: `SessionManager` scrive e svuota lo
-> store sotto il mutex del refresh (niente sessione che rivive dopo un logout o chiusa da un 401 vecchio), cambio
-> password e cancellazione non annullabili, errori dello store senza crash, Keychain con update e pulizia dopo una
-> reinstallazione, database escluso dal backup, satellite bloccato sul livello EOX CC BY. 102 test host.
+> **Review e security review di M2 e M3.1** (03/10), due giri, correzioni applicate e riverificate:
+> `SessionManager` scrive e svuota lo store sotto il mutex del refresh (niente sessione che rivive dopo un logout o
+> chiusa da un 401 vecchio, anche durante un cambio password), refresh entro 20 s, cambio password e cancellazione
+> non annullabili, errori dello store senza crash, Keychain con update e pulizia dopo una reinstallazione, database
+> escluso dal backup, satellite bloccato sul livello EOX CC BY; sulla mappa niente lampo dello stile sbagliato e
+> "La mia posizione" con un tempo massimo. 104 test host; mappa riverificata sull'emulatore. Dettagli in M2.3 e
+> M3.1, punti rimandati in M9.3. Aperti: job `ios` (codice del Keychain controllato solo a occhio) e simulatore.
 > Prossimo: M3.2.
 
 ---
@@ -603,6 +606,25 @@ class SessionManager(store: SecureTokenStore, authApi: AuthApi, usersApi: UsersA
   - Test: 6 in `SessionManagerTest` (backend finto esteso con PATCH/DELETE `/users/me` e `/users/me/password`) e 8 in
     `ProfileViewModelsTest`; 86 test host in tutto. Verificato anche rompendo apposta `clearToken` dopo il cambio
     password: il test fallisce.
+- Dopo la review del 03/10 (regole della sessione, valgono anche per le milestone dopo):
+  - lo store si scrive e si svuota solo con `refreshMutex` preso; `refreshTokens` lo tiene per tutta la richiesta,
+    così login, logout, cambio password e cancellazione non si accavallano mai con un refresh. Il mutex non avvolge
+    mai una richiesta autenticata (il plugin `Auth` vi richiama `refreshTokens`: deadlock);
+  - refresh entro `RefreshTimeout` (20 s): oltre, conta come errore di rete (i token restano, ADR-0019 copre una
+    risposta persa);
+  - durante un cambio password (`passwordChanges` > 0) il 401 di un refresh partito con il token appena revocato
+    non chiude la sessione: i token nuovi arrivano con la risposta del cambio;
+  - `changePassword` e `deleteAccount` in `NonCancellable`; logout con il refresh token riletto subito prima
+    dell'invio (e una seconda revoca se il plugin lo rinnova a metà);
+  - errori dello store: mai un crash. Login e registrazione restituiscono un errore generico, `restore()` parte da
+    ospite, `clear()` si riprova una volta (se fallisce ancora, la sessione si chiude in memoria e si riapre al
+    riavvio: annotato in M9.3);
+  - iOS: Keychain con `SecItemUpdate` e add solo se manca; alla prima lettura dopo un'installazione la sessione
+    rimasta nel Keychain si cancella (flag in `NSUserDefaults`). Chi era già loggato con una build precedente esce
+    una volta: nessuna versione distribuita;
+  - backup Android: esclusi i token e il database (da M4/M6 posizioni SOS, note mediche, outbox);
+  - test: 9 in più in `SessionManagerTest` (concorrenza con un refresh in volo, annullamento, store che fallisce,
+    `restore()` in parallelo, cambio password con refresh rifiutato); 6 falliscono sul `SessionManager` di prima.
 - Checkpoint (backend locale, emulatore `Medium_Phone`, 03/10):
   - [x] dopo il cambio password l'app resta loggata (anche dopo un riavvio), un altro dispositivo riceve 401 e la
     vecchia password non vale più. Password attuale sbagliata: errore sul campo.
@@ -659,6 +681,11 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
     quando si prova sul simulatore.
   - `MapStylesTest` (androidHostTest) blocca il satellite sul livello EOX 2016 (CC BY 4.0; dal 2018 è CC BY-NC-SA)
     e controlla che nessuno stile usi chiavi.
+  - Dopo la review del 03/10: il tipo salvato si legge prima di caricare uno stile (niente stradale e poi satellite),
+    lo stile si legge su `Dispatchers.Default` e un file illeggibile lascia la mappa vuota invece di un crash;
+    "La mia posizione" smette di aspettare il fix dopo 15 s o quando l'utente sposta la mappa, e l'animazione gira
+    nello scope della schermata. `current()` usa `firstOrNull`. Verificato sull'emulatore (centratura su
+    Camigliatello, riavvio con il satellite salvato).
   - Nota per M3.2/M6: su Android il primo fix è l'ultima posizione nota, che può essere vecchia (sull'emulatore era
     ancora a Roma). Per "vicino a me" e per l'SOS conviene guardare `measuredAt` e aspettare un fix recente.
 

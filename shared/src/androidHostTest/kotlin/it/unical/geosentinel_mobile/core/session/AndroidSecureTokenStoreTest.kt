@@ -8,7 +8,8 @@ import androidx.datastore.preferences.core.edit
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import okio.FileSystem
 import okio.Path.Companion.toOkioPath
@@ -45,14 +46,17 @@ class AndroidSecureTokenStoreTest {
 
     private fun newStore(key: SecretKey = this.key) = AndroidSecureTokenStore(newDataStore()) { key }
 
-    private fun restart() {
-        scopes.forEach { it.cancel() }
+    // Si aspetta che lo scope sia davvero chiuso: il DataStore libera il file solo allora, e uno nuovo sullo stesso
+    // file aperto prima lancia IllegalStateException ("multiple DataStores active"). Con il solo cancel() era una
+    // corsa: passava su Windows e falliva nella CI Linux.
+    private suspend fun restart() {
+        scopes.forEach { it.coroutineContext.job.cancelAndJoin() }
         scopes.clear()
     }
 
     @AfterTest
     fun tearDown() {
-        restart()
+        runBlocking { restart() }
         dir.deleteRecursively()
     }
 

@@ -8,9 +8,9 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 **Stato (03/10/2026):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
 logout, refresh unico, nome, cambio password e cancellazione dell'account. M3.1 fatta: mappa (Stradale chiara/scura e
-Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate
-(store scritto sotto il mutex del refresh, operazioni sull'account non annullabili, errori dello store senza crash).
-Restano il job `ios` verde e le prove sul simulatore. Backend: periodo di grazia di 60 s sul refresh token
+Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate e
+riverificate (regole della sessione in M2.3 del piano), 104 test host. Restano il job `ios` verde (codice del
+Keychain controllato solo a occhio) e le prove sul simulatore. Backend: periodo di grazia di 60 s sul refresh token
 (ADR-0019). Prossimo: M3.2 (sentieri e POI).
 
 ## Come lavoriamo (regola tassativa)
@@ -43,7 +43,7 @@ Restano il job `ios` verde e le prove sul simulatore. Backend: periodo di grazia
 | DI | Koin, avviato una volta per processo con `initKoin(config, preferencesPath)`: in `GeoSentinelApplication` (Android) e in `MainViewController` (iOS), mai in `MainActivity` |
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
 | Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox; DataStore per le preferenze |
-| Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS. Token in `AuthTokens`, il cui `toString` non li stampa |
+| Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS (update, non delete + add; pulito alla prima lettura dopo un'installazione). Token in `AuthTokens`, il cui `toString` non li stampa. Errori dello store mai un crash: in `SessionManager` diventano un errore o "ospite" |
 | Mappa | MapLibre Compose 0.19. Tipi Stradale (OpenFreeMap ricolorato tipo Google Maps, chiaro/scuro) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. Niente raster PNG (es. OpenTopoMap): il motore su Android non li disegna in modo affidabile. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
 | Piattaforma | Posizione dal modulo `location` di MapLibre Compose (provider creato nella UI con `rememberLocationState`; `core/location/Location.kt` per `GeoPoint` e `current()`). Ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
@@ -83,7 +83,7 @@ shared/src/
   risposta definitiva (2xx o 4xx non ritentabile).
 - **Dispatcher:** sul main thread solo la UI; rete e database su `Dispatchers.IO` (`Default` dove IO non esiste).
 - **Enum:** un valore nuovo dal server non deve far crashare l'app: arriva come `unknown_default_open_api` e i `when` lo gestiscono.
-- **Token:** il bearer va solo a schema, host e porta di `apiBaseUrl`; su `/auth/login`, `/auth/register`, `/auth/refresh` e verso altri host il plugin `Auth` è spento (`AuthScope`). Un solo `HttpClient` autenticato; il refresh token vale una volta sola, quindi un refresh alla volta in tutta l'app (`Mutex` nel repository). La sessione si svuota solo su un 401 del refresh, mai per un errore di rete.
+- **Token:** il bearer va solo a schema, host e porta di `apiBaseUrl`; su `/auth/login`, `/auth/register`, `/auth/refresh` e verso altri host il plugin `Auth` è spento (`AuthScope`). Un solo `HttpClient` autenticato; il refresh token vale una volta sola, quindi un refresh alla volta in tutta l'app (`Mutex` nel repository, preso per tutta la richiesta di refresh, al massimo 20 s). Lo store si scrive e si svuota solo con quel `Mutex` preso, che però non deve mai avvolgere una richiesta autenticata (deadlock). La sessione si svuota solo su un 401 del refresh (non durante un cambio password), mai per un errore di rete. Le operazioni che ruotano o revocano i token (cambio password, cancellazione, logout) girano in `NonCancellable`.
 - **Interfaccia:**
   - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezioni: `EmergencyRed` e le
     anteprime del selettore della mappa, che riproducono i colori degli stili);
