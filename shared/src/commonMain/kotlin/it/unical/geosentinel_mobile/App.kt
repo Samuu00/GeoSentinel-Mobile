@@ -72,6 +72,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.placeholder_alerts_body
 import geosentinel_mobile.shared.generated.resources.placeholder_alerts_title
@@ -94,7 +95,7 @@ import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.PlaceholderScreen
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItems
-import it.unical.geosentinel_mobile.core.ui.navigation.FormRoutes
+import it.unical.geosentinel_mobile.core.ui.navigation.NoBottomBarRoutes
 import it.unical.geosentinel_mobile.core.ui.navigation.Route
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyOnRed
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
@@ -104,6 +105,7 @@ import it.unical.geosentinel_mobile.profile.ui.ChangePasswordScreen
 import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
+import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -145,8 +147,8 @@ fun App() {
             // che in orizzontale stanno di lato. Vale per contenuto e pulsante SOS.
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
-                // nei form la barra non serve, e con la tastiera aperta ruberebbe spazio
-                if (FormRoutes.any { route -> destination?.hasRoute(route) == true }) return@Scaffold
+                // nei form la barra non serve (con la tastiera aperta ruberebbe spazio), nel dettaglio del sentiero nemmeno
+                if (NoBottomBarRoutes.any { route -> destination?.hasRoute(route) == true }) return@Scaffold
                 TabBar(role, destination) { route ->
                     navController.navigate(route) {
                         popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -177,9 +179,9 @@ fun App() {
                 exitTransition = { fadeOut(tween(100)) },
             ) {
                 composable<Route.Map>(
-                    // quando entra l'SOS la mappa scivola un po' a sinistra e lascia il posto (parallasse)
+                    // quando entra l'SOS o un sentiero la mappa scivola un po' a sinistra e lascia il posto (parallasse)
                     exitTransition = {
-                        if (targetState.destination.hasRoute<Route.SosEmergency>()) {
+                        if (targetState.destination.hasRoute<Route.SosEmergency>() || targetState.destination.hasRoute<Route.TrailDetail>()) {
                             slideOutHorizontally(tween(PushMillis)) { -it / 4 }
                         } else {
                             fadeOut(tween(100))
@@ -187,7 +189,14 @@ fun App() {
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
-                    MapScreen()
+                    MapScreen(onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } })
+                }
+                composable<Route.TrailDetail>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val trailId = entry.toRoute<Route.TrailDetail>().id
+                    TrailDetailScreen(trailId, onBack = { navController.popBackStack() }, onLogin = { navController.navigate(Route.Login) })
                 }
                 composable<Route.Refuges> {
                     PlaceholderScreen(Icons.Filled.Home, Res.string.placeholder_refuges_title, Res.string.placeholder_refuges_body)
@@ -217,7 +226,8 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         // la registrazione prende il posto dell'accesso: Indietro torna al Profilo
                         onRegister = { navController.navigate(Route.Register) { popUpTo<Route.Login> { inclusive = true } } },
-                        onLoggedIn = { navController.popBackStack<Route.Profile>(inclusive = false) },
+                        // dal Profilo si torna al Profilo; dal dettaglio di un sentiero (Profilo non nella pila) al sentiero
+                        onLoggedIn = { if (!navController.popBackStack<Route.Profile>(inclusive = false)) navController.popBackStack() },
                     )
                 }
                 composable<Route.Register>(
@@ -227,7 +237,7 @@ fun App() {
                     RegisterScreen(
                         onBack = { navController.popBackStack() },
                         onLogin = { navController.navigate(Route.Login) { popUpTo<Route.Register> { inclusive = true } } },
-                        onRegistered = { navController.popBackStack<Route.Profile>(inclusive = false) },
+                        onRegistered = { if (!navController.popBackStack<Route.Profile>(inclusive = false)) navController.popBackStack() },
                     )
                 }
                 composable<Route.EditName>(

@@ -10,8 +10,8 @@ class GeoSentinelApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         initKoin(
+            context = this,
             config = AppConfig(apiBaseUrl = BuildConfig.API_BASE_URL, isDebug = BuildConfig.DEBUG),
-            filesDir = filesDir.absolutePath,
         )
     }
 }

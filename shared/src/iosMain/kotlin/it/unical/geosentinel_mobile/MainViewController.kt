@@ -2,7 +2,8 @@ package it.unical.geosentinel_mobile
 
 import androidx.compose.ui.window.ComposeUIViewController
 import it.unical.geosentinel_mobile.core.config.AppConfig
-import it.unical.geosentinel_mobile.core.di.initKoin
+import it.unical.geosentinel_mobile.core.db.iosDatabaseBuilder
+import it.unical.geosentinel_mobile.core.di.startKoinWith
 import kotlinx.cinterop.ExperimentalForeignApi
 import platform.Foundation.NSBundle
 import platform.Foundation.NSDocumentDirectory
@@ -18,9 +19,10 @@ fun MainViewController(): UIViewController {
     // API_BASE_URL arriva da Config.xcconfig attraverso Info.plist
     val apiBaseUrl = NSBundle.mainBundle.objectForInfoDictionaryKey("API_BASE_URL") as? String
         ?: error("API_BASE_URL mancante in Info.plist")
-    initKoin(
+    startKoinWith(
         config = AppConfig(apiBaseUrl = apiBaseUrl, isDebug = Platform.isDebugBinary),
         filesDir = documentsPath(),
+        databaseBuilder = ::iosDatabaseBuilder,
     )
     return ComposeUIViewController { App() }
 }

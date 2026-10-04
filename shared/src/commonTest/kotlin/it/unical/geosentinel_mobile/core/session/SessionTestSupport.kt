@@ -40,6 +40,8 @@ class FakeBackend {
     var loginStatus: HttpStatusCode? = null // forza una risposta (es. 429)
     var registerProblem: Pair<HttpStatusCode, String>? = null // status + ProblemDetail
     val requests = mutableListOf<String>() // "METODO path bearer"
+    // Rotte in più (catalogo, M3.2): null = non gestita, si risponde 404
+    var extraRoutes: (suspend MockRequestHandleScope.(request: HttpRequestData, bearerOwner: String?) -> HttpResponseData?)? = null
     private val owners = mutableMapOf<String, String>() // access token -> email
     private val refreshOwners = mutableMapOf<String, String>()
     private var counter = 0
@@ -104,7 +106,7 @@ class FakeBackend {
                 revokeAll(email)
                 respond("", HttpStatusCode.NoContent)
             }
-            else -> problem(HttpStatusCode.NotFound, "not-found")
+            else -> extraRoutes?.invoke(this, request, owners[bearer?.removePrefix("Bearer ")]) ?: problem(HttpStatusCode.NotFound, "not-found")
         }
     }
 
@@ -121,7 +123,7 @@ class FakeBackend {
     private fun tokenJson(tokens: AuthTokens) =
         """{"accessToken":"${tokens.accessToken}","refreshToken":"${tokens.refreshToken}","accessExpiresAt":"2027-01-15T08:00:00Z","tokenType":"Bearer"}"""
 
-    private fun MockRequestHandleScope.problem(status: HttpStatusCode, slug: String, retryAfter: String? = null) = respond(
+    fun MockRequestHandleScope.problem(status: HttpStatusCode, slug: String, retryAfter: String? = null) = respond(
         """{"type":"https://geosentinel.dev/problems/$slug","title":"x","status":${status.value}}""",
         status,
         if (retryAfter == null) problemJson else headersOf(HttpHeaders.ContentType to listOf("application/problem+json"), HttpHeaders.RetryAfter to listOf(retryAfter)),

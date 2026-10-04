@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.trail.ui
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -18,17 +19,27 @@ import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
@@ -45,6 +56,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -56,12 +68,18 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.location_denied_body
@@ -77,35 +95,57 @@ import geosentinel_mobile.shared.generated.resources.map_type_streets
 import geosentinel_mobile.shared.generated.resources.map_type_title
 import geosentinel_mobile.shared.generated.resources.map_zoom_in
 import geosentinel_mobile.shared.generated.resources.map_zoom_out
+import geosentinel_mobile.shared.generated.resources.poi_close
+import geosentinel_mobile.shared.generated.resources.poi_open_trail
+import geosentinel_mobile.shared.generated.resources.trail_length_km
+import geosentinel_mobile.shared.generated.resources.trail_retry
+import geosentinel_mobile.shared.generated.resources.trails_load_failed
+import geosentinel_mobile.shared.generated.resources.trails_loading
+import geosentinel_mobile.shared.generated.resources.trails_nearby_button
+import geosentinel_mobile.shared.generated.resources.trails_nearby_empty
+import geosentinel_mobile.shared.generated.resources.trails_nearby_title
+import geosentinel_mobile.shared.generated.resources.trails_nearby_waiting
+import geosentinel_mobile.shared.generated.resources.trails_too_many
+import geosentinel_mobile.shared.generated.resources.trails_zoom_in_hint
+import it.unical.geosentinel_mobile.api.model.PoiResponse
+import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
+import it.unical.geosentinel_mobile.core.location.GeoBounds
 import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
+import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
 import kotlin.math.max
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
-import org.maplibre.compose.camera.CameraPosition
+import org.koin.compose.viewmodel.koinViewModel
 import org.maplibre.compose.camera.CameraMoveReason
+import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.layers.LocationIndicatorLayer
 import org.maplibre.compose.location.LocationPermission
+import org.maplibre.compose.location.LocationState
 import org.maplibre.compose.location.rememberLocationState
 import org.maplibre.compose.location.rememberSystemSettingsLauncher
+import org.maplibre.compose.map.MapState
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.overlay.AttributionDefaults
-import org.maplibre.compose.overlay.AttributionStyle
+import org.maplibre.compose.overlay.attributions
 import org.maplibre.compose.overlay.DisappearingCompassButton
 import org.maplibre.compose.overlay.DisappearingScaleBar
-import org.maplibre.compose.overlay.ExpandingAttributionButton
 import org.maplibre.compose.overlay.LocalViewportInsets
 import org.maplibre.compose.overlay.MapOverlay
 import org.maplibre.compose.style.BaseStyle
@@ -135,26 +175,52 @@ private suspend fun loadStyle(type: MapType, dark: Boolean): BaseStyle = withCon
     }
 }
 
-// Quanto si aspetta un fix dopo "La mia posizione" (posizione spenta, nessun segnale): poi la camera non salta più
-private val FixWait = 15.seconds
-
-// Cosa mostra il dialogo della posizione
-private enum class LocationPrompt { None, Rationale, Denied }
-
+/** Il tipo di mappa scelto dall'utente: null finché non si è letta la scelta salvata. */
 @Composable
-fun MapScreen() {
+internal fun rememberSavedMapType(): MapType? = koinInject<MapSettings>().type.collectAsState(initial = null).value
+
+/**
+ * Lo stile della mappa per [mapType] nel tema attuale. Vuoto finché il tipo non è noto: niente stradale caricata e
+ * subito sostituita dal satellite. Lo usano la mappa e l'anteprima del dettaglio.
+ */
+@Composable
+internal fun rememberMapStyle(mapType: MapType?): BaseStyle {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    // Provider di default di MapLibre (LocationManager / CLLocationManager). Non chiede il permesso da solo:
-    // se c'è già, il pallino compare subito; se non c'è, la mappa funziona lo stesso dall'area di default.
-    val location = rememberLocationState()
-    val mapSettings = koinInject<MapSettings>()
-    // null finché non si è letta la scelta salvata: niente stradale caricata e subito sostituita dal satellite
-    val mapType by mapSettings.type.collectAsState(initial = null)
     // lo stile si legge dal file (pochi ms): fino ad allora la mappa è vuota
     val style by produceState<BaseStyle>(BaseStyle.Empty, mapType, dark) {
         value = mapType?.let { loadStyle(it, dark) } ?: BaseStyle.Empty
     }
+    return style
+}
+
+// Il bordo chiaro (o scuro) sotto le linee dei sentieri: le stacca dalla mappa
+internal fun trailCasing(mapIsDark: Boolean): Color = if (mapIsDark) Color.Black.copy(alpha = 0.55f) else Color.White
+
+// Quanto si aspetta un fix dopo "La mia posizione" o "Sentieri vicini" (posizione spenta, nessun segnale)
+private val FixWait = 15.seconds
+// Un fix più vecchio non vale per "Sentieri vicini": su Android il primo è l'ultima posizione nota, anche di giorni fa
+private val MaxFixAge = 2.minutes
+
+// Cosa mostra il dialogo della posizione
+private enum class LocationPrompt { None, Rationale, Denied }
+
+// Cosa fare quando arriva il permesso
+private enum class LocationGoal { Center, Nearby }
+
+@Composable
+fun MapScreen(onOpenTrail: (String) -> Unit) {
+    val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
+    val colors = MaterialTheme.colorScheme
+    // Provider di default di MapLibre (LocationManager / CLLocationManager). Non chiede il permesso da solo:
+    // se c'è già, il pallino compare subito; se non c'è, la mappa funziona lo stesso dall'area di default.
+    val location = rememberLocationState()
+    val mapSettings = koinInject<MapSettings>()
+    val mapType = rememberSavedMapType()
+    val style = rememberMapStyle(mapType)
+    val viewModel = koinViewModel<TrailMapViewModel>()
+    val ui by viewModel.state.collectAsStateWithLifecycle()
     var choosingType by rememberSaveable { mutableStateOf(false) }
+    var selectedPoiId by rememberSaveable { mutableStateOf<String?>(null) }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
     // Lasciando la mappa tornano a seguire il tema.
     val statusBarOverDark = LocalStatusBarOverDark.current
@@ -163,17 +229,36 @@ fun MapScreen() {
         statusBarOverDark.value = mapIsDark
         onDispose { statusBarOverDark.value = null }
     }
+    val casing = trailCasing(mapIsDark)
     val mapState = rememberMapState(
         baseStyle = style,
         initialCameraPosition = CameraPosition(target = DefaultArea.toPosition(), zoom = DefaultZoom),
     ) {
+        TrailLines(ui.trails, casing = casing, unknownColor = colors.onSurfaceVariant, onTrailClick = onOpenTrail)
+        PoiMarkers(
+            ui.pois,
+            background = colors.surfaceContainerLowest,
+            outline = colors.outline,
+            symbol = colors.primary,
+            onPoiClick = { selectedPoiId = it },
+        )
+        // il pallino sopra tutto
         LocationIndicatorLayer(id = "posizione", locationState = location)
     }
     val settings = rememberSystemSettingsLauncher()
     val scope = rememberCoroutineScope()
     var prompt by rememberSaveable { mutableStateOf(LocationPrompt.None) }
+    var goal by rememberSaveable { mutableStateOf(LocationGoal.Center) }
     // "La mia posizione" toccato: si centra appena arriva un fix (subito, se c'è già)
     var centerOnFix by remember { mutableStateOf(false) }
+
+    // Mappa ferma: sentieri e POI dell'area visibile (il ViewModel aspetta 400 ms e salta le aree già caricate)
+    LaunchedEffect(mapState) {
+        snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport }.filterNotNull().collect { viewport ->
+            val bounds = viewport.visibleBounds
+            viewModel.onCameraIdle(GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north), viewport.cameraPosition.zoom)
+        }
+    }
 
     LaunchedEffect(centerOnFix, location.lastLocation) {
         val fix = location.lastLocation ?: return@LaunchedEffect
@@ -195,10 +280,24 @@ fun MapScreen() {
         if (mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.GESTURE) centerOnFix = false
     }
 
-    fun onMyLocation() {
+    // "Sentieri vicini": serve un fix recente, non l'ultima posizione nota
+    val waitingForNearbyFix = ui.nearby == NearbyTrails.WaitingForFix
+    LaunchedEffect(waitingForNearbyFix, location.lastLocation) {
+        if (!waitingForNearbyFix) return@LaunchedEffect
+        location.recentFix()?.let(viewModel::onNearbyFix)
+    }
+    LaunchedEffect(waitingForNearbyFix) {
+        if (!waitingForNearbyFix) return@LaunchedEffect
+        delay(FixWait)
+        viewModel.onNearbyNoFix()
+    }
+
+    // Prima del dialogo di sistema si spiega perché: il permesso si chiede solo quando serve (§M3.1)
+    fun withLocation(target: LocationGoal, action: () -> Unit) {
+        goal = target
         prompt = when (val permission = location.permission) {
             is LocationPermission.Granted -> {
-                centerOnFix = true
+                action()
                 LocationPrompt.None
             }
             // canRequest false: negato per sempre, il sistema non mostra più il dialogo
@@ -235,10 +334,34 @@ fun MapScreen() {
                     )
                     DisappearingCompassButton(modifier = Modifier.align(Alignment.TopEnd))
                     // In basso a sinistra, lontano dall'SOS, e nei colori del tema: leggibile su ogni mappa
-                    AttributionButton(Modifier.align(Alignment.BottomStart))
+                    AttributionButton(mapState, Modifier.align(Alignment.BottomStart))
                 }
             },
         )
+        // In alto al centro: "Sentieri vicini" e, sotto, lo stato dei sentieri (carico, errore, zoom).
+        // Margini laterali per non coprire scala e bussola.
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(top = 12.dp, start = 72.dp, end = 72.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            MapPill(stringResource(Res.string.trails_nearby_button), emphasized = true) {
+                withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested)
+            }
+            val status = when {
+                ui.failed != null -> stringResource(Res.string.trails_load_failed)
+                ui.zoomTooLow -> stringResource(Res.string.trails_zoom_in_hint)
+                ui.truncated -> stringResource(Res.string.trails_too_many)
+                ui.loading -> stringResource(Res.string.trails_loading)
+                else -> null
+            }
+            if (status != null) {
+                MapPill(status, onClick = if (ui.failed != null) viewModel::retry else null)
+            }
+        }
         // Controlli grandi a destra, a metà altezza: lontani dall'SOS (in basso) e raggiungibili col pollice
         Column(
             modifier = Modifier
@@ -255,7 +378,21 @@ fun MapScreen() {
             MapButton(Res.string.map_zoom_out, Glyph.Minus) {
                 scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom - 1)) }
             }
-            MapButton(Res.string.map_my_location, Glyph.Locate, onClick = ::onMyLocation)
+            MapButton(Res.string.map_my_location, Glyph.Locate) {
+                withLocation(LocationGoal.Center) { centerOnFix = true }
+            }
+        }
+        // POI toccato: nome e tipo in una card in basso a sinistra (l'SOS sta a destra)
+        ui.pois.firstOrNull { it.id == selectedPoiId }?.let { poi ->
+            PoiCard(
+                poi = poi,
+                onOpenTrail = poi.trailId?.let { trailId -> { onOpenTrail(trailId) } },
+                onClose = { selectedPoiId = null },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
+                    .padding(start = 16.dp, end = 136.dp, bottom = 16.dp),
+            )
         }
     }
 
@@ -270,14 +407,29 @@ fun MapScreen() {
         )
     }
 
+    if (ui.nearby != NearbyTrails.Hidden) {
+        NearbySheet(
+            nearby = ui.nearby,
+            onOpenTrail = { id ->
+                viewModel.closeNearby()
+                onOpenTrail(id)
+            },
+            onRetry = { withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested) },
+            onDismiss = viewModel::closeNearby,
+        )
+    }
+
     when (prompt) {
-        // Prima del dialogo di sistema si spiega perché: il permesso si chiede solo quando serve (§M3.1)
         LocationPrompt.Rationale -> LocationDialog(
             title = Res.string.location_rationale_title,
             body = Res.string.location_rationale_body,
             confirm = Res.string.location_rationale_allow,
             onConfirm = {
-                centerOnFix = true
+                // se il permesso viene negato nel dialogo di sistema, l'attesa del fix finisce dopo FixWait
+                when (goal) {
+                    LocationGoal.Center -> centerOnFix = true
+                    LocationGoal.Nearby -> viewModel.onNearbyRequested()
+                }
                 location.requestPermission()
             },
             onDismiss = { prompt = LocationPrompt.None },
@@ -290,6 +442,140 @@ fun MapScreen() {
             onDismiss = { prompt = LocationPrompt.None },
         )
         LocationPrompt.None -> Unit
+    }
+}
+
+// L'ultimo fix, solo se è di adesso (MaxFixAge)
+private fun LocationState.recentFix(): GeoPoint? {
+    val fix = lastLocation ?: return null
+    val age = lastLocationMeasurementMark?.elapsedNow() ?: return null
+    return if (age <= MaxFixAge) fix.position.toGeoPoint() else null
+}
+
+// Capsula sopra la mappa, nei colori delle card: un'azione (emphasized, nel verde del tema) o un avviso
+@Composable
+private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> Unit)? = null) {
+    val colors = MaterialTheme.colorScheme
+    val container = if (emphasized) colors.primary else colors.surfaceContainerLowest
+    val content = if (emphasized) colors.onPrimary else colors.onSurface
+    val border = if (emphasized) null else BorderStroke(1.dp, colors.outlineVariant)
+    // gli avvisi si annunciano da soli (carico, errore), le azioni no
+    val modifier = if (emphasized) Modifier else Modifier.semantics { liveRegion = LiveRegionMode.Polite }
+    val label: @Composable () -> Unit = {
+        Box(Modifier.heightIn(min = 48.dp).padding(horizontal = 18.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
+            Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold, color = content, maxLines = 2)
+        }
+    }
+    if (onClick != null) {
+        Surface(onClick = onClick, shape = CircleShape, color = container, border = border, shadowElevation = 2.dp, modifier = modifier) { label() }
+    } else {
+        Surface(shape = CircleShape, color = container, border = border, shadowElevation = 2.dp, modifier = modifier) { label() }
+    }
+}
+
+@Composable
+private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onClose: () -> Unit, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = MaterialTheme.shapes.medium,
+        color = colors.surfaceContainerLowest,
+        border = BorderStroke(1.dp, colors.outlineVariant),
+        shadowElevation = 3.dp,
+        modifier = modifier.widthIn(max = 420.dp).semantics { liveRegion = LiveRegionMode.Polite },
+    ) {
+        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            // decorativa: il tipo è scritto accanto
+            Icon(poi.type.icon(), contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(poi.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Text(stringResource(poi.type.label()), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                if (onOpenTrail != null) {
+                    TextButton(onClick = onOpenTrail, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(Res.string.poi_open_trail), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+            }
+            IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
+                Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.poi_close))
+            }
+        }
+    }
+}
+
+// Foglio "Sentieri vicini": mentre cerca la posizione e carica, poi la lista ordinata per distanza (dal server)
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun NearbySheet(nearby: NearbyTrails, onOpenTrail: (String) -> Unit, onRetry: () -> Unit, onDismiss: () -> Unit) {
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
+        Column(Modifier.padding(bottom = 24.dp)) {
+            Text(
+                stringResource(Res.string.trails_nearby_title),
+                style = MaterialTheme.typography.titleLarge,
+                modifier = Modifier.padding(horizontal = 20.dp).semantics { heading() },
+            )
+            Spacer(Modifier.size(12.dp))
+            when (nearby) {
+                NearbyTrails.WaitingForFix, NearbyTrails.Loading -> Row(
+                    Modifier.padding(horizontal = 20.dp, vertical = 16.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+                    Spacer(Modifier.width(16.dp))
+                    Text(
+                        stringResource(if (nearby == NearbyTrails.WaitingForFix) Res.string.trails_nearby_waiting else Res.string.trails_loading),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                }
+                is NearbyTrails.Failed -> Column(Modifier.padding(horizontal = 20.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+                    Text(nearby.message.resolve(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                    TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
+                        Text(stringResource(Res.string.trail_retry), fontWeight = FontWeight.SemiBold)
+                    }
+                }
+                is NearbyTrails.Loaded -> if (nearby.trails.isEmpty()) {
+                    Text(
+                        stringResource(Res.string.trails_nearby_empty),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                    )
+                } else {
+                    LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                        items(nearby.trails, key = { it.id }) { trail ->
+                            TrailRow(trail, onClick = { onOpenTrail(trail.id) })
+                            HorizontalDivider(Modifier.padding(start = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                        }
+                    }
+                }
+                NearbyTrails.Hidden -> Unit
+            }
+        }
+    }
+}
+
+// Riga di un sentiero: nome, difficoltà e lunghezza, stato con il suo simbolo (non solo il colore)
+@Composable
+private fun TrailRow(trail: TrailSummaryResponse, onClick: () -> Unit) {
+    val difficulty = TrailDifficulty.of(trail.difficulty.value)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .heightIn(min = 64.dp)
+            .clickable(role = Role.Button, onClick = onClick)
+            .padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(trail.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                stringResource(difficulty.label) + " · " + stringResource(Res.string.trail_length_km, formatKm(trail.lengthM)),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Spacer(Modifier.width(12.dp))
+        TrailStateBadge(TrailState.of(trail.status.value))
     }
 }
 
@@ -307,202 +593,4 @@ private fun LocationDialog(title: StringResource, body: StringResource, confirm:
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.auth_cancel)) } },
     )
-}
-
-// ---- Controlli della mappa ----
-
-// Attribuzione di OpenStreetMap e OpenFreeMap (obbligatoria): una "i" piccola su un tondo da card, che si apre in
-// un pannello con i crediti. Il default di MapLibre è nero fisso, quasi invisibile sulla mappa scura.
-@Composable
-private fun AttributionButton(modifier: Modifier) {
-    val colors = MaterialTheme.colorScheme
-    val panel = AttributionStyle(
-        containerColor = colors.surfaceContainerLowest.copy(alpha = 0.94f),
-        contentColor = colors.onSurfaceVariant,
-        textStyle = MaterialTheme.typography.labelSmall.copy(color = colors.onSurfaceVariant),
-        border = BorderStroke(1.dp, colors.outlineVariant),
-    )
-    ExpandingAttributionButton(
-        modifier = modifier,
-        contentAlignment = Alignment.BottomStart,
-        toggleButton = { onClick ->
-            // bersaglio da 48 dp, disegno da 28: si nota senza ingombrare
-            Box(
-                Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick),
-                contentAlignment = Alignment.Center,
-            ) {
-                Box(
-                    Modifier
-                        .size(28.dp)
-                        .background(colors.surfaceContainerLowest.copy(alpha = 0.94f), CircleShape)
-                        .border(1.dp, colors.outlineVariant, CircleShape),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        AttributionDefaults.icon(),
-                        contentDescription = AttributionDefaults.contentDescription(),
-                        tint = colors.onSurfaceVariant,
-                        modifier = Modifier.size(18.dp),
-                    )
-                }
-            }
-        },
-        expandedStyle = panel,
-        // chiuso: niente pannello, resta solo il tondo
-        collapsedStyle = panel.copy(containerColor = Color.Transparent, border = null),
-    )
-}
-
-private enum class Glyph { Layers, Plus, Minus, Locate }
-
-// Tondo da 56 dp come le card (tono e filo di bordo): si legge sopra qualsiasi zona della mappa
-@Composable
-private fun MapButton(description: StringResource, glyph: Glyph, onClick: () -> Unit) {
-    val label = stringResource(description)
-    Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 2.dp,
-        modifier = Modifier.size(56.dp).semantics { contentDescription = label },
-    ) {
-        Box(contentAlignment = Alignment.Center) { GlyphIcon(glyph, MaterialTheme.colorScheme.onSurface) }
-    }
-}
-
-// Simboli disegnati con lo stesso tratto: material-icons-core non ha né il "meno" né il mirino della posizione
-@Composable
-private fun GlyphIcon(glyph: Glyph, tint: Color) {
-    Canvas(Modifier.size(24.dp)) {
-        val stroke = 2.dp.toPx()
-        val c = center
-        val arm = size.minDimension * 0.36f
-        when (glyph) {
-            Glyph.Plus -> {
-                drawLine(tint, c.copy(x = c.x - arm), c.copy(x = c.x + arm), stroke, StrokeCap.Round)
-                drawLine(tint, c.copy(y = c.y - arm), c.copy(y = c.y + arm), stroke, StrokeCap.Round)
-            }
-            Glyph.Minus -> drawLine(tint, c.copy(x = c.x - arm), c.copy(x = c.x + arm), stroke, StrokeCap.Round)
-            Glyph.Layers -> {
-                // livelli: un rombo pieno di contorno e, sotto, il bordo di quello successivo
-                val w = size.width * 0.42f
-                val h = size.height * 0.22f
-                val top = c.y - h * 0.8f
-                val sheet = Path().apply {
-                    moveTo(c.x, top - h)
-                    lineTo(c.x + w, top)
-                    lineTo(c.x, top + h)
-                    lineTo(c.x - w, top)
-                    close()
-                }
-                drawPath(sheet, tint, style = Stroke(stroke, join = StrokeJoin.Round))
-                val below = Path().apply {
-                    moveTo(c.x - w, top + h * 1.6f)
-                    lineTo(c.x, top + h * 2.6f)
-                    lineTo(c.x + w, top + h * 1.6f)
-                }
-                drawPath(below, tint, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
-            }
-            Glyph.Locate -> {
-                // mirino: cerchio, quattro tacche e il punto al centro
-                val r = size.minDimension * 0.30f
-                drawCircle(tint, r, c, style = Stroke(stroke))
-                drawCircle(tint, r * 0.35f, c)
-                val outer = size.minDimension * 0.48f
-                drawLine(tint, c.copy(y = c.y - outer), c.copy(y = c.y - r), stroke, StrokeCap.Round)
-                drawLine(tint, c.copy(y = c.y + r), c.copy(y = c.y + outer), stroke, StrokeCap.Round)
-                drawLine(tint, c.copy(x = c.x - outer), c.copy(x = c.x - r), stroke, StrokeCap.Round)
-                drawLine(tint, c.copy(x = c.x + r), c.copy(x = c.x + outer), stroke, StrokeCap.Round)
-            }
-        }
-    }
-}
-
-// ---- Tipo di mappa ----
-
-// Foglio dal basso con le mappe, come in Google Maps: riquadri d'anteprima con il nome sotto, la scelta evidenziata
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MapTypeSheet(current: MapType, onSelect: (MapType) -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(
-        onDismissRequest = onDismiss,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-    ) {
-        Column(Modifier.padding(start = 20.dp, end = 20.dp, bottom = 28.dp)) {
-            Text(
-                stringResource(Res.string.map_type_title),
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.semantics { heading() },
-            )
-            Spacer(Modifier.size(16.dp))
-            Row(Modifier.selectableGroup(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                MapType.entries.forEach { type ->
-                    MapTypeTile(type, selected = type == current, onClick = { onSelect(type) }, modifier = Modifier.weight(1f))
-                }
-            }
-        }
-    }
-}
-
-@Composable
-private fun MapTypeTile(type: MapType, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    val shape = MaterialTheme.shapes.medium
-    val colors = MaterialTheme.colorScheme
-    Column(
-        modifier = modifier
-            .clip(shape)
-            .selectable(selected = selected, role = Role.RadioButton, onClick = onClick)
-            .padding(4.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        MapPreview(
-            type,
-            Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(shape)
-                .border(if (selected) 2.dp else 1.dp, if (selected) colors.primary else colors.outlineVariant, shape),
-        )
-        Spacer(Modifier.size(8.dp))
-        Text(
-            stringResource(type.label()),
-            style = MaterialTheme.typography.labelLarge,
-            color = if (selected) colors.primary else colors.onSurface,
-        )
-    }
-}
-
-private fun MapType.label(): StringResource = when (this) {
-    MapType.STREETS -> Res.string.map_type_streets
-    MapType.SATELLITE -> Res.string.map_type_satellite
-}
-
-// Anteprime disegnate: riprendono i colori degli stili (sono campioni della mappa, non colori dell'interfaccia,
-// per questo non vengono dal tema). Decorative: il nome è scritto sotto.
-@Composable
-private fun MapPreview(type: MapType, modifier: Modifier) {
-    Canvas(modifier.clearAndSetSemantics { }) {
-        val w = size.width
-        val h = size.height
-        when (type) {
-            MapType.STREETS -> {
-                drawRect(Color(0xFFF2F2EF))
-                drawOval(Color(0xFFCDEBC5), topLeft = Offset(w * 0.05f, h * 0.08f), size = Size(w * 0.5f, h * 0.38f))
-                drawCircle(Color(0xFFAADAFF), radius = w * 0.32f, center = Offset(w * 1.02f, h * 1.02f))
-                drawLine(Color(0xFFD4D4D4), Offset(0f, h * 0.62f), Offset(w, h * 0.5f), w * 0.09f)
-                drawLine(Color.White, Offset(0f, h * 0.62f), Offset(w, h * 0.5f), w * 0.06f)
-                drawLine(Color(0xFFF2C45A), Offset(w * 0.62f, 0f), Offset(w * 0.38f, h), w * 0.1f)
-                drawLine(Color(0xFFFDE293), Offset(w * 0.62f, 0f), Offset(w * 0.38f, h), w * 0.07f)
-            }
-            MapType.SATELLITE -> {
-                drawRect(Color(0xFF3E4A2E))
-                drawOval(Color(0xFF2C3A22), topLeft = Offset(-w * 0.1f, h * 0.05f), size = Size(w * 0.7f, h * 0.55f))
-                drawOval(Color(0xFF6B6A4C), topLeft = Offset(w * 0.45f, h * 0.45f), size = Size(w * 0.65f, h * 0.5f))
-                drawOval(Color(0xFF526140), topLeft = Offset(w * 0.5f, -h * 0.1f), size = Size(w * 0.6f, h * 0.45f))
-                drawLine(Color.White.copy(alpha = 0.7f), Offset(0f, h * 0.7f), Offset(w, h * 0.35f), w * 0.035f)
-            }
-        }
-    }
 }

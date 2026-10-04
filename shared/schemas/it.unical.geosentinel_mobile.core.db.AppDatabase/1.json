@@ -1,0 +1,270 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 1,
+    "identityHash": "fee0b6f2ac5e94ff2855bc9528391c33",
+    "entities": [
+      {
+        "tableName": "trail_summary",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `difficulty` TEXT NOT NULL, `lengthMeters` REAL NOT NULL, `status` TEXT NOT NULL, `simplifiedGeoJson` TEXT NOT NULL, `minLon` REAL NOT NULL, `minLat` REAL NOT NULL, `maxLon` REAL NOT NULL, `maxLat` REAL NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "difficulty",
+            "columnName": "difficulty",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lengthMeters",
+            "columnName": "lengthMeters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "simplifiedGeoJson",
+            "columnName": "simplifiedGeoJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minLon",
+            "columnName": "minLon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "minLat",
+            "columnName": "minLat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxLon",
+            "columnName": "maxLon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "maxLat",
+            "columnName": "maxLat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_trail_summary_minLon_maxLon",
+            "unique": false,
+            "columnNames": [
+              "minLon",
+              "maxLon"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trail_summary_minLon_maxLon` ON `${TABLE_NAME}` (`minLon`, `maxLon`)"
+          },
+          {
+            "name": "index_trail_summary_minLat_maxLat",
+            "unique": false,
+            "columnNames": [
+              "minLat",
+              "maxLat"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_trail_summary_minLat_maxLat` ON `${TABLE_NAME}` (`minLat`, `maxLat`)"
+          }
+        ]
+      },
+      {
+        "tableName": "trail_detail",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `name` TEXT NOT NULL, `difficulty` TEXT NOT NULL, `lengthMeters` REAL NOT NULL, `status` TEXT NOT NULL, `fullGeoJson` TEXT NOT NULL, `description` TEXT, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "difficulty",
+            "columnName": "difficulty",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lengthMeters",
+            "columnName": "lengthMeters",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "fullGeoJson",
+            "columnName": "fullGeoJson",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "description",
+            "columnName": "description",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        }
+      },
+      {
+        "tableName": "poi",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` TEXT NOT NULL, `trailId` TEXT, `name` TEXT NOT NULL, `type` TEXT NOT NULL, `lat` REAL NOT NULL, `lon` REAL NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trailId",
+            "columnName": "trailId",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "type",
+            "columnName": "type",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lat",
+            "columnName": "lat",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "lon",
+            "columnName": "lon",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_poi_trailId",
+            "unique": false,
+            "columnNames": [
+              "trailId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_poi_trailId` ON `${TABLE_NAME}` (`trailId`)"
+          },
+          {
+            "name": "index_poi_lat_lon",
+            "unique": false,
+            "columnNames": [
+              "lat",
+              "lon"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_poi_lat_lon` ON `${TABLE_NAME}` (`lat`, `lon`)"
+          }
+        ]
+      },
+      {
+        "tableName": "catalog_etag",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`key` TEXT NOT NULL, `etag` TEXT NOT NULL, PRIMARY KEY(`key`))",
+        "fields": [
+          {
+            "fieldPath": "key",
+            "columnName": "key",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "etag",
+            "columnName": "etag",
+            "affinity": "TEXT",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": false,
+          "columnNames": [
+            "key"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, 'fee0b6f2ac5e94ff2855bc9528391c33')"
+    ]
+  }
+}

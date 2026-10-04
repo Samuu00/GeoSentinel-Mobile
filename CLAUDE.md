@@ -5,13 +5,17 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M6 → M4 → M5 → M7 → M8 → M9.
 
-**Stato (03/10/2026):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
+**Stato (04/10/2026):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
 logout, refresh unico, nome, cambio password e cancellazione dell'account. M3.1 fatta: mappa (Stradale chiara/scura e
 Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate e
-riverificate (regole della sessione in M2.3 del piano), 104 test host. Restano il job `ios` verde (codice del
+riverificate (regole della sessione in M2.3 del piano), 104 test host. Il job `android` della CI falliva per un test
+del DataStore che riapriva il file senza aspettare la chiusura: corretto (M2.1 del piano). Restano il job `ios` verde (codice del
 Keychain controllato solo a occhio) e le prove sul simulatore. Backend: periodo di grazia di 60 s sul refresh token
-(ADR-0019). Prossimo: M3.2 (sentieri e POI).
+(ADR-0019) e, dal 04/10, percorso semplificato nei sentieri della bbox con `ST_Intersects` (ADR-0020). M3.2 fatta
+(04/10): sentieri e POI sulla mappa, "Sentieri vicini", dettaglio del sentiero (pericoli e foto solo da loggati), 131
+test host. M3.3 scritta (04/10): cache Room del catalogo, ETag per rotta (`catalog_etag`) con `If-None-Match`, review di M3 applicata, 153 test
+host, checkpoint verificati sull'emulatore (304, modalità aereo, SQL di Room). Prossimo: M6 (SOS).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -40,16 +44,16 @@ Keychain controllato solo a occhio) e le prove sul simulatore. Backend: periodo 
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
 | Rete | Client generato da openapi-generator 7.14 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Enum generati con un ultimo caso `unknown_default_open_api` (template `apiClient/templates/data_class.mustache`, da ripatchare quando si aggiorna il generatore). Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
 | Errori | `sealed interface ApiError` costruito dallo slug (`type`) del `ProblemDetail`, mai da `title` o `detail` |
-| DI | Koin, avviato una volta per processo con `initKoin(config, preferencesPath)`: in `GeoSentinelApplication` (Android) e in `MainViewController` (iOS), mai in `MainActivity` |
+| DI | Koin, avviato una volta per processo: `initKoin(context, config)` in `GeoSentinelApplication` (Android), `startKoinWith(config, filesDir, databaseBuilder)` in `MainViewController` (iOS), mai in `MainActivity` |
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
-| Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox; DataStore per le preferenze |
+| Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox, un solo `AppDatabase` (`core/db`): builder dalla piattaforma (`initKoin(context, config)` su Android, `startKoinWith` su iOS), niente migrazioni distruttive, schema in `shared/schemas` da committare. ETag per rotta, non per riga (il backend lo calcola sul body). DataStore per le preferenze |
 | Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS (update, non delete + add; pulito alla prima lettura dopo un'installazione). Token in `AuthTokens`, il cui `toString` non li stampa. Errori dello store mai un crash: in `SessionManager` diventano un errore o "ospite" |
-| Mappa | MapLibre Compose 0.19. Tipi Stradale (OpenFreeMap ricolorato tipo Google Maps, chiaro/scuro) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. Niente raster PNG (es. OpenTopoMap): il motore su Android non li disegna in modo affidabile. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
+| Mappa | MapLibre Compose 0.19. Sentieri e POI in `trail/ui/TrailMapLayers.kt` (una sorgente GeoJSON per stato, chiusi tratteggiati); bbox e `[lon, lat]` solo da `core/location/GeoBounds.kt`. Tipi Stradale (OpenFreeMap ricolorato tipo Google Maps, chiaro/scuro) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. Niente raster PNG (es. OpenTopoMap): il motore su Android non li disegna in modo affidabile. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
 | Piattaforma | Posizione dal modulo `location` di MapLibre Compose (provider creato nella UI con `rememberLocationState`; `core/location/Location.kt` per `GeoPoint` e `current()`). Ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
 | Stringhe | `composeResources/values/strings.xml`, italiano come lingua base |
 | Log | Kermit |
-| Test | `commonTest` con `ktor-client-mock` (backend finto in `SessionTestSupport`), kotlinx-coroutines-test, Room in memoria; `androidHostTest` per le API Android sulla JVM; `androidDeviceTest` sull'emulatore (albero separato, nomi senza spazi per D8). Nomi dei test tra backtick senza `, . ; : / < > [ ]`: Kotlin/Native (job `ios`) non li accetta, la JVM sì |
+| Test | `commonTest` con `ktor-client-mock` (backend finto in `SessionTestSupport`), kotlinx-coroutines-test, Room in memoria; `androidHostTest` per le API Android sulla JVM; `androidDeviceTest` sull'emulatore (albero separato, nomi senza spazi per D8). Nomi dei test tra backtick senza `, . ; : / < > [ ]`: Kotlin/Native (job `ios`) non li accetta, la JVM sì. DataStore nei test: prima di riaprire lo stesso file si chiude lo scope con `cancelAndJoin()` (con il solo `cancel()` la CI Linux fallisce). Niente API sperimentali di coroutines-test dove basta `join()` (warning di opt-in) |
 
 ## Struttura
 ```

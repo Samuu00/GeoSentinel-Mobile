@@ -3,7 +3,7 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (02/10/2026):** il backend è completo (da M0 a M7) più il periodo di grazia del refresh token (ADR-0019,
+> **Stato (04/10/2026):** il backend è completo (da M0 a M7) più il periodo di grazia del refresh token (ADR-0019,
 > migration V10, 02/10): `./mvnw clean verify` verde, 42 unit + 108 IT.
 > App: **M0.1–M0.5 scritte** (convenzioni e dipendenze l'01/10; configurazione per ambiente, tema, navigazione,
 > Koin e CI il 02/10). L'app ha la shell completa: tema "foresta" chiaro/scuro selezionabile, barra in basso per
@@ -27,9 +27,16 @@
 > chiusa da un 401 vecchio, anche durante un cambio password), refresh entro 20 s, cambio password e cancellazione
 > non annullabili, errori dello store senza crash, Keychain con update e pulizia dopo una reinstallazione, database
 > escluso dal backup, satellite bloccato sul livello EOX CC BY; sulla mappa niente lampo dello stile sbagliato e
-> "La mia posizione" con un tempo massimo. 104 test host; mappa riverificata sull'emulatore. Dettagli in M2.3 e
+> "La mia posizione" con un tempo massimo. 104 test host; mappa riverificata sull'emulatore. Corretto anche un test
+> instabile del DataStore che faceva fallire il job `android` della CI (M2.1). Dettagli in M2.3 e
 > M3.1, punti rimandati in M9.3. Aperti: job `ios` (codice del Keychain controllato solo a occhio) e simulatore.
-> Prossimo: M3.2.
+> **M3.2 fatta** (04/10): sentieri della bbox disegnati sulla mappa per stato (chiusi tratteggiati), POI con un simbolo
+> per tipo, "Sentieri vicini", dettaglio del sentiero con difficoltà, POI e, da loggati, pericoli e foto (URL
+> firmato rinnovato quando scade). Nel backend il riepilogo dei sentieri ha ora il percorso semplificato e la bbox usa
+> `ST_Intersects` (ADR-0020). 131 test host. Dettagli in M3.2.
+> **M3.3 scritta** (04/10): cache Room del catalogo (la UI legge da lì), ETag per rotta con `If-None-Match` su dettaglio
+> e POI del sentiero, "aggiornato alle" e dati salvati senza rete. 144 test host; checkpoint verificati sull'emulatore.
+> Prossimo: chiudere i checkpoint di M3, poi la review di M3 (§6) e M6 (SOS).
 
 ---
 
@@ -43,7 +50,7 @@ L'app ha quattro tipi di utente, e il ruolo arriva da `GET /users/me` (campo `ro
 
 | Ruolo | Cosa fa nell'app |
 |---|---|
-| Ospite (non loggato) | Mappa con sentieri e POI (sono le uniche GET pubbliche), dettaglio del sentiero, registrazione e login |
+| Ospite (non loggato) | Mappa con sentieri e POI (sono le uniche GET pubbliche), dettaglio del sentiero senza pericoli né foto (anche `/media/**` richiede il login), registrazione e login |
 | `HIKER` | Tutto quello dell'ospite, più: pericoli su un sentiero, segnalazione con foto, rifugi e prenotazioni, **SOS**, profilo e cancellazione dell'account |
 | `PARK_MANAGER` | Verifica delle segnalazioni, stato dei sentieri, POI, ticket di manutenzione, capacità dei propri rifugi |
 | `RESCUE_OPERATOR` | Push sui nuovi SOS, lista e mappa delle allerte, invio di una squadra, chiusura |
@@ -94,6 +101,13 @@ Non sono bug del backend, sono cose che l'app vorrebbe e l'API oggi non dà:
 - **Nessun elenco "le mie segnalazioni"** né "pericoli vicino a me": i pericoli si leggono solo per sentiero
   (`/hazards/trail/{trailId}`).
 - **I rifugi richiedono il login** (`/refuges/**` non è pubblico): l'ospite non li vede sulla mappa.
+- **Anche foto e pericoli richiedono il login** (`/media/**`, `/hazards/**`): nel dettaglio del sentiero l'ospite vede
+  un invito ad accedere al posto di pericoli e foto (M3.2).
+- **Sentieri della mappa senza geometria: risolto nel backend il 04/10** (ADR-0020). `TrailSummaryResponse` non aveva il
+  percorso, quindi per disegnare i sentieri della bbox serviva un `GET /trails/{id}` per ognuno (fino a 200, contro un
+  limite di 60 richieste al minuto). Ora ha un `path` semplificato (circa 5 m); il percorso completo resta nel
+  dettaglio. Nello stesso ADR la bbox passa da `ST_Contains` a `ST_Intersects`: prima, avvicinandosi con lo zoom, un
+  sentiero che usciva dallo schermo spariva.
 - **Risposta del refresh persa: risolto nel backend il 02/10** (ADR-0019 del backend, migration V10). Se la
   connessione cade dopo che il server ha ruotato il refresh token, l'app può riprovare con lo stesso token entro
   **60 secondi**, purché il successore non sia mai stato usato: il server emette una coppia nuova e invalida quella
@@ -150,8 +164,9 @@ L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a t
   del Profilo). Prima la regola diceva "72 dp per le azioni principali", troppo vago: nei form dava pulsanti
   sproporzionati. Il pulsante SOS si tiene premuto 3 secondi con un
   anello che si riempie, così non parte un SOS dalla tasca.
-- **Etichette di montagna:** difficoltà con la scala CAI che il backend già documenta (`EASY` = T, `MODERATE` = E,
-  `DIFFICULT` = EE, `EXPERT` = EEA); pericoli e POI con nomi italiani (frana, albero caduto, bivacco, sorgente...).
+- **Etichette di montagna:** difficoltà con le quattro parole del backend: Facile, Media, Difficile, Per esperti
+  (04/10: niente più scala CAI T/E/EE/EEA, la sigla la assegna chi gestisce il sentiero e non si ricava da quattro
+  valori); pericoli e POI con nomi italiani (frana, albero caduto, bivacco, sorgente...).
   Lunghezze in km con un decimale, distanze in metri.
 - **Offline visibile:** un banner quando non c'è rete, la data dell'ultimo aggiornamento sui dati in cache, le azioni
   in coda mostrate come "in invio".
@@ -479,8 +494,9 @@ suspend fun <T> apiCall(block: suspend () -> T): Result<T>   // ProblemDetail ->
 - Checkpoint (`commonTest`, `core/network/ApiErrorTest.kt`, 12 test, 02/10):
   - [x] un test per ogni slug della guida: il `ProblemDetail` finisce nel ramo giusto di `ApiError`, e ogni slug ha
     il suo messaggio (uno slug sconosciuto ha quello generico del ramo).
-  - [ ] i messaggi per campo di un errore di validazione (`errors[]`) arrivano fino al form. Fino a `apiCall` sì
-    (`Validation.fieldErrors`, testato con `MockEngine`); il form arriva in M2.2 e il checkpoint si chiude lì.
+  - [x] i messaggi per campo di un errore di validazione (`errors[]`) arrivano fino al form: fino a `apiCall` con
+    `Validation.fieldErrors` (testato con `MockEngine`), poi nei form di accesso e registrazione con messaggi italiani
+    nostri (M2.2, `AuthViewModelsTest`).
   - [x] in più: 2xx → successo; `Retry-After` portato in `RateLimited`; pagina HTML di un proxy → `Server`;
     `IOException` → `Network`; la cancellazione si propaga; un 2xx fuori contratto non diventa `ApiException`.
     Verificato rompendo apposta il codice: i test falliscono.
@@ -489,13 +505,13 @@ suspend fun <T> apiCall(block: suspend () -> T): Result<T>   // ProblemDetail ->
 
 **M2.1 `SecureTokenStore`**
 ```kotlin
-// core/session/SecureTokenStore.kt
-expect class SecureTokenStore {
-    suspend fun read(): StoredTokens?
-    suspend fun write(tokens: StoredTokens)
+// core/session/SecureTokenStore.kt (contratto attuale; quello iniziale era un expect class, vedi "Fatto il 02/10")
+interface SecureTokenStore {
+    suspend fun read(): AuthTokens?
+    suspend fun write(tokens: AuthTokens)
     suspend fun clear()
 }
-data class StoredTokens(val accessToken: String, val refreshToken: String, val accessExpiresAt: Instant)
+internal expect fun createSecureTokenStore(filesDir: String): SecureTokenStore
 ```
 - Android: chiave AES-GCM nel Keystore (`AndroidKeyStore`), token cifrati in DataStore. Il file dei token va
   **escluso dal backup** (`android:dataExtractionRules` e `fullBackupContent`; oggi `allowBackup="true"`): la chiave
@@ -520,6 +536,11 @@ data class StoredTokens(val accessToken: String, val refreshToken: String, val a
     su Windows lo storage di default non sostituisce il file alla seconda scrittura) e
     `AndroidSecureTokenStoreDeviceTest` sull'emulatore con il Keystore vero
     (`./gradlew :shared:connectedAndroidDeviceTest`; albero separato da commonTest, nomi senza spazi per D8).
+  - 03/10: il job `android` della CI falliva su `AndroidSecureTokenStoreTest` ("multiple DataStores active",
+    `IllegalStateException` da `OkioStorage`). Il "riavvio" del test chiudeva lo scope del DataStore con `cancel()`
+    senza aspettarlo, e il DataStore successivo trovava il file ancora aperto: una corsa che su Windows passava e su
+    Linux no. Ora `cancelAndJoin()`. Regola: nei test, prima di riaprire lo stesso file DataStore si aspetta la
+    chiusura dello scope precedente.
 - Checkpoint:
   - [x] dopo un riavvio dell'app la sessione c'è ancora; dopo `clear()` no (host test, 02/10).
   - [x] il file di DataStore su Android non contiene il token in chiaro: verificato sul file vero
@@ -645,7 +666,6 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
 - Il permesso di posizione si chiede **quando serve** (primo "vicino a me" o primo SOS), con una spiegazione prima del
   dialogo di sistema. Senza permesso la mappa funziona lo stesso, partendo da un'area di default.
 - MapLibre con lo stile OpenFreeMap, pallino della posizione, controlli di zoom grandi.
-- Checkpoint:
 - Fatto il 03/10 (contratto cambiato):
   - **Niente `expect class LocationProvider`.** Quella scritta per M3.1 non aveva `actual` (la build non compilava) e
     un `expect class` senza costruttore non può ricevere il `Context`/l'Activity che Android vuole per il permesso.
@@ -693,21 +713,120 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
 - `findTrailsInBoundingBox` quando la mappa si ferma (debounce di 400 ms, bbox nel formato del backend),
   `findTrailsNearby` per "vicino a me", `getTrail` per il dettaglio con il percorso disegnato,
   `findPoisByTrail` e `findPoisNearby` con un'icona per tipo.
-- Dettaglio del sentiero: nome, difficoltà (T/E/EE/EEA), lunghezza, stato, descrizione, pericoli attivi
+- Dettaglio del sentiero: nome, difficoltà, lunghezza, stato, descrizione, pericoli attivi
   (`findActiveHazardsByTrail`, solo da loggati), foto allegate (`findAttachedMedia` + `getMediaDownloadUrl`).
+- Fatto il 04/10 (contratto cambiato nel backend, ADR-0020):
+  - **Backend:** `TrailSummaryResponse.path` (GeoJSON semplificato, obbligatorio) e bbox con `ST_Intersects`; senza,
+    la mappa non poteva disegnare i sentieri (vedi le lacune in §1). Contratto ricopiato in `api/openapi.json`.
+  - **Dati:** `core/location/GeoBounds.kt` (bbox `minLon,minLat,maxLon,maxLat` tenuta dentro i limiti del mondo,
+    `GeoJsonLineString.toPositions()` da `[lon, lat]`, distanza in metri, `toString` senza coordinate);
+    `TrailRepository` (bbox, vicini, dettaglio, POI per sentiero e vicini, con i limiti del server: 200 nella bbox,
+    50 vicini, raggio fino a 50 km), `HazardRepository`, `MediaRepository` (solo le foto `READY`). Tutti sul client
+    condiviso, registrati in Koin. Niente strato `domain`.
+  - **Mappa** (`TrailMapViewModel`, `TrailMapLayers.kt`): a camera ferma, dopo 400 ms senza movimenti, si chiede la
+    vista allargata di metà per lato; finché la vista resta nell'area già caricata non parte nulla (rate limit). Con
+    200 risultati l'area non conta come caricata e compare "Troppi sentieri in quest'area". Sotto lo zoom 8 niente
+    richieste ("Avvicinati"), POI solo dallo zoom 12 (raggio che copre l'area). Un errore lascia i sentieri già visti
+    con "Sentieri non aggiornati. Tocca per riprovare". Linee con un bordo chiaro (scuro su satellite e stradale
+    scura), una sorgente per stato perché in MapLibre il tratteggio non può dipendere da un dato: aperti verdi, con
+    avvisi ambra, chiusi rossi **e tratteggiati**. Tocco su una linea: dettaglio. POI come tondi da card con il simbolo
+    SDF del tipo (casa, goccia disegnata a mano, stella, triangolo, chiave, "i"); tocco: card con nome, tipo e "Apri il
+    sentiero".
+  - **Sentieri vicini:** capsula in alto; il permesso si chiede come per "La mia posizione" (spiegazione, poi
+    dialogo). Vale solo un fix di meno di 2 minuti (`lastLocationMeasurementMark`), atteso per 15 s: su Android il
+    primo fix può essere vecchio di giorni (nota di M3.1). Foglio con i sentieri entro 10 km (ordine del server).
+  - **Dettaglio** (`TrailDetailScreen`, rotta `TrailDetail(id)`, spinta senza barra in basso): anteprima ferma del
+    percorso completo inquadrato, stato con simbolo ed etichetta, difficoltà (Facile, Media, Difficile, Per esperti), km con la virgola, descrizione, POI.
+    Pericoli (il rosso solo per `CRITICAL`) e foto solo da loggati, e spariscono all'uscita; da ospite un invito ad
+    accedere (dopo il login si torna al sentiero). Foto con Coil: l'URL firmato si chiede quando la foto compare, la
+    cache usa l'id della foto (l'URL cambia a ogni richiesta), su un errore di download (URL scaduto) se ne chiede un
+    altro, al massimo tre per foto.
+  - **Nota sul client generato:** openapi-generator 7.14 dà a `findTrailsInBoundingBox(bbox)` il default
+    `"createdAt,ASC"`, preso da un'altra operazione (il contratto è corretto). `TrailRepository` passa sempre `bbox`;
+    da ricontrollare quando si aggiorna il generatore.
+  - Test: `GeoBoundsTest` (8), `TrailLabelsTest` (3), `TrailMapViewModelTest` (10), `TrailDetailViewModelTest` (6),
+    con le rotte del catalogo in `FakeCatalog` sul backend finto (`FakeBackend.extraRoutes`). 131 test host.
+    Verificato anche invertendo apposta lon e lat in `toPositions`: tre test falliscono.
 - Checkpoint:
-  - [ ] **test di regressione lon/lat:** il percorso GeoJSON del seed (Sila) si disegna in Calabria e non nel Golfo di
-    Aden. Test in `commonTest` sulla conversione da `[lon, lat]` a `Position`.
-  - [ ] un sentiero `CLOSED` si riconosce senza leggere il colore (icona o etichetta).
-  - [ ] le foto si caricano con l'URL firmato; quando l'URL scade (5 minuti) se ne chiede un altro.
+  - [x] **test di regressione lon/lat:** il percorso GeoJSON del seed (Sila) si disegna in Calabria e non nel Golfo di
+    Aden (`GeoBoundsTest`, e lo stesso percorso letto dall'API finta in `TrailMapViewModelTest`).
+  - [ ] un sentiero `CLOSED` si riconosce senza leggere il colore: linea tratteggiata sulla mappa, simbolo ed etichetta
+    "Chiuso" nel dettaglio e nella lista dei vicini. Manca la prova sull'emulatore contro il backend locale.
+  - [ ] le foto si caricano con l'URL firmato; quando l'URL scade (5 minuti) se ne chiede un altro. Il rinnovo è
+    coperto dai test; la prova vera vuole una foto `READY` sul sentiero, che arriva con l'upload (M4.2).
+  - [ ] (con il Mac) mappa, sentieri e dettaglio sul simulatore iPhone.
 
 **M3.3 Cache del catalogo e GET condizionali**
 - Room: tabelle `trail_summary`, `trail_detail` (con il GeoJSON come testo) e `poi`, con l'`ETag` e la data
   dell'ultimo aggiornamento. La UI legge sempre dalla cache, la rete la aggiorna.
 - Le GET del catalogo rimandano l'ETag in `If-None-Match`; un `304` aggiorna solo la data.
-- Checkpoint:
-  - [ ] in modalità aereo il sentiero già aperto si vede ancora, con "aggiornato alle ...".
-  - [ ] la seconda apertura dello stesso sentiero riceve 304 (log del client in debug).
+- Fatto il 04/10 (entità, DAO e database scritti dall'utente; il resto e le correzioni da Claude):
+  - **ETag per rotta, non per riga.** Il backend calcola l'ETag sull'intero body (`ShallowEtagHeaderFilter`), quindi
+    vale per una risposta: sta in una tabella a parte, `catalog_etag(key, etag)` con chiave `trail/<id>` e
+    `pois/<trailId>`. Le colonne `etag` su `trail_summary` e `poi` erano sbagliate e sono state tolte; `updatedAt`
+    resta su ogni riga (ultima conferma del server, è la data di "aggiornato alle").
+  - **Quali GET sono condizionali:** il dettaglio (`/trails/{id}`) e i POI del sentiero (`/pois/trail/{id}`). La bbox
+    no: l'area cambia a ogni movimento e la stessa URL non torna quasi mai. Il client generato non ha l'header,
+    perché lo schema non lo dice: `core/network/ConditionalGet.kt` fa la GET sul client condiviso (bearer, retry, log)
+    con gli stessi errori di `apiCall`. L'ETag non si manda se manca la copia in cache (un 304 lascerebbe il dettaglio
+    vuoto).
+  - **Database:** `AppDatabase` con `@ConstructedBy(AppDatabaseConstructor)` (senza, il target iOS non compila),
+    `createAppDatabase` con `BundledSQLiteDriver` e query su `Dispatchers.IO`, nessuna migrazione distruttiva (da
+    M5/M6 qui c'è l'outbox). Android in `databases/geosentinel.db` (già escluso dal backup), iOS in Application
+    Support con `NSURLIsExcludedFromBackupKey` (compilato solo nel job `ios`). Koin riceve il builder dalla
+    piattaforma: `initKoin(context, config)` su Android (Room vuole il `Context`), `startKoinWith` da
+    `MainViewController`. Flag `-Xexpect-actual-classes` in `shared` per l'`expect object` di Room.
+  - **DAO:** classe astratta (i metodi `@Transaction` con un corpo funzionano così su tutti i target): sentieri il cui
+    riquadro tocca la vista, `replaceSummariesInBox` (con una risposta completa, meno di 200, toglie quelli che il
+    server non ha più; con 200 aggiunge e basta), `replacePoisOfTrail`, POI nel riquadro, ETag.
+  - **Repository e UI:** `TrailRepository` con `observe*` (dalla cache) e `refresh*` (dalla rete alla cache). Mappa:
+    i sentieri e i POI salvati dell'area si vedono subito, anche senza rete. Dettaglio: prima la copia salvata, poi
+    l'aggiornamento; sotto la lunghezza "Aggiornato alle 14:05" (o "il 03/10 alle 14:05"); senza rete il motivo,
+    "Mostro i dati salvati. Tocca per aggiornare." e i dati salvati; senza copia, l'errore di prima. "Sentieri vicini"
+    resta solo rete.
+  - Test: `TrailRepositoryTest` (10: 304 che cambia solo la data, ETag nuovo quando il sentiero cambia, niente ETag
+    senza copia, modalità aereo, lon/lat del percorso salvato, POI rivalidati e tolti, bbox completa e parziale,
+    riquadro, riga illeggibile), 2 in più in `TrailDetailViewModelTest` (offline con e senza copia), 1 in
+    `TrailLabelsTest` ("aggiornato alle"), con `FakeCatalogDao` (sulla JVM Room vuole un Context) e ETag/304 nel
+    backend finto. 144 test host. Verificato anche togliendo apposta `If-None-Match`: i due test del 304 falliscono.
+    `CatalogDaoDeviceTest` (3) con la SQL vera sull'emulatore.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 04/10):
+  - [x] in modalità aereo, con l'app chiusa e riaperta, la mappa mostra i sentieri salvati con "Sentieri non
+    aggiornati. Tocca per riprovare" e il sentiero già aperto si vede con POI, "Nessuna connessione… Mostro i dati
+    salvati" e "Aggiornato alle 17:24".
+  - [x] la seconda apertura dello stesso sentiero riceve 304 (log `HTTP` in debug), sia `/trails/{id}` sia
+    `/pois/trail/{id}`; la prima 200.
+  - [x] `CatalogDaoDeviceTest` verde sull'emulatore (`./gradlew :shared:connectedAndroidDeviceTest`), insieme al test
+    del Keystore.
+- Visto sull'emulatore: l'attribuzione nell'anteprima del dettaglio restava aperta (quella di MapLibre si chiude solo
+  al primo gesto). Ora `AttributionButton` (`MapControls.kt`) parte aperta e si chiude al primo gesto o dopo 5 s, come
+  chiedono le linee guida di OSM, sulla mappa e nell'anteprima (i 5 s partono quando lo stile è caricato); verificato
+  sull'emulatore il 04/10. L'emulatore ha poco
+  spazio (520 MB liberi su 5,8 GB): per aggiornare l'app è servito disinstallarla (persa la sessione di prova).
+
+**Review di M3** (04/10, `ecc:kotlin-reviewer` + `ecc:code-reviewer`, §6): nessun CRITICAL. Corretto:
+- **cache che perdeva sentieri validi** (HIGH): con una risposta completa della bbox si cancellano solo i sentieri il cui
+  riquadro sta tutto dentro l'area; un sentiero a L che tocca l'area solo con il riquadro poteva non tornare dal server
+  (`ST_Intersects` sul percorso vero) e sparire dalla cache;
+- **"Carico i sentieri…" per sempre** (HIGH/MEDIUM): `loading` si azzera in un `finally` anche quando un movimento
+  annulla la richiesta; l'errore di un'altra area sparisce se la vista è già coperta;
+- **foto in caricamento infinito** se l'URL firmato non arriva: "Foto non disponibile", tocco per riprovare (anche
+  dopo i tre tentativi);
+- **POI tolti dal server** che restavano sulla mappa: con una risposta completa (meno di 50, cerchio che contiene il
+  riquadro) si tolgono quelli del riquadro (`replacePoisInBox`); **404 sul dettaglio**: si toglie la copia salvata e
+  si mostra l'errore;
+- **conversioni GeoJSON sul main thread**: `flowOn`/`withContext` su un dispatcher passato al repository (Default
+  nell'app, quello del test nei test); **errori del database o fuori contratto**: fallimenti e non crash (`guarded`
+  nel repository, `safely` nel ViewModel), scope della sessione con `SupervisorJob`; un solo aggiornamento del
+  dettaglio alla volta;
+- **da lontano** (sotto lo zoom 8) la cache non si legge più tutta; **bbox senza notazione scientifica** vicino allo 0;
+  id codificato nell'URL; `MapScreen.kt` sotto le 800 righe (controlli in `MapControls.kt`);
+- backend: `ORDER BY t.id` prima del `LIMIT 200` (sottoinsieme stabile), latitudine controllata nel test del percorso.
+- Test in più: sentiero a L (anche in `CatalogDaoDeviceTest`), 404, POI tolti, errore del database, annullamento
+  durante il caricamento, zoom basso, URL firmato che non arriva, bbox vicino allo 0. 153 test host (due giri da zero),
+  `TrailSpatialQueryIT` verde. `CatalogDaoDeviceTest` (con il sentiero a L) verde sull'emulatore.
+- Non corretto, da decidere: CLAUDE.md dice "rosso solo per SOS e `CRITICAL`", §2 dice "`CLOSED` rosso" (e
+  `TrailClosed = EmergencyRed`). Accettato: con una risposta troncata (200) la cache non si ripulisce.
 
 ### Milestone 4: segnalazioni e foto
 
@@ -779,6 +898,11 @@ class SosController(sosApi: SosApi, outbox: OutboxDao, location: LocationProvide
     suspend fun cancel()
 }
 ```
+- **Contratto da rivedere prima di iniziare:** con A11 il `LocationProvider` si crea nella UI
+  (`rememberLocationState`, su Android serve l'Activity per il permesso), quindi Koin non può passarlo al costruttore
+  di `SosController`. Strade possibili: la posizione (o il provider) come parametro di `raise()` e di
+  `updateLocation()`, oppure un provider creato a livello di Activity e registrato a parte. Si decide qui e si
+  aggiorna la firma.
 - Pressione lunga di 3 s sul FAB, poi posizione corrente (timeout di 10 s; senza fix, l'ultima nota), poi azione `SOS`
   nell'outbox con la sua `Idempotency-Key`, poi `raiseSos`. Si ritenta finché non c'è una risposta, anche dopo un
   riavvio.

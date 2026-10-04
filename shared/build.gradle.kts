@@ -11,6 +11,10 @@ plugins {
 }
 
 kotlin {
+    // Room KMP vuole un expect object (AppDatabaseConstructor): le classi expect/actual sono ancora Beta
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
     listOf(
         iosArm64(),
         iosSimulatorArm64()
