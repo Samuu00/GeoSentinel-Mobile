@@ -12,6 +12,7 @@ enum class UserRole {
     // Gerarchia del backend: ADMIN include PARK_MANAGER e RESCUE_OPERATOR, che includono HIKER
     fun canViewRefuges(): Boolean = this != GUEST
     fun canRaiseSos(): Boolean = this != GUEST
+    fun canReportHazards(): Boolean = this != GUEST
     fun canViewAlerts(): Boolean = this == RESCUE_OPERATOR || this == ADMIN
     fun canManagePark(): Boolean = this == PARK_MANAGER || this == ADMIN
 }

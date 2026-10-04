@@ -26,6 +26,8 @@ sealed interface Route {
     @Serializable data object SosEmergency : Route
     // "spinta" sopra la mappa (M3.2), senza barra in basso
     @Serializable data class TrailDetail(val id: String) : Route
+    // form "spinto" (M4.1): la mappa del form parte da lat/lon/zoom; trailId se si parte da un sentiero
+    @Serializable data class ReportHazard(val lat: Double, val lon: Double, val zoom: Double, val trailId: String? = null) : Route
     // "spinte" sopra il Profilo, senza barra in basso
     @Serializable data object Login : Route
     @Serializable data object Register : Route
@@ -34,7 +36,7 @@ sealed interface Route {
 }
 
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
-val FormRoutes = setOf(Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class)
+val FormRoutes = setOf(Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class)
 
 // Schermate senza barra in basso: i form e il dettaglio di un sentiero (a tutto schermo, con il suo Indietro)
 val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class

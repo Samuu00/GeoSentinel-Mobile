@@ -225,7 +225,7 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
 // Quanto resta aperta l'attribuzione se nessuno tocca la mappa
 private val AttributionOpenFor = 5.seconds
 
-internal enum class Glyph { Layers, Plus, Minus, Locate }
+internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard }
 
 // Tondo da 56 dp come le card (tono e filo di bordo): si legge sopra qualsiasi zona della mappa
 @Composable
@@ -276,6 +276,21 @@ private fun GlyphIcon(glyph: Glyph, tint: Color) {
                     lineTo(c.x + w, top + h * 1.6f)
                 }
                 drawPath(below, tint, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            Glyph.Hazard -> {
+                // triangolo di pericolo con il punto esclamativo, come sui cartelli
+                val half = size.width * 0.42f
+                val top = c.y - size.height * 0.38f
+                val bottom = c.y + size.height * 0.34f
+                val triangle = Path().apply {
+                    moveTo(c.x, top)
+                    lineTo(c.x + half, bottom)
+                    lineTo(c.x - half, bottom)
+                    close()
+                }
+                drawPath(triangle, tint, style = Stroke(stroke, join = StrokeJoin.Round))
+                drawLine(tint, c.copy(y = c.y - size.height * 0.12f), c.copy(y = c.y + size.height * 0.10f), stroke, StrokeCap.Round)
+                drawCircle(tint, stroke * 0.65f, c.copy(y = c.y + size.height * 0.22f))
             }
             Glyph.Locate -> {
                 // mirino: cerchio, quattro tacche e il punto al centro

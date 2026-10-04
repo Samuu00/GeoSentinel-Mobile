@@ -89,6 +89,7 @@ import geosentinel_mobile.shared.generated.resources.location_rationale_allow
 import geosentinel_mobile.shared.generated.resources.location_rationale_body
 import geosentinel_mobile.shared.generated.resources.location_rationale_title
 import geosentinel_mobile.shared.generated.resources.map_my_location
+import geosentinel_mobile.shared.generated.resources.report_open
 import geosentinel_mobile.shared.generated.resources.map_type_button
 import geosentinel_mobile.shared.generated.resources.map_type_satellite
 import geosentinel_mobile.shared.generated.resources.map_type_streets
@@ -154,6 +155,8 @@ import org.maplibre.compose.style.BaseStyle
 private val DefaultArea = GeoPoint(lat = 39.33, lon = 16.55)
 private const val DefaultZoom = 9.5
 private const val MyLocationZoom = 14.0
+// La mappa del form della segnalazione parte almeno da qui: abbastanza vicina per mettere il segnaposto
+private const val ReportZoom = 13.0
 
 // Stili della mappa in composeResources/files/map, generati da tools/map-styles (tutti gratuiti e senza chiave):
 // Stradale = OpenFreeMap ricolorato con una palette tipo Google Maps (chiaro e scuro), Satellite = Sentinel-2 di EOX
@@ -208,7 +211,7 @@ private enum class LocationPrompt { None, Rationale, Denied }
 private enum class LocationGoal { Center, Nearby }
 
 @Composable
-fun MapScreen(onOpenTrail: (String) -> Unit) {
+fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
     // Provider di default di MapLibre (LocationManager / CLLocationManager). Non chiede il permesso da solo:
@@ -381,6 +384,13 @@ fun MapScreen(onOpenTrail: (String) -> Unit) {
             MapButton(Res.string.map_my_location, Glyph.Locate) {
                 withLocation(LocationGoal.Center) { centerOnFix = true }
             }
+            // solo da loggati (null per l'ospite): il form parte dal punto che si sta guardando
+            if (onReportHazard != null) {
+                Spacer(Modifier.size(4.dp))
+                MapButton(Res.string.report_open, Glyph.Hazard) {
+                    onReportHazard(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
+                }
+            }
         }
         // POI toccato: nome e tipo in una card in basso a sinistra (l'SOS sta a destra)
         ui.pois.firstOrNull { it.id == selectedPoiId }?.let { poi ->
@@ -445,8 +455,8 @@ fun MapScreen(onOpenTrail: (String) -> Unit) {
     }
 }
 
-// L'ultimo fix, solo se è di adesso (MaxFixAge)
-private fun LocationState.recentFix(): GeoPoint? {
+// L'ultimo fix, solo se è di adesso (MaxFixAge). Lo usa anche il form della segnalazione (M4.1)
+internal fun LocationState.recentFix(): GeoPoint? {
     val fix = lastLocation ?: return null
     val age = lastLocationMeasurementMark?.elapsedNow() ?: return null
     return if (age <= MaxFixAge) fix.position.toGeoPoint() else null

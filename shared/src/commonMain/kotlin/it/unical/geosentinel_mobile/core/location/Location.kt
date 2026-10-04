@@ -10,6 +10,8 @@ import org.maplibre.compose.location.LocationPermission
 import org.maplibre.compose.location.LocationProvider
 import org.maplibre.compose.location.LocationRequest
 import org.maplibre.spatialk.geojson.Position
+import kotlin.math.PI
+import kotlin.math.cos
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -24,6 +26,19 @@ data class GeoPoint(val lat: Double, val lon: Double)
 // GeoJSON e MapLibre vogliono prima la longitudine: conversioni in un solo posto (test di regressione in LocationTest)
 fun GeoPoint.toPosition(): Position = Position(longitude = lon, latitude = lat)
 fun Position.toGeoPoint(): GeoPoint = GeoPoint(lat = latitude, lon = longitude)
+
+/**
+ * Il centro della mappa dopo un trascinamento di [dxDp], [dyDp] (verso destra e verso il basso) a [metersPerDp]: la
+ * mappa segue il dito, quindi il centro va dalla parte opposta. Approssimazione locale (un grado di latitudine
+ * ≈ 111 km), più che sufficiente per i pochi metri di un gesto. Latitudine limitata a ±85 (Web Mercator).
+ */
+fun Position.dragged(dxDp: Double, dyDp: Double, metersPerDp: Double): Position {
+    val lat = (latitude + dyDp * metersPerDp / METERS_PER_DEGREE).coerceIn(-85.0, 85.0)
+    val lon = longitude - dxDp * metersPerDp / (METERS_PER_DEGREE * cos(latitude * PI / 180))
+    return Position(longitude = (lon + 540.0) % 360.0 - 180.0, latitude = lat)
+}
+
+private const val METERS_PER_DEGREE = 111_320.0
 
 /**
  * La posizione attuale, per chi la usa una volta (sentieri vicini, SOS): il primo fix entro [timeout]. Su Android il

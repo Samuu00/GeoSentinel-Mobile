@@ -195,4 +195,31 @@
     <string name="hazard_severity_critical">Gravità critica</string>
     <string name="hazard_severity_unknown">Gravità non indicata</string>
 
+    <!-- Segnalazione di un pericolo (M4.1) -->
+    <string name="report_open">Segnala un pericolo</string>
+    <string name="report_title">Segnala un pericolo</string>
+    <string name="report_body">La segnalazione arriva ai gestori del parco e compare sul sentiero dopo la loro verifica.</string>
+    <string name="report_type">Tipo di pericolo</string>
+    <string name="report_severity">Gravità</string>
+    <string name="report_severity_low">Bassa</string>
+    <string name="report_severity_medium">Media</string>
+    <string name="report_severity_high">Alta</string>
+    <string name="report_severity_critical">Critica</string>
+    <string name="report_location">Posizione</string>
+    <string name="report_location_hint">Sposta la mappa finché il segnaposto non è sul pericolo.</string>
+    <string name="report_use_my_location">Usa la mia posizione</string>
+    <string name="report_locating">Cerco la tua posizione…</string>
+    <string name="report_location_unavailable">Posizione non disponibile: sposta la mappa a mano.</string>
+    <string name="report_location_denied">Posizione non consentita: sposta la mappa a mano o consentila dalle impostazioni.</string>
+    <string name="report_description">Descrizione (facoltativa)</string>
+    <string name="report_description_count">%1$d/%2$d</string>
+    <string name="report_send">Invia la segnalazione</string>
+    <string name="report_error_type">Scegli il tipo di pericolo.</string>
+    <string name="report_error_severity">Scegli la gravità.</string>
+    <string name="report_error_location">Indica dove si trova il pericolo.</string>
+    <string name="report_error_description">Al massimo %1$d caratteri.</string>
+    <string name="report_sent_title">Segnalazione inviata</string>
+    <string name="report_sent_body">Grazie. Un gestore del parco la verificherà: dopo comparirà tra i pericoli del sentiero.</string>
+    <string name="report_sent_done">Fatto</string>
+
 </resources>

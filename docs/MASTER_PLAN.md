@@ -35,8 +35,15 @@
 > firmato rinnovato quando scade). Nel backend il riepilogo dei sentieri ha ora il percorso semplificato e la bbox usa
 > `ST_Intersects` (ADR-0020). 131 test host. Dettagli in M3.2.
 > **M3.3 scritta** (04/10): cache Room del catalogo (la UI legge da lì), ETag per rotta con `If-None-Match` su dettaglio
-> e POI del sentiero, "aggiornato alle" e dati salvati senza rete. 144 test host; checkpoint verificati sull'emulatore.
-> Prossimo: chiudere i checkpoint di M3, poi la review di M3 (§6) e M6 (SOS).
+> e POI del sentiero, "aggiornato alle" e dati salvati senza rete; checkpoint verificati sull'emulatore.
+> **Review di M3 fatta** (04/10, §6): correzioni applicate, 153 test host. Dettagli in fondo a M3.
+> Il job `ios` della CI falliva su `NSNumber.numberWithBool` in `AppDatabase.ios.kt` (04/10): corretto con
+> `NSNumber(bool = true)`, da riverificare in CI.
+> **M4.1 fatta** (04/10, anticipata rispetto all'ordine di §6): segnalazione di un pericolo dalla mappa e dal
+> dettaglio del sentiero, posizione scelta su una mappa con il segnaposto al centro. 164 test host, verificata
+> sull'emulatore contro il backend locale. Dettagli in M4.1.
+> Prossimo: M4.3 (le mie segnalazioni, con la rotta nuova nel backend), poi M6 (SOS). Restano i checkpoint aperti di
+> M3.2 (URL firmato con M4.2, simulatore).
 
 ---
 
@@ -85,7 +92,7 @@ Il caso d'uso che conta più di tutti è l'SOS con poca rete. Tutto il resto si 
 | A16 | **Configurazione per ambiente passata dalla piattaforma**: `BuildConfig` su Android, `Info.plist` (da `Config.xcconfig`) su iOS, letti in un `AppConfig` | Niente plugin Gradle in più per due valori (URL dell'API e ambiente). |
 | A17 | **Stile visivo "foresta", minimale, uguale su Android e iOS** (02/10): palette nebbia/bosco di notte con accento verde pino/salvia, card morbide, illustrazione di montagne e pini disegnata con i colori del tema, barra in basso fluttuante. **Rivisto il 03/10 in "carta topografica"**: curve di livello al posto dell'illustrazione, palette pietra/abete/lichene, superfici separate da tono e filo di bordo invece che da ombre, due font OFL (Barlow Semi Condensed per i titoli, Atkinson Hyperlegible Next per il testo) | Scelto dopo tre giri di prova sull'emulatore (Material 3 Expressive e stile iOS scartati). La prima versione risultava grossolana (pini a triangoli, font di sistema, card invisibili sullo sfondo): le carte dei sentieri danno un'identità di montagna più precisa e minimale, sempre senza immagini da caricare. |
 | A18 | **Tema scelto dall'utente** (Sistema/Chiaro/Scuro) salvato in DataStore (`ThemeSettings`), con le barre di sistema allineate (`SystemBarsAppearance`, expect/actual) | Al sole serve il chiaro, di notte e con la batteria scarica lo scuro: la scelta non può dipendere solo dal sistema. |
-| A19 | **Errori in prugna** (ruolo `error` del tema), non in rosso | Il rosso resta solo a SOS e `CRITICAL` (§2). La prugna si distingue dal rosso anche con la protanopia. |
+| A19 | **Errori in prugna** (ruolo `error` del tema), non in rosso | Il rosso resta solo a SOS, `CRITICAL` e sentieri `CLOSED` (§2). La prugna si distingue dal rosso anche con la protanopia. |
 
 ### Vincolo dell'ambiente di sviluppo
 Il PC è **Windows**: Android si compila e si prova sull'emulatore, **iOS no**. Per iOS servono un Mac con Xcode
@@ -98,8 +105,9 @@ Non sono bug del backend, sono cose che l'app vorrebbe e l'API oggi non dà:
 - **Nessun elenco del personale.** `PATCH /maintenance-tickets/{id}/assign` vuole un `operatorId`, ma non c'è una rotta
   per cercare gli utenti `PARK_MANAGER`. Per ora l'app permette solo "assegna a me" (id da `/users/me`). Se si vuole
   scegliere qualcun altro serve una rotta nuova nel backend.
-- **Nessun elenco "le mie segnalazioni"** né "pericoli vicino a me": i pericoli si leggono solo per sentiero
-  (`/hazards/trail/{trailId}`).
+- **"Le mie segnalazioni" e "pericoli vicino a me": si fanno** (04/10 e 05/10). Oggi i pericoli si leggono solo per
+  sentiero (`/hazards/trail/{trailId}`); le rotte `GET /hazards/mine` (M4.3) e `GET /hazards/nearby` (M4.4) si
+  aggiungono al backend.
 - **I rifugi richiedono il login** (`/refuges/**` non è pubblico): l'ospite non li vede sulla mappa.
 - **Anche foto e pericoli richiedono il login** (`/media/**`, `/hazards/**`): nel dettaglio del sentiero l'ospite vede
   un invito ad accedere al posto di pericoli e foto (M3.2).
@@ -133,7 +141,7 @@ L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a t
   `surfaceContainerHigh` menu, `surfaceContainerHighest` binari (es. selettore del tema), `primaryContainer`
   "muschio", `onSurfaceVariant` testo secondario, `outlineVariant` separatori.
 - **Colori** (03/10): pietra `EDF0E9` e bosco di notte `0D1411` come sfondi, card un passo sopra (`FAFBF7` / `151E19`)
-  con un filo di bordo `outlineVariant`, accento verde abete `1F4535` (chiaro) e lichene `A9D3B6` (scuro). Il **rosso (`D32F2F`) è riservato all'SOS e ai pericoli `CRITICAL`**, così il pulsante di
+  con un filo di bordo `outlineVariant`, accento verde abete `1F4535` (chiaro) e lichene `A9D3B6` (scuro). Il **rosso (`D32F2F`) è riservato all'SOS, ai pericoli `CRITICAL` e ai sentieri `CLOSED`**, così il pulsante di
   emergenza non si confonde con nient'altro; gli **errori** (form, rete) usano la **prugna** del ruolo `error` (A19).
   Stato dei sentieri: `OPEN` verde, `WARNING` ambra (`B45309`), `CLOSED` rosso, sempre con un'icona o un'etichetta
   oltre al colore (per chi non distingue i colori).
@@ -750,8 +758,8 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
 - Checkpoint:
   - [x] **test di regressione lon/lat:** il percorso GeoJSON del seed (Sila) si disegna in Calabria e non nel Golfo di
     Aden (`GeoBoundsTest`, e lo stesso percorso letto dall'API finta in `TrailMapViewModelTest`).
-  - [ ] un sentiero `CLOSED` si riconosce senza leggere il colore: linea tratteggiata sulla mappa, simbolo ed etichetta
-    "Chiuso" nel dettaglio e nella lista dei vicini. Manca la prova sull'emulatore contro il backend locale.
+  - [x] un sentiero `CLOSED` si riconosce senza leggere il colore: linea tratteggiata sulla mappa, simbolo ed etichetta
+    "Chiuso" nel dettaglio e nella lista dei vicini (visto sull'emulatore contro il backend locale il 04/10).
   - [ ] le foto si caricano con l'URL firmato; quando l'URL scade (5 minuti) se ne chiede un altro. Il rinnovo è
     coperto dai test; la prova vera vuole una foto `READY` sul sentiero, che arriva con l'upload (M4.2).
   - [ ] (con il Mac) mappa, sentieri e dettaglio sul simulatore iPhone.
@@ -825,17 +833,42 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
 - Test in più: sentiero a L (anche in `CatalogDaoDeviceTest`), 404, POI tolti, errore del database, annullamento
   durante il caricamento, zoom basso, URL firmato che non arriva, bbox vicino allo 0. 153 test host (due giri da zero),
   `TrailSpatialQueryIT` verde. `CatalogDaoDeviceTest` (con il sentiero a L) verde sull'emulatore.
-- Non corretto, da decidere: CLAUDE.md dice "rosso solo per SOS e `CRITICAL`", §2 dice "`CLOSED` rosso" (e
-  `TrailClosed = EmergencyRed`). Accettato: con una risposta troncata (200) la cache non si ripulisce.
+- Deciso il 04/10: i sentieri `CLOSED` restano rossi (`TrailClosed = EmergencyRed`), sempre tratteggiati e con
+  l'etichetta "Chiuso"; CLAUDE.md e §2 aggiornati. Accettato: con una risposta troncata (200) la cache non si ripulisce.
 
 ### Milestone 4: segnalazioni e foto
 
 **M4.1 Segnalazione di un pericolo**
 - Form: tipo (nomi italiani), gravità, descrizione facoltativa, posizione (attuale o toccando la mappa), sentiero
   facoltativo. `createHazard`, solo `HIKER` e superiori.
-- Checkpoint:
+- **Fatto (04/10)**, `hazard/`:
+  - `HazardRepository.report(type, severity, location, description, trailId)` con gli enum generati di
+    `CreateHazardRequest` (niente enum scritti a mano); descrizione senza spazi ai lati, vuota non si manda. Il POST
+    non ha `Idempotency-Key`: su un errore di rete un solo tentativo, l'utente riprova (il form resta compilato).
+  - `ReportHazardViewModel` + `ReportHazardScreen` (`FormScaffold`): tipo e gravità senza valore di partenza
+    (obbligatori), capsule di scelta (`Critica` in rosso, §2), descrizione fino a 1000 caratteri con contatore
+    (`FormTextField` ora accetta `singleLine`/`minLines`), errori del server mappati sui campi come in registrazione
+    (`location.lat` → posizione, campo sconosciuto → errore generico), poi "Segnalazione inviata" con "Fatto".
+  - **Posizione = centro di una mappa con il segnaposto fisso**: si sposta la mappa, o "Usa la mia posizione"
+    (permesso chiesto solo al tocco, fix recente come per "Sentieri vicini": `recentFix` ora condivisa). I gesti della
+    mappa sono in Compose (`detectTransformGestures` + `Position.dragged`, mappa con `MapInteractions.None`): con i
+    gesti nativi, dentro la pagina che scorre, sull'emulatore il trascinamento spostava la pagina e non la mappa.
+  - Ingressi (solo da loggati, `UserRole.canReportHazards`): pulsante col triangolo sulla mappa (parte dal punto
+    guardato, zoom almeno 13) e "Segnala un pericolo" sotto i pericoli nel dettaglio (parte dall'inizio del sentiero,
+    con `trailId`). Rotta `Route.ReportHazard(lat, lon, zoom, trailId?)`, senza barra in basso.
+  - Tolte le bozze `hazard/data/HazardModels.kt` e `media/ui/ReportHazard*` (package sbagliato, enum senza
+    `SNOW_ICE`, testi nel codice, controllo della posizione mai raggiunto).
+  - Test: `ReportHazardViewModelTest` (10: campi obbligatori, corpo con lat/lon e trailId, dalla mappa senza sentiero,
+    descrizione lunga, 400 su campo noto e sconosciuto, posizione, rete senza retry, 403, doppio tocco, niente dati
+    personali in `toString`) e `Position.dragged` in `LocationTest`. 164 test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 04/10):
+  - [x] dalla mappa: senza tipo compare "Scegli il tipo di pericolo."; inviata arriva al backend `FALLEN_TREE`/`CRITICAL`,
+    `SUBMITTED`, senza sentiero, lat 39,32 lon 16,56 (in Sila, non invertite); il trascinamento sposta la mappa e non
+    la pagina.
+  - [x] dal dettaglio del "Sentiero delle Vette Silane": arriva con il suo `trailId` e la posizione d'inizio.
   - [ ] la segnalazione compare tra i pericoli del sentiero solo dopo la verifica di un `PARK_MANAGER` (M8), come
-    vuole il backend.
+    vuole il backend (oggi resta `SUBMITTED` e non si vede, giusto).
+  - [ ] (con il Mac) form e gesti della mappa sul simulatore iPhone.
 
 **M4.2 Upload delle foto**
 ```kotlin
@@ -857,6 +890,67 @@ class MediaUploader(mediaApi: MediaApi, storageClient: HttpClient) {
   - [ ] il JPEG caricato non ha EXIF GPS (controllo sul file scaricato).
   - [ ] una foto HEIC dal simulatore iOS arriva come JPEG (serve il Mac).
   - [ ] chiude il checkpoint aperto del backend (M7) "foto da emulatore/simulatore → `READY`".
+
+**M4.3 Le mie segnalazioni** (aggiunta il 04/10, si fa prima di M6)
+- **Prima il backend** (`../GeoSentinel-Backend`): `GET /api/v1/hazards/mine?page&size`, per ogni utente loggato,
+  paginata (`PagedModel<HazardResponse>` come le altre liste, es. `findMyBookings`), ordinata per `createdAt` decrescente, solo le segnalazioni con
+  `reporter_id` = utente corrente (indice `idx_hazard_reports_reporter` già in V4). `HazardResponse` ha bisogno anche di
+  `createdAt` per mostrare la data. Con test di integrazione (le segnalazioni di un altro utente non compaiono) e
+  `openapi.json` rigenerato; nell'app `checkApiContract`, copia in `api/` e client rigenerato.
+```kotlin
+// hazard/data
+suspend fun HazardRepository.mine(page: Int): Result<PagedModelHazardResponse>   // nome generato dal backend (PagedModel di Spring)
+
+// hazard/ui
+data class MyHazardsUiState(
+    val items: List<HazardResponse> = emptyList(),
+    val loading: Boolean = false,       // prima pagina o pagina successiva
+    val endReached: Boolean = false,
+    val error: UiMessage? = null,
+)
+class MyHazardsViewModel(hazards: HazardRepository) : ViewModel() {
+    fun loadMore()   // la pagina successiva quando la lista arriva in fondo
+    fun refresh()    // trascinando in basso e al ritorno dal form della segnalazione
+}
+```
+- Schermata "spinta" dal Profilo ("Le mie segnalazioni", solo da loggati), con il suo Indietro: tipo, data, sentiero
+  (se c'è) e stato in parole, non solo con il colore: `SUBMITTED` "In verifica", `VERIFIED` "Confermata",
+  `REJECTED` "Non confermata", `RESOLVED` "Risolta"; un valore nuovo del server "Stato non disponibile". Lista vuota:
+  stato vuoto che rimanda alla mappa per segnalare.
+- Il tocco su una voce con un sentiero apre il dettaglio del sentiero. Il dettaglio della segnalazione con le foto
+  arriva con M4.2 (l'upload su `HAZARD_REPORT` è consentito solo a chi l'ha fatta).
+- Niente cache: solo rete, con l'errore e "Riprova" senza connessione.
+- Checkpoint:
+  - [ ] la segnalazione appena inviata (M4.1) compare in cima come "In verifica"; dopo la verifica di `manager@`
+    (da Swagger, finché non c'è M8) diventa "Confermata".
+  - [ ] con più di una pagina di segnalazioni la seconda si carica in fondo alla lista, senza doppioni.
+  - [ ] `hiker2@` non vede le segnalazioni di `hiker@`.
+
+**M4.4 Pericoli vicino a me** (aggiunta il 05/10, dopo M4.2)
+- **Prima il backend:** `GET /api/v1/hazards/nearby?lat&lon&radius&limit`, come `/pois/nearby` e `/trails/nearby`
+  (`radius` in metri, default 5000, massimo 50000; `limit` default 30, massimo 50), solo da loggati come il resto di
+  `/hazards/**`. Restituisce i pericoli **attivi** (stessa regola di `/hazards/trail/{trailId}`: verificati e non
+  risolti), anche quelli senza sentiero, dal più vicino; con `ST_DWithin` sul `geography` e un indice GiST su
+  `location` (migration nuova). Test di integrazione: ordine per distanza, raggio rispettato, `SUBMITTED` e
+  `RESOLVED` esclusi, 401 da ospite. `openapi.json` rigenerato, client dell'app rigenerato.
+```kotlin
+// hazard/data
+suspend fun HazardRepository.nearby(center: GeoPoint, radiusMeters: Double): Result<List<HazardResponse>>
+```
+- **Sulla mappa** (solo da loggati): un livello di pericoli sopra i sentieri, triangolo nel colore della gravità (rosso
+  solo `CRITICAL`, §2), caricato come i POI della vista (cerchio che contiene il riquadro, stesso debounce, sotto lo
+  zoom 8 niente richiesta). Il tocco apre una card con tipo, gravità, descrizione e, se c'è, "Apri il sentiero"; il
+  livello sparisce al logout. Niente cache in Room: i pericoli cambiano spesso, e uno vecchio mostrato come attivo
+  inganna (senza rete il livello resta vuoto, con l'avviso).
+- **"Pericoli vicini"** accanto a "Sentieri vicini": dalla posizione attuale (fix recente, `recentFix`), raggio 5 km,
+  lista per distanza ("a 350 m", "a 2,1 km") con tipo e gravità; il tocco centra la mappa sul pericolo. Senza
+  posizione, lo stesso dialogo dei sentieri vicini.
+- Il filtro dei log sulle query con posizione (M9.3) va esteso a questa rotta (`lat`, `lon`, `radius`).
+- Checkpoint:
+  - [ ] il pericolo verificato del seed compare sulla mappa nel punto giusto (in Sila, non nel Golfo di Aden) e nella
+    lista "Pericoli vicini" con la distanza; una segnalazione `SUBMITTED` (M4.1) no.
+  - [ ] da ospite il livello non c'è e la rotta non parte (nessun 401 nei log).
+  - [ ] un pericolo `CRITICAL` si riconosce senza il colore: etichetta "Gravità critica" nella card e nella lista.
 
 ### Milestone 5: rifugi e prenotazioni
 
@@ -1025,9 +1119,11 @@ sealed interface PushEvent {
 ## 6. Ordine e review
 
 ```
-M0 → M1 → M2 → M3 → M6 → M4 → M5 → M7 → M8 → M9
+M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9
 ```
 L'SOS (M6) viene subito dopo la mappa: è la funzione per cui l'app esiste, e i suoi problemi conviene scoprirli presto.
+Eccezione decisa il 04/10: la segnalazione (M4.1, già fatta) e "Le mie segnalazioni" (M4.3) vengono prima; le foto
+(M4.2) e i pericoli vicini (M4.4) restano dopo M6.
 La parte iOS di M7 richiede il Mac (vedi §1).
 
 Dopo ogni milestone si lancia una **catena di sola review**. Le catene di implementazione (`tdd-guide`) non si usano,

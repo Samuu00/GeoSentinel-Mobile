@@ -106,4 +106,18 @@ class LocationTest {
 
         assertEquals(listOf(sila, GeoPoint(39.4, 16.6)), provider.positions(60.seconds).toList())
     }
+
+    @Test
+    fun `trascinare la mappa sposta il centro dalla parte opposta al dito`() {
+        val center = sila.toPosition()
+        // dito verso destra di 100 dp a 10 m/dp: il centro va 1 km a ovest
+        val west = center.dragged(dxDp = 100.0, dyDp = 0.0, metersPerDp = 10.0)
+        assertEquals(39.33, west.latitude, 1e-9)
+        assertEquals(16.55 - 1000 / (111_320.0 * kotlin.math.cos(39.33 * kotlin.math.PI / 180)), west.longitude, 1e-9)
+        // dito verso il basso: il centro va a nord
+        assertEquals(39.33 + 1000 / 111_320.0, center.dragged(0.0, 100.0, 10.0).latitude, 1e-9)
+        // oltre l'antimeridiano la longitudine resta tra -180 e 180
+        val east = org.maplibre.spatialk.geojson.Position(longitude = 179.99, latitude = 0.0).dragged(-1000.0, 0.0, 10.0)
+        assertEquals(-179.92, east.longitude, 0.01)
+    }
 }

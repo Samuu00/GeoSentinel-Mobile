@@ -106,6 +106,8 @@ import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
+import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
+import it.unical.geosentinel_mobile.core.location.GeoPoint
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -113,6 +115,8 @@ import org.koin.compose.koinInject
 // Durate delle transizioni "spinte": l'uscita è più rapida dell'entrata
 private const val PushMillis = 320
 private const val PopMillis = 240
+// Dal dettaglio di un sentiero la mappa della segnalazione parte dall'inizio del percorso, da vicino
+private const val ReportFromTrailZoom = 15.0
 
 @Composable
 fun App() {
@@ -189,14 +193,34 @@ fun App() {
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
-                    MapScreen(onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } })
+                    MapScreen(
+                        onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
+                        // segnalare richiede il login (HIKER e superiori): l'ospite non vede il pulsante
+                        onReportHazard = if (role.canReportHazards()) {
+                            { center, zoom -> navController.navigate(Route.ReportHazard(center.lat, center.lon, zoom)) { launchSingleTop = true } }
+                        } else {
+                            null
+                        },
+                    )
                 }
                 composable<Route.TrailDetail>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
                     popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
                 ) { entry ->
                     val trailId = entry.toRoute<Route.TrailDetail>().id
-                    TrailDetailScreen(trailId, onBack = { navController.popBackStack() }, onLogin = { navController.navigate(Route.Login) })
+                    TrailDetailScreen(
+                        trailId,
+                        onBack = { navController.popBackStack() },
+                        onLogin = { navController.navigate(Route.Login) },
+                        onReportHazard = { start -> navController.navigate(Route.ReportHazard(start.lat, start.lon, ReportFromTrailZoom, trailId)) { launchSingleTop = true } },
+                    )
+                }
+                composable<Route.ReportHazard>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.ReportHazard>()
+                    ReportHazardScreen(route.trailId, GeoPoint(route.lat, route.lon), route.zoom, onBack = { navController.popBackStack() })
                 }
                 composable<Route.Refuges> {
                     PlaceholderScreen(Icons.Filled.Home, Res.string.placeholder_refuges_title, Res.string.placeholder_refuges_body)

@@ -3,7 +3,7 @@
 App per chi va in montagna: mappa dei sentieri, segnalazione dei pericoli, rifugi e **SOS**, più le schermate per
 gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unico client del backend in
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
-[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M6 → M4 → M5 → M7 → M8 → M9.
+[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9.
 
 **Stato (04/10/2026):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
@@ -15,7 +15,9 @@ Keychain controllato solo a occhio) e le prove sul simulatore. Backend: periodo 
 (ADR-0019) e, dal 04/10, percorso semplificato nei sentieri della bbox con `ST_Intersects` (ADR-0020). M3.2 fatta
 (04/10): sentieri e POI sulla mappa, "Sentieri vicini", dettaglio del sentiero (pericoli e foto solo da loggati), 131
 test host. M3.3 scritta (04/10): cache Room del catalogo, ETag per rotta (`catalog_etag`) con `If-None-Match`, review di M3 applicata, 153 test
-host, checkpoint verificati sull'emulatore (304, modalità aereo, SQL di Room). Prossimo: M6 (SOS).
+host, checkpoint verificati sull'emulatore (304, modalità aereo, SQL di Room). M4.1 fatta (04/10, anticipata):
+segnalazione di un pericolo (`hazard/ui`), posizione = centro di una mappa con gesti in Compose, 164 test host,
+verificata sull'emulatore. Prossimo: M4.3 (le mie segnalazioni: prima `GET /hazards/mine` nel backend), poi M6 (SOS).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -91,7 +93,7 @@ shared/src/
 - **Interfaccia:**
   - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezioni: `EmergencyRed` e le
     anteprime del selettore della mappa, che riproducono i colori degli stili);
-  - il rosso solo per SOS e pericoli `CRITICAL`; gli errori usano il ruolo `error` del tema (prugna);
+  - il rosso solo per SOS, pericoli `CRITICAL` e sentieri `CLOSED` (questi sempre tratteggiati e con l'etichetta "Chiuso"); gli errori usano il ruolo `error` del tema (prugna);
   - contrasto almeno WCAG AA, verificato in chiaro e in scuro;
   - bersagli: 72 dp per le azioni d'emergenza (SOS, Chiama 112), 56 dp per l'invio dei form, 48 dp minimo per il resto;
   - form con i controlli di `core/ui/FormControls.kt` (campi a card, capsula `PrimaryPillButton`, `FormErrorBanner`;

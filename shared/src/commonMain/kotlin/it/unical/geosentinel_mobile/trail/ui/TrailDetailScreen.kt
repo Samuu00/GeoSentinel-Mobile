@@ -60,6 +60,7 @@ import coil3.compose.LocalPlatformContext
 import coil3.request.ImageRequest
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.profile_login
+import geosentinel_mobile.shared.generated.resources.report_open
 import geosentinel_mobile.shared.generated.resources.trail_description
 import geosentinel_mobile.shared.generated.resources.trail_difficulty
 import geosentinel_mobile.shared.generated.resources.trail_hazards
@@ -81,6 +82,8 @@ import it.unical.geosentinel_mobile.api.model.MediaResponse
 import it.unical.geosentinel_mobile.api.model.PoiResponse
 import it.unical.geosentinel_mobile.api.model.TrailDetailResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
+import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toBoundingBox
 import it.unical.geosentinel_mobile.core.location.toPositions
 import it.unical.geosentinel_mobile.core.ui.BackButton
@@ -106,7 +109,7 @@ private val ContentMaxWidth = 600.dp
  * solo da loggati, pericoli attivi e foto. Schermata "spinta" sopra la mappa, con il suo Indietro.
  */
 @Composable
-fun TrailDetailScreen(trailId: String, onBack: () -> Unit, onLogin: () -> Unit) {
+fun TrailDetailScreen(trailId: String, onBack: () -> Unit, onLogin: () -> Unit, onReportHazard: (start: GeoPoint) -> Unit) {
     val viewModel = koinViewModel<TrailDetailViewModel>(key = "trail-$trailId") { parametersOf(trailId) }
     val ui by viewModel.state.collectAsStateWithLifecycle()
 
@@ -118,6 +121,7 @@ fun TrailDetailScreen(trailId: String, onBack: () -> Unit, onLogin: () -> Unit) 
                 trail = trail,
                 ui = ui,
                 onLogin = onLogin,
+                onReportHazard = onReportHazard,
                 onRetry = viewModel::retry,
                 onRetryHazards = viewModel::retryHazards,
                 onRetryPhotos = viewModel::retryPhotos,
@@ -137,6 +141,7 @@ private fun TrailContent(
     trail: TrailDetailResponse,
     ui: TrailDetailUiState,
     onLogin: () -> Unit,
+    onReportHazard: (start: GeoPoint) -> Unit,
     onRetry: () -> Unit,
     onRetryHazards: () -> Unit,
     onRetryPhotos: () -> Unit,
@@ -209,6 +214,16 @@ private fun TrailContent(
                                 HazardRow(hazard)
                             }
                         }
+                    }
+                }
+                // Solo da loggati (qui siamo nel ramo con i pericoli): la mappa del form parte dall'inizio del sentiero
+                trail.path.toPositions().firstOrNull()?.let { start ->
+                    TextButton(
+                        onClick = { onReportHazard(start.toGeoPoint()) },
+                        contentPadding = PaddingValues(horizontal = 0.dp),
+                        modifier = Modifier.heightIn(min = 48.dp),
+                    ) {
+                        Text(stringResource(Res.string.report_open), fontWeight = FontWeight.SemiBold)
                     }
                 }
                 // Le foto solo se ce ne sono: una sezione vuota non dice niente

@@ -23,7 +23,7 @@ internal fun iosDatabaseBuilder(): RoomDatabase.Builder<AppDatabase> {
             error = null,
         ),
     ) { "cartella Application Support non disponibile" }
-    directory.setResourceValue(NSNumber.numberWithBool(true), forKey = NSURLIsExcludedFromBackupKey, error = null)
+    directory.setResourceValue(NSNumber(bool = true), forKey = NSURLIsExcludedFromBackupKey, error = null)
     val path = requireNotNull(directory.path) { "cartella Application Support non disponibile" }
     return Room.databaseBuilder<AppDatabase>(name = "$path/$DATABASE_FILE_NAME")
 }
