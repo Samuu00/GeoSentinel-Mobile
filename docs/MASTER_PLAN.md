@@ -986,6 +986,11 @@ class MyHazardsViewModel(hazards: HazardRepository) : ViewModel() {
   risolti), anche quelli senza sentiero, dal più vicino; con `ST_DWithin` sul `geography` e un indice GiST su
   `location` (migration nuova). Test di integrazione: ordine per distanza, raggio rispettato, `SUBMITTED` e
   `RESOLVED` esclusi, 401 da ospite. `openapi.json` rigenerato, client dell'app rigenerato.
+  **Backend fatto il 05/10** (prima bozza dell'utente, corretta da Claude su richiesta: mancava la `@Query`, quindi il
+  contesto non partiva; filtrava per `reporterId`; `Pageable` su una query nativa): `findHazardsNearby` →
+  `List<HazardResponse>`, solo `VERIFIED`, di tutti gli utenti, dal più vicino. **Nessuna migration**: l'indice GiST su
+  `location::geography` c'è già (`idx_hazard_reports_location_geog`, V4). `NearbyHazardsIT` (5), `openapi.json`
+  rigenerato, CHANGELOG. Nell'app: `checkApiContract`, copia in `api/`, client rigenerato.
 ```kotlin
 // hazard/data
 suspend fun HazardRepository.nearby(center: GeoPoint, radiusMeters: Double): Result<List<HazardResponse>>
@@ -998,12 +1003,32 @@ suspend fun HazardRepository.nearby(center: GeoPoint, radiusMeters: Double): Res
 - **"Pericoli vicini"** accanto a "Sentieri vicini": dalla posizione attuale (fix recente, `recentFix`), raggio 5 km,
   lista per distanza ("a 350 m", "a 2,1 km") con tipo e gravità; il tocco centra la mappa sul pericolo. Senza
   posizione, lo stesso dialogo dei sentieri vicini.
-- Il filtro dei log sulle query con posizione (M9.3) va esteso a questa rotta (`lat`, `lon`, `radius`).
-- Checkpoint:
-  - [ ] il pericolo verificato del seed compare sulla mappa nel punto giusto (in Sila, non nel Golfo di Aden) e nella
-    lista "Pericoli vicini" con la distanza; una segnalazione `SUBMITTED` (M4.1) no.
-  - [ ] da ospite il livello non c'è e la rotta non parte (nessun 401 nei log).
-  - [ ] un pericolo `CRITICAL` si riconosce senza il colore: etichetta "Gravità critica" nella card e nella lista.
+- Il filtro dei log sulle query con posizione (M9.3) va esteso a questa rotta (`lat`, `lon`, `radius`). Già coperta:
+  `lat` e `lon` bastano a escludere la riga dal log.
+- **App fatta (05/10)**: prima bozza dell'utente, corretta e completata da Claude su richiesta (non compilava:
+  `nearby` senza tipo di ritorno, `findHazardNearby` inesistente, `HazardType` tolto in M4.1, `formatDistance` senza
+  tipo; `color()` e le etichette della gravità duplicate in conflitto con quelle di `TrailLabels.kt`; esadecimali e
+  testi nel codice; stati dei pericoli in `TrailMapViewModel` mai usati).
+  - `HazardRepository.nearby(center, radiusMeters = 5000)` su `findHazardsNearby` (limite 50).
+  - `HazardMapViewModel(hazards)` in `hazard/ui`, separato da `TrailMapViewModel`: livello caricato a mappa ferma
+    (400 ms, cerchio della vista più il margine come i POI, sotto lo zoom 8 niente), area già caricata riusata per
+    5 minuti al massimo; `setEnabled(role != GUEST)` dalla schermata (al logout livello, card e foglio spariscono);
+    senza rete livello vuoto e avviso "Pericoli non aggiornati" con riprova; "Pericoli vicini" come "Sentieri vicini"
+    (fix recente, `NearbyHazards`), distanze dal punto del fix.
+  - `HazardMarkers` (triangolo SDF da 30 dp, rosso solo `CRITICAL`, ambra `HIGH`, il resto `onSurfaceVariant`, bordo
+    come i sentieri; `idClickHandler` di `TrailMapLayers` ora `internal`), `HazardCard` (come la card dei POI, mai
+    insieme), `NearbyHazardsSheet` (riga: tipo, "a 350 m · Gravità alta"); il tocco chiude il foglio, centra la mappa
+    (zoom almeno 15) e apre la card. `distanceLabel` in `HazardUiUtils.kt`. Capsule "Sentieri vicini" e "Pericoli vicini"
+    affiancate (la seconda solo da loggati).
+  - `HazardMapViewModelTest` (15, compresa `distanceLabel`). 203 test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 05/10):
+  - [x] i due pericoli `VERIFIED` (quello del seed sul Sentiero delle Vette, `HIGH`, e un `CRITICAL`) compaiono in Sila
+    nel punto giusto; le segnalazioni `SUBMITTED` di M4.1 no. "Pericoli vicini" da 39,31/16,54: "a 2,0 km · Gravità
+    critica", "a 4,4 km · Gravità alta"; il tocco centra la mappa sul pericolo con la sua card.
+  - [ ] da ospite il livello non c'è e la rotta non parte: coperto dai test (nessuna richiesta, stato vuoto al logout) e
+    dal 401 del backend; da rivedere a mano sull'emulatore con un logout.
+  - [x] un pericolo `CRITICAL` si riconosce senza il colore: "Gravità critica" nella card e nella lista.
+  - [ ] (con il Mac) livello e foglio sul simulatore iPhone.
 
 ### Milestone 5: rifugi e prenotazioni
 

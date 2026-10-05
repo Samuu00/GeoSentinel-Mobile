@@ -82,6 +82,8 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.auth_cancel
+import geosentinel_mobile.shared.generated.resources.hazards_load_failed
+import geosentinel_mobile.shared.generated.resources.hazards_nearby_button
 import geosentinel_mobile.shared.generated.resources.location_denied_body
 import geosentinel_mobile.shared.generated.resources.location_denied_title
 import geosentinel_mobile.shared.generated.resources.location_open_settings
@@ -116,6 +118,11 @@ import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
+import it.unical.geosentinel_mobile.hazard.ui.HazardCard
+import it.unical.geosentinel_mobile.hazard.ui.HazardMapViewModel
+import it.unical.geosentinel_mobile.hazard.ui.HazardMarkers
+import it.unical.geosentinel_mobile.hazard.ui.NearbyHazards
+import it.unical.geosentinel_mobile.hazard.ui.NearbyHazardsSheet
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
 import kotlin.math.max
@@ -208,10 +215,16 @@ private val MaxFixAge = 2.minutes
 private enum class LocationPrompt { None, Rationale, Denied }
 
 // Cosa fare quando arriva il permesso
-private enum class LocationGoal { Center, Nearby }
+private enum class LocationGoal { Center, Nearby, NearbyHazards }
 
+// Il tocco su "Pericoli vicini" porta almeno a questo zoom: il triangolo si vede in mezzo ai sentieri
+private const val HazardZoom = 15.0
+
+/**
+ * [showHazards]: pericoli sulla mappa e "Pericoli vicini", solo da loggati (M4.4). Al logout spariscono.
+ */
 @Composable
-fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?) {
+fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?, showHazards: Boolean) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
     // Provider di default di MapLibre (LocationManager / CLLocationManager). Non chiede il permesso da solo:
@@ -222,6 +235,9 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
     val style = rememberMapStyle(mapType)
     val viewModel = koinViewModel<TrailMapViewModel>()
     val ui by viewModel.state.collectAsStateWithLifecycle()
+    val hazardViewModel = koinViewModel<HazardMapViewModel>()
+    val hazardUi by hazardViewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(showHazards) { hazardViewModel.setEnabled(showHazards) }
     var choosingType by rememberSaveable { mutableStateOf(false) }
     var selectedPoiId by rememberSaveable { mutableStateOf<String?>(null) }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
@@ -243,8 +259,16 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
             background = colors.surfaceContainerLowest,
             outline = colors.outline,
             symbol = colors.primary,
-            onPoiClick = { selectedPoiId = it },
+            onPoiClick = {
+                selectedPoiId = it
+                hazardViewModel.clearSelection()
+            },
         )
+        // sopra sentieri e POI: un pericolo non deve restare nascosto
+        HazardMarkers(hazardUi.hazards, halo = casing, otherColor = colors.onSurfaceVariant) { id ->
+            selectedPoiId = null
+            hazardViewModel.select(id)
+        }
         // il pallino sopra tutto
         LocationIndicatorLayer(id = "posizione", locationState = location)
     }
@@ -259,7 +283,9 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
     LaunchedEffect(mapState) {
         snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport }.filterNotNull().collect { viewport ->
             val bounds = viewport.visibleBounds
-            viewModel.onCameraIdle(GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north), viewport.cameraPosition.zoom)
+            val view = GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north)
+            viewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
+            hazardViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
         }
     }
 
@@ -293,6 +319,17 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
         if (!waitingForNearbyFix) return@LaunchedEffect
         delay(FixWait)
         viewModel.onNearbyNoFix()
+    }
+    // "Pericoli vicini": la stessa attesa
+    val waitingForHazardsFix = hazardUi.nearby == NearbyHazards.WaitingForFix
+    LaunchedEffect(waitingForHazardsFix, location.lastLocation) {
+        if (!waitingForHazardsFix) return@LaunchedEffect
+        location.recentFix()?.let(hazardViewModel::onNearbyFix)
+    }
+    LaunchedEffect(waitingForHazardsFix) {
+        if (!waitingForHazardsFix) return@LaunchedEffect
+        delay(FixWait)
+        hazardViewModel.onNearbyNoFix()
     }
 
     // Prima del dialogo di sistema si spiega perché: il permesso si chiede solo quando serve (§M3.1)
@@ -351,18 +388,38 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MapPill(stringResource(Res.string.trails_nearby_button), emphasized = true) {
-                withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                MapPill(stringResource(Res.string.trails_nearby_button), emphasized = true) {
+                    withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested)
+                }
+                if (showHazards) {
+                    MapPill(stringResource(Res.string.hazards_nearby_button), emphasized = true) {
+                        withLocation(LocationGoal.NearbyHazards, hazardViewModel::onNearbyRequested)
+                    }
+                }
             }
+            // un avviso alla volta: prima quello dei sentieri, che dice già se manca la rete
+            val hazardsFailed = showHazards && hazardUi.failed && !ui.zoomTooLow
             val status = when {
                 ui.failed != null -> stringResource(Res.string.trails_load_failed)
                 ui.zoomTooLow -> stringResource(Res.string.trails_zoom_in_hint)
+                hazardsFailed -> stringResource(Res.string.hazards_load_failed)
                 ui.truncated -> stringResource(Res.string.trails_too_many)
                 ui.loading -> stringResource(Res.string.trails_loading)
                 else -> null
             }
             if (status != null) {
-                MapPill(status, onClick = if (ui.failed != null) viewModel::retry else null)
+                val onRetry = when {
+                    ui.failed != null -> {
+                        {
+                            viewModel.retry()
+                            hazardViewModel.retry()
+                        }
+                    }
+                    hazardsFailed -> hazardViewModel::retry
+                    else -> null
+                }
+                MapPill(status, onClick = onRetry)
             }
         }
         // Controlli grandi a destra, a metà altezza: lontani dall'SOS (in basso) e raggiungibili col pollice
@@ -404,6 +461,18 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
                     .padding(start = 16.dp, end = 136.dp, bottom = 16.dp),
             )
         }
+        // Pericolo toccato (o scelto da "Pericoli vicini"): stessa posizione della card dei POI, mai insieme
+        hazardUi.selected?.let { hazard ->
+            HazardCard(
+                hazard = hazard,
+                onOpenTrail = hazard.trailId?.let { trailId -> { onOpenTrail(trailId) } },
+                onClose = hazardViewModel::clearSelection,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
+                    .padding(start = 16.dp, end = 136.dp, bottom = 16.dp),
+            )
+        }
     }
 
     if (choosingType) {
@@ -429,6 +498,25 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
         )
     }
 
+    if (hazardUi.nearby != NearbyHazards.Hidden) {
+        NearbyHazardsSheet(
+            nearby = hazardUi.nearby,
+            // si chiude il foglio e la mappa va sul pericolo, con la sua card
+            onSelect = { hazard ->
+                hazardViewModel.closeNearby()
+                selectedPoiId = null
+                hazardViewModel.select(hazard)
+                scope.launch {
+                    mapState.animateCamera(
+                        CameraUpdate(target = hazard.location.toGeoPoint().toPosition(), zoom = max(mapState.cameraPosition.zoom, HazardZoom)),
+                    )
+                }
+            },
+            onRetry = { withLocation(LocationGoal.NearbyHazards, hazardViewModel::onNearbyRequested) },
+            onDismiss = hazardViewModel::closeNearby,
+        )
+    }
+
     when (prompt) {
         LocationPrompt.Rationale -> LocationDialog(
             title = Res.string.location_rationale_title,
@@ -439,6 +527,7 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
                 when (goal) {
                     LocationGoal.Center -> centerOnFix = true
                     LocationGoal.Nearby -> viewModel.onNearbyRequested()
+                    LocationGoal.NearbyHazards -> hazardViewModel.onNearbyRequested()
                 }
                 location.requestPermission()
             },

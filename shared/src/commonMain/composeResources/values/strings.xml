@@ -147,6 +147,13 @@
     <string name="trails_nearby_empty">Nessun sentiero entro 10 km.</string>
     <string name="trails_nearby_waiting">Cerco la tua posizione…</string>
     <string name="trails_nearby_no_fix">Posizione non disponibile. Controlla che la localizzazione sia attiva e riprova.</string>
+    <!-- M4.4: pericoli vicino a me -->
+    <string name="hazards_nearby_button">Pericoli vicini</string>
+    <string name="hazards_nearby_title">Pericoli vicino a te</string>
+    <string name="hazards_nearby_empty">Nessun pericolo attivo entro 5 km.</string>
+    <string name="hazards_loading">Carico i pericoli…</string>
+    <string name="hazards_load_failed">Pericoli non aggiornati. Tocca per riprovare.</string>
+    <string name="hazards_distance">a %1$s</string>
     <string name="trail_open_detail">Apri il sentiero %1$s</string>
     <string name="trail_length_km">%1$s km</string>
     <string name="trail_difficulty">Difficoltà %1$s</string>

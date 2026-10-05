@@ -202,6 +202,8 @@ fun App() {
                         } else {
                             null
                         },
+                        // /hazards/** richiede il login: l'ospite non ha il livello né "Pericoli vicini"
+                        showHazards = role != UserRole.GUEST,
                     )
                 }
                 composable<Route.TrailDetail>(

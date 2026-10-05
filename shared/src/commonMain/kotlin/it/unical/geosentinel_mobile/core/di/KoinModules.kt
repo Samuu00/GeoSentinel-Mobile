@@ -18,6 +18,7 @@ import it.unical.geosentinel_mobile.profile.ui.ChangePasswordViewModel
 import it.unical.geosentinel_mobile.profile.ui.EditNameViewModel
 import it.unical.geosentinel_mobile.profile.ui.ProfileViewModel
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
+import it.unical.geosentinel_mobile.hazard.ui.HazardMapViewModel
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsViewModel
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardViewModel
 import it.unical.geosentinel_mobile.media.data.ImageEncoder
@@ -71,6 +72,7 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     viewModel { ChangePasswordViewModel(get()) }
     viewModel { TrailMapViewModel(get()) }
     viewModel { MyHazardsViewModel(get()) }
+    viewModel { HazardMapViewModel(get()) }
     // l'id del sentiero arriva dalla rotta (koinViewModel { parametersOf(id) })
     viewModel { (trailId: String) -> TrailDetailViewModel(trailId, get(), get(), get(), get()) }
     // trailId facoltativo: null se la segnalazione parte dalla mappa

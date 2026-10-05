@@ -199,8 +199,9 @@ private fun TrailSummaryResponse.toFeature(): Feature<LineString, JsonObject>? {
     return Feature(geometry = LineString(positions), properties = buildJsonObject { put(IdProperty, id) })
 }
 
-// Il primo elemento toccato che ha un id: si apre quello, e il tocco non arriva alla mappa sotto
-private fun idClickHandler(onClick: (String) -> Unit): FeaturesClickHandler = { features ->
+// Il primo elemento toccato che ha un id: si apre quello, e il tocco non arriva alla mappa sotto.
+// Lo usano anche i pericoli (hazard/ui/HazardMapLayers.kt), con la stessa proprietà "id"
+internal fun idClickHandler(onClick: (String) -> Unit): FeaturesClickHandler = { features ->
     val id = features.firstNotNullOfOrNull { it.properties?.get(IdProperty)?.jsonPrimitive?.contentOrNull }
     if (id != null) {
         onClick(id)
