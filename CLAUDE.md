@@ -19,7 +19,8 @@ host, checkpoint verificati sull'emulatore (304, modalità aereo, SQL di Room). 
 segnalazione di un pericolo (`hazard/ui`), posizione = centro di una mappa con gesti in Compose, 164 test host,
 verificata sull'emulatore. M4.2 scritta (05/10, anticipata): foto dalla schermata "Segnalazione inviata"
 (`MediaUploader`, storage client senza `Auth`, `ImageEncoder`, `rememberPhotoPicker`), 178 test host, verificata sull'emulatore con MinIO (READY, niente EXIF GPS); resta il job `ios`.
-Prossimo: M4.3 (le mie segnalazioni: prima `GET /hazards/mine` nel backend), poi M6 (SOS).
+M4.3 fatta (05/10): "Le mie segnalazioni" dal Profilo (`findMyHazards` nel backend, `MyHazardsScreen` paginata), 188 test host,
+verificata sull'emulatore. Prossimo: M6 (SOS).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

@@ -106,6 +106,7 @@ import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
+import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import kotlinx.coroutines.launch
@@ -238,8 +239,26 @@ fun App() {
                         onRegister = { navController.navigate(Route.Register) },
                         onEditName = { navController.navigate(Route.EditName) },
                         onChangePassword = { navController.navigate(Route.ChangePassword) },
+                        onMyHazards = { navController.navigate(Route.MyHazards) { launchSingleTop = true } },
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
+                    )
+                }
+                composable<Route.MyHazards>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    MyHazardsScreen(
+                        onBack = { navController.popBackStack() },
+                        onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
+                        // la segnalazione parte dalla mappa: si passa alla scheda Mappa come dalla barra in basso
+                        onGoToMap = {
+                            navController.navigate(Route.Map) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
                     )
                 }
                 composable<Route.Login>(

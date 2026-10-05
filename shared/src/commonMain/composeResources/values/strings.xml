@@ -222,6 +222,17 @@
     <string name="report_sent_body">Grazie. Un gestore del parco la verificherà: dopo comparirà tra i pericoli del sentiero.</string>
     <string name="report_sent_done">Fatto</string>
     <string name="report_photos">Foto</string>
+    <string name="my_hazards_title">Le mie segnalazioni</string>
+    <string name="my_hazards_intro">Dalla più recente. Lo stato cambia quando un gestore del parco le verifica.</string>
+    <string name="my_hazards_empty_title">Nessuna segnalazione</string>
+    <string name="my_hazards_empty_body">Se trovi un albero caduto, una frana o un altro pericolo, segnalalo dalla mappa: lo ritroverai qui con il suo stato.</string>
+    <string name="my_hazards_go_to_map">Vai alla mappa</string>
+    <string name="my_hazards_open_trail">Apri il sentiero</string>
+    <string name="my_hazards_status_submitted">In verifica</string>
+    <string name="my_hazards_status_verified">Confermata</string>
+    <string name="my_hazards_status_rejected">Non confermata</string>
+    <string name="my_hazards_status_resolved">Risolta</string>
+    <string name="my_hazards_status_unknown">Stato non disponibile</string>
     <string name="report_photos_hint">Una foto aiuta il gestore a capire il pericolo. La posizione salvata nella foto non viene inviata.</string>
     <string name="report_photo_take">Scatta</string>
     <string name="report_photo_pick">Galleria</string>

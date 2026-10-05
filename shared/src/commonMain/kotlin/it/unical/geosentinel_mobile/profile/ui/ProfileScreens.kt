@@ -69,6 +69,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
+import geosentinel_mobile.shared.generated.resources.my_hazards_title
 import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.auth_no_account
 import geosentinel_mobile.shared.generated.resources.auth_password_rules
@@ -139,6 +140,7 @@ fun ProfileScreen(
     onRegister: () -> Unit,
     onEditName: () -> Unit,
     onChangePassword: () -> Unit,
+    onMyHazards: () -> Unit,
     themeMode: ThemeMode,
     onThemeModeSelected: (ThemeMode) -> Unit,
 ) {
@@ -194,6 +196,8 @@ fun ProfileScreen(
                     )
                     RowDivider()
                     SettingsRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, chevron = true)
+                    RowDivider()
+                    SettingsRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, chevron = true)
                     RowDivider()
                     // "Esci" è un'uscita, non un errore: verde, non prugna
                     SettingsRow(stringResource(Res.string.profile_logout), onClick = viewModel::logout, color = MaterialTheme.colorScheme.primary)

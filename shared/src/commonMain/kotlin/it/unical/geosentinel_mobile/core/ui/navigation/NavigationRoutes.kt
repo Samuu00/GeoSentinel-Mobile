@@ -29,6 +29,7 @@ sealed interface Route {
     // form "spinto" (M4.1): la mappa del form parte da lat/lon/zoom; trailId se si parte da un sentiero
     @Serializable data class ReportHazard(val lat: Double, val lon: Double, val zoom: Double, val trailId: String? = null) : Route
     // "spinte" sopra il Profilo, senza barra in basso
+    @Serializable data object MyHazards : Route
     @Serializable data object Login : Route
     @Serializable data object Register : Route
     @Serializable data object EditName : Route
@@ -38,8 +39,8 @@ sealed interface Route {
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
 val FormRoutes = setOf(Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class)
 
-// Schermate senza barra in basso: i form e il dettaglio di un sentiero (a tutto schermo, con il suo Indietro)
-val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class
+// Schermate senza barra in basso: i form, il dettaglio di un sentiero e le mie segnalazioni (con il loro Indietro)
+val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.MyHazards::class
 
 data class BottomNavItem(
     val route: Route,

@@ -33,7 +33,7 @@ class FakeCatalog(private val backend: FakeBackend) {
     var trails: List<String> = listOf(trailJson())
     var detailStatus = HttpStatusCode.OK
     var pois = listOf("""{"id":"p1","trailId":"$SEED_TRAIL_ID","name":"Fonte del Faggio","type":"WATER_SOURCE","location":{"lat":39.298,"lon":16.491}}""")
-    var hazards = listOf("""{"id":"h1","trailId":"$SEED_TRAIL_ID","type":"FALLEN_TREE","severity":"HIGH","status":"VERIFIED","location":{"lat":39.3,"lon":16.5}}""")
+    var hazards = listOf("""{"id":"h1","trailId":"$SEED_TRAIL_ID","type":"FALLEN_TREE","severity":"HIGH","status":"VERIFIED","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-04T09:00:00Z"}""")
     var media = listOf(mediaJson("m1", "READY"), mediaJson("m2", "QUARANTINED"), mediaJson("m3", "READY"))
     var offline = false
     // una richiesta della bbox ancora in volo (per i test di annullamento)

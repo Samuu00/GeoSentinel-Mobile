@@ -324,6 +324,6 @@ class ReportHazardViewModelTest {
 
     private companion object {
         const val CREATED_JSON =
-            """{"id":"h9","trailId":"t1","type":"FALLEN_TREE","severity":"HIGH","status":"SUBMITTED","location":{"lat":39.3,"lon":16.5}}"""
+            """{"id":"h9","trailId":"t1","type":"FALLEN_TREE","severity":"HIGH","status":"SUBMITTED","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-05T10:00:00Z"}"""
     }
 }

@@ -933,6 +933,11 @@ class MediaUploader(mediaApi: MediaApi, storageClient: HttpClient) {
   `reporter_id` = utente corrente (indice `idx_hazard_reports_reporter` già in V4). `HazardResponse` ha bisogno anche di
   `createdAt` per mostrare la data. Con test di integrazione (le segnalazioni di un altro utente non compaiono) e
   `openapi.json` rigenerato; nell'app `checkApiContract`, copia in `api/` e client rigenerato.
+  **Fatto il 05/10 da Claude (su richiesta):** `GET /hazards/mine` (`findMyHazards`), sort solo su `createdAt`
+  (whitelist, 400 sugli altri), in ogni stato compreso `REJECTED`; `HazardResponse.createdAt` obbligatorio (anche in
+  creazione e nel dettaglio). `MyHazardsIT` (7 test) e `./mvnw verify` verde (158); CHANGELOG aggiornato. Nell'app:
+  contratto copiato, client rigenerato (`findMyHazards(page, size, sort)` → `PagedModelHazardResponse`), `createdAt`
+  aggiunto ai JSON finti dei test (`ReportHazardViewModelTest`, `FakeCatalog`).
 ```kotlin
 // hazard/data
 suspend fun HazardRepository.mine(page: Int): Result<PagedModelHazardResponse>   // nome generato dal backend (PagedModel di Spring)
@@ -956,11 +961,23 @@ class MyHazardsViewModel(hazards: HazardRepository) : ViewModel() {
 - Il tocco su una voce con un sentiero apre il dettaglio del sentiero. Il dettaglio della segnalazione con le foto
   arriva con M4.2 (l'upload su `HAZARD_REPORT` è consentito solo a chi l'ha fatta).
 - Niente cache: solo rete, con l'errore e "Riprova" senza connessione.
-- Checkpoint:
-  - [ ] la segnalazione appena inviata (M4.1) compare in cima come "In verifica"; dopo la verifica di `manager@`
-    (da Swagger, finché non c'è M8) diventa "Confermata".
-  - [ ] con più di una pagina di segnalazioni la seconda si carica in fondo alla lista, senza doppioni.
-  - [ ] `hiker2@` non vede le segnalazioni di `hiker@`.
+- **App fatta (05/10)**: prima bozza dell'utente, rivista e completata da Claude su richiesta (non compilava:
+  `mine` senza corpo, `suspend` chiamata da `init`, `UiMessage.Dynamic` inesistente, testi nel codice, enum
+  `HazardType`/`HazardSeverity` tolti in M4.1, "←" di testo al posto di `BackButton`).
+  - `HazardRepository.mine(page, size = 20)` su `findMyHazards`; `MyHazardsViewModel(hazards)` con `loadMore()`,
+    `refresh()` e `retry()`: flag alzati prima del `launch` (niente pagine doppie), un refresh annulla la pagina in
+    corso, `distinctBy` sulle pagine a offset, errore della pagina dopo in fondo alla lista con "Riprova" (le righe
+    restano). `MyHazardsUiState` senza descrizioni né posizioni in `toString`; `HazardResponse.Status.label()`.
+  - `MyHazardsScreen`: testata, titolo, card come quelle del form (tipo + stato in una capsula, gravità e data,
+    inizio della descrizione; "Non confermata" in prugna, mai rosso), trascinando in basso si ricarica, stato vuoto con
+    "Vai alla mappa" (scheda Mappa), tutta la card apre il sentiero (freccia). Voce nel Profilo sotto "Cambia
+    password"; rotta senza barra in basso. Il ritorno "dal form" del piano non serve: da qui non si apre il form.
+  - `MyHazardsViewModelTest` (10). 188 test host.
+- Checkpoint (emulatore, backend locale, 05/10):
+  - [x] la segnalazione verificata da `manager@` (via API, finché non c'è M8) compare in cima come "Confermata",
+    le altre "In verifica"; tocco sulla card con sentiero → dettaglio del sentiero.
+  - [x] con 25 segnalazioni la seconda pagina si carica in fondo; l'ultima riga coincide con l'ultima del server.
+  - [x] `hiker2@` vede solo le sue 2 del seed (una "Non confermata"), nessuna di `hiker@`.
 
 **M4.4 Pericoli vicino a me** (aggiunta il 05/10, dopo M4.2)
 - **Prima il backend:** `GET /api/v1/hazards/nearby?lat&lon&radius&limit`, come `/pois/nearby` e `/trails/nearby`
