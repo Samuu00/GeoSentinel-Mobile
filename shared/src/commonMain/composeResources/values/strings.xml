@@ -16,8 +16,6 @@
     <!-- Schermate segnaposto, sostituite milestone per milestone -->
     <string name="placeholder_map_title">Mappa dei sentieri</string>
     <string name="placeholder_map_body">Qui compariranno sentieri, punti di interesse e la tua posizione.</string>
-    <string name="placeholder_refuges_title">Rifugi e prenotazioni</string>
-    <string name="placeholder_refuges_body">Qui potrai vedere i posti liberi e prenotare una notte.</string>
     <string name="placeholder_alerts_title">Allerte SOS</string>
     <string name="placeholder_alerts_body">Qui compariranno le richieste di soccorso attive.</string>
     <string name="placeholder_management_title">Gestione del parco</string>
@@ -250,5 +248,30 @@
     <string name="report_photo_retry">Riprova</string>
     <string name="report_photo_rejected_message">Una foto non è stata accettata: il server non la riconosce come immagine.</string>
     <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un\'altra.</string>
+
+    <!-- M5.1: rifugi -->
+    <string name="refuges_title">Rifugi</string>
+    <string name="refuges_intro_near_me">I rifugi entro 50 km dalla tua posizione, dal più vicino.</string>
+    <string name="refuges_intro_area">I rifugi entro 50 km dalla Sila. Con la posizione attiva vedi quelli vicino a te.</string>
+    <string name="refuges_empty">Nessun rifugio entro 50 km.</string>
+    <string name="refuge_open">Apri il rifugio</string>
+    <plurals name="refuge_beds">
+        <item quantity="one">%1$d posto letto</item>
+        <item quantity="other">%1$d posti letto</item>
+    </plurals>
+    <plurals name="refuge_free_beds">
+        <item quantity="one">%1$d posto libero</item>
+        <item quantity="other">%1$d posti liberi</item>
+    </plurals>
+    <string name="refuge_full">Pieno</string>
+    <string name="refuge_nights_title">Posti liberi nelle prossime notti</string>
+    <string name="refuge_tonight">Stanotte</string>
+    <string name="weekday_1">lun</string>
+    <string name="weekday_2">mar</string>
+    <string name="weekday_3">mer</string>
+    <string name="weekday_4">gio</string>
+    <string name="weekday_5">ven</string>
+    <string name="weekday_6">sab</string>
+    <string name="weekday_7">dom</string>
 
 </resources>

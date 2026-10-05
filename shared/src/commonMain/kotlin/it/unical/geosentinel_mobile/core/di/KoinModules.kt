@@ -24,6 +24,10 @@ import it.unical.geosentinel_mobile.hazard.ui.ReportHazardViewModel
 import it.unical.geosentinel_mobile.media.data.ImageEncoder
 import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.media.data.MediaUploader
+import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
+import it.unical.geosentinel_mobile.refuge.ui.RefugeDetailViewModel
+import it.unical.geosentinel_mobile.refuge.ui.RefugeListViewModel
+import it.unical.geosentinel_mobile.refuge.ui.RefugeMapViewModel
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailViewModel
@@ -55,6 +59,7 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     single { TrailRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl, dao = get()) }
     single { HazardRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { MediaRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    single { RefugeRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     // Upload delle foto (M4.2): l'API sul client autenticato, lo storage su un client suo, senza Auth
     single {
         MediaUploader(
@@ -77,6 +82,10 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     viewModel { (trailId: String) -> TrailDetailViewModel(trailId, get(), get(), get(), get()) }
     // trailId facoltativo: null se la segnalazione parte dalla mappa
     viewModel { params -> ReportHazardViewModel(get(), get(), params.getOrNull<String>()) }
+    viewModel { RefugeListViewModel(get()) }
+    viewModel { RefugeMapViewModel(get()) }
+    // l'id del rifugio arriva dalla rotta, come per il sentiero
+    viewModel { (refugeId: String) -> RefugeDetailViewModel(refugeId, get()) }
 }
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su

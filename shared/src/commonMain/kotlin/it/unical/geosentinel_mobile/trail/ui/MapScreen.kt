@@ -123,6 +123,8 @@ import it.unical.geosentinel_mobile.hazard.ui.HazardMapViewModel
 import it.unical.geosentinel_mobile.hazard.ui.HazardMarkers
 import it.unical.geosentinel_mobile.hazard.ui.NearbyHazards
 import it.unical.geosentinel_mobile.hazard.ui.NearbyHazardsSheet
+import it.unical.geosentinel_mobile.refuge.ui.RefugeMapViewModel
+import it.unical.geosentinel_mobile.refuge.ui.RefugeMarkers
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
 import kotlin.math.max
@@ -158,8 +160,8 @@ import org.maplibre.compose.overlay.LocalViewportInsets
 import org.maplibre.compose.overlay.MapOverlay
 import org.maplibre.compose.style.BaseStyle
 
-// Senza posizione la mappa parte dalla Sila, dove stanno i sentieri del seed
-private val DefaultArea = GeoPoint(lat = 39.33, lon = 16.55)
+// Senza posizione la mappa parte dalla Sila, dove stanno i sentieri del seed. Anche la lista dei rifugi parte da qui
+internal val DefaultArea = GeoPoint(lat = 39.33, lon = 16.55)
 private const val DefaultZoom = 9.5
 private const val MyLocationZoom = 14.0
 // La mappa del form della segnalazione parte almeno da qui: abbastanza vicina per mettere il segnaposto
@@ -222,9 +224,15 @@ private const val HazardZoom = 15.0
 
 /**
  * [showHazards]: pericoli sulla mappa e "Pericoli vicini", solo da loggati (M4.4). Al logout spariscono.
+ * [onOpenRefuge]: i rifugi sulla mappa (M5.1), null per l'ospite (le rotte dei rifugi richiedono il login).
  */
 @Composable
-fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?, showHazards: Boolean) {
+fun MapScreen(
+    onOpenTrail: (String) -> Unit,
+    onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?,
+    showHazards: Boolean,
+    onOpenRefuge: ((String) -> Unit)?,
+) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
     // Provider di default di MapLibre (LocationManager / CLLocationManager). Non chiede il permesso da solo:
@@ -238,6 +246,9 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
     val hazardViewModel = koinViewModel<HazardMapViewModel>()
     val hazardUi by hazardViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(showHazards) { hazardViewModel.setEnabled(showHazards) }
+    val refugeViewModel = koinViewModel<RefugeMapViewModel>()
+    val refuges by refugeViewModel.state.collectAsStateWithLifecycle()
+    LaunchedEffect(onOpenRefuge != null) { refugeViewModel.setEnabled(onOpenRefuge != null) }
     var choosingType by rememberSaveable { mutableStateOf(false) }
     var selectedPoiId by rememberSaveable { mutableStateOf<String?>(null) }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
@@ -264,7 +275,10 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
                 hazardViewModel.clearSelection()
             },
         )
-        // sopra sentieri e POI: un pericolo non deve restare nascosto
+        if (onOpenRefuge != null) {
+            RefugeMarkers(refuges, fill = colors.primary, outline = colors.surfaceContainerLowest, symbol = colors.onPrimary, onRefugeClick = onOpenRefuge)
+        }
+        // sopra sentieri, POI e rifugi: un pericolo non deve restare nascosto
         HazardMarkers(hazardUi.hazards, halo = casing, otherColor = colors.onSurfaceVariant) { id ->
             selectedPoiId = null
             hazardViewModel.select(id)
@@ -286,6 +300,7 @@ fun MapScreen(onOpenTrail: (String) -> Unit, onReportHazard: ((center: GeoPoint,
             val view = GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north)
             viewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
             hazardViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
+            refugeViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
         }
     }
 

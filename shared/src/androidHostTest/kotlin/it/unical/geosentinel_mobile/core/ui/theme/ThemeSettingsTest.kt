@@ -7,6 +7,8 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.job
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import okio.Path.Companion.toOkioPath
@@ -41,7 +43,9 @@ class ThemeSettingsTest {
     @Test
     fun `la scelta resta dopo un riavvio`() = runBlocking {
         ThemeSettings(newDataStore()).setMode(ThemeMode.DARK)
-        scopes.forEach { it.cancel() }
+        // si aspetta la chiusura del primo DataStore: con il solo cancel() su Linux il file risulta ancora aperto
+        // ("multiple DataStores active", FileStorage.kt:52), come in AndroidSecureTokenStoreTest
+        scopes.forEach { it.coroutineContext.job.cancelAndJoin() }
         assertEquals(ThemeMode.DARK, ThemeSettings(newDataStore()).mode.first())
     }
 

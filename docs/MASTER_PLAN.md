@@ -1035,8 +1035,32 @@ suspend fun HazardRepository.nearby(center: GeoPoint, radiusMeters: Double): Res
 **M5.1 Rifugi**
 - Rifugi sulla mappa da `findRefugesNearby` (solo da loggati), dettaglio con `getRefuge` e calendario di
   `getRefugeAvailability` (posti liberi notte per notte).
-- Checkpoint:
-  - [ ] il rifugio piccolo del seed mostra i posti giusti per le prossime notti.
+- **Fatto (05/10)**: prima bozza dell'utente, corretta e completata da Claude su richiesta (non compilava: modelli con
+  altitudine, descrizione e contatti che `RefugeResponse` non ha, `RefugeDetailViewModel` vuoto e la sua logica in
+  `RefugeListViewModel`, `UiMessage.Dynamic` inesistente, `kotlinx.datetime.Clock` tolto, `by lazy { httpClient }` che
+  non chiamava la funzione; testi nel codice, "←" al posto di `BackButton`, "Prenota" di M5.2 senza destinazione).
+  - Niente modelli scritti a mano per il rifugio: `RefugeResponse` generato; `NightAvailability(date, freeBeds)` in
+    `refuge/data`. `RefugeRepository`: `nearby(center, 50 km)`, `get(id)`, `availability(id, from, nights = 14)` (14 è
+    anche il massimo del server; date ordinate, `from` nel passato o più di 14 notti → 422).
+  - Scheda Rifugi = la lista (`Route.Refuges`, tolta la rotta doppia `RefugeList`): rifugi entro 50 km dalla posizione
+    se il permesso c'è già (fix atteso 3 s), altrimenti dall'area di partenza della mappa (`DefaultArea`, ora
+    `internal`), senza chiedere il permesso; card con nome, posti letto e distanza.
+  - Dettaglio (`Route.RefugeDetail`, spinto dalla lista o dalla mappa, senza barra in basso): rifugio e calendario in
+    parallelo (`Section` del dettaglio sentiero), un errore del solo calendario non nasconde il rifugio e "Riprova"
+    chiede solo le notti; righe "Stanotte", "mar 6/10"… con "N posti liberi" (plurali) o "Pieno" (non rosso, §2).
+  - Mappa: `RefugeMapViewModel` (come i POI: a mappa ferma, area con margine, sotto lo zoom 8 niente, errore muto),
+    `RefugeMarkers` (tondo pieno `primary` con la casa in negativo: non si confonde con il POI bivacco), il tocco apre
+    il dettaglio; solo da loggati (`onOpenRefuge` null per l'ospite).
+  - Tolte le stringhe segnaposto dei rifugi. `RefugeViewModelsTest` (9). 212 test host.
+  - Il seed ha la prenotazione con `CURRENT_DATE` del giorno in cui è girato (repeatable, `ON CONFLICT DO NOTHING`):
+    dopo qualche giorno finisce nel passato e il rifugio risulta libero ovunque. Per la prova serve una prenotazione
+    fresca (via API, o con M5.2).
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 05/10):
+  - [x] il rifugio piccolo del seed mostra i posti giusti per le prossime notti: con una prenotazione di prova di 2
+    ospiti per il 10 e l'11 ottobre "2 posti liberi" in quelle notti e 4 nelle altre; con altri 2 ospiti il 10 "Pieno".
+    Prenotazioni di prova poi cancellate. Lista: "4 posti letto · a 8,4 km" dalla posizione; il tocco sul rifugio della
+    mappa apre il dettaglio.
+  - [ ] (con il Mac) lista, dettaglio e livello sul simulatore iPhone.
 
 **M5.2 Prenotazione con outbox**
 ```kotlin

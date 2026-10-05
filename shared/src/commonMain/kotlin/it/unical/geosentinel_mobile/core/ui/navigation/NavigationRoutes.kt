@@ -19,6 +19,7 @@ import org.jetbrains.compose.resources.StringResource
 
 sealed interface Route {
     @Serializable data object Map : Route
+    // scheda Rifugi: la lista dei rifugi vicini (M5.1)
     @Serializable data object Refuges : Route
     @Serializable data object Alerts : Route
     @Serializable data object Management : Route
@@ -26,6 +27,8 @@ sealed interface Route {
     @Serializable data object SosEmergency : Route
     // "spinta" sopra la mappa (M3.2), senza barra in basso
     @Serializable data class TrailDetail(val id: String) : Route
+    // "spinta" sopra la scheda Rifugi o la mappa (M5.1), senza barra in basso
+    @Serializable data class RefugeDetail(val refugeId: String) : Route
     // form "spinto" (M4.1): la mappa del form parte da lat/lon/zoom; trailId se si parte da un sentiero
     @Serializable data class ReportHazard(val lat: Double, val lon: Double, val zoom: Double, val trailId: String? = null) : Route
     // "spinte" sopra il Profilo, senza barra in basso
@@ -39,8 +42,8 @@ sealed interface Route {
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
 val FormRoutes = setOf(Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class)
 
-// Schermate senza barra in basso: i form, il dettaglio di un sentiero e le mie segnalazioni (con il loro Indietro)
-val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.MyHazards::class
+// Schermate senza barra in basso: i form, i dettagli di sentiero e rifugio e le mie segnalazioni (con il loro Indietro)
+val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.RefugeDetail::class + Route.MyHazards::class
 
 data class BottomNavItem(
     val route: Route,

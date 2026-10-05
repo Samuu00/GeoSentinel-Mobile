@@ -21,7 +21,9 @@ verificata sull'emulatore. M4.2 scritta (05/10, anticipata): foto dalla schermat
 (`MediaUploader`, storage client senza `Auth`, `ImageEncoder`, `rememberPhotoPicker`), 178 test host, verificata sull'emulatore con MinIO (READY, niente EXIF GPS); resta il job `ios`.
 M4.3 fatta (05/10): "Le mie segnalazioni" dal Profilo (`findMyHazards` nel backend, `MyHazardsScreen` paginata), 188 test host,
 verificata sull'emulatore. M4.4 fatta (05/10): `GET /hazards/nearby` nel backend (`findHazardsNearby`, solo `VERIFIED`),
-pericoli sulla mappa e "Pericoli vicini" (`HazardMapViewModel`), 203 test host, verificata sull'emulatore. Prossimo: M6 (SOS).
+pericoli sulla mappa e "Pericoli vicini" (`HazardMapViewModel`), 203 test host, verificata sull'emulatore. M5.1 fatta
+(05/10, anticipata): scheda Rifugi con la lista, dettaglio con i posti liberi di 14 notti, rifugi sulla mappa da loggati,
+212 test host, verificata sull'emulatore. Prossimo: M6 (SOS).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

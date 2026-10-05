@@ -33,7 +33,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Warning
@@ -80,8 +79,6 @@ import geosentinel_mobile.shared.generated.resources.placeholder_management_body
 import geosentinel_mobile.shared.generated.resources.placeholder_management_title
 import geosentinel_mobile.shared.generated.resources.placeholder_map_body
 import geosentinel_mobile.shared.generated.resources.placeholder_map_title
-import geosentinel_mobile.shared.generated.resources.placeholder_refuges_body
-import geosentinel_mobile.shared.generated.resources.placeholder_refuges_title
 import geosentinel_mobile.shared.generated.resources.placeholder_sos_body
 import geosentinel_mobile.shared.generated.resources.placeholder_sos_title
 import geosentinel_mobile.shared.generated.resources.sos_button
@@ -105,6 +102,8 @@ import it.unical.geosentinel_mobile.profile.ui.ChangePasswordScreen
 import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
+import it.unical.geosentinel_mobile.refuge.ui.RefugeDetailScreen
+import it.unical.geosentinel_mobile.refuge.ui.RefugeListScreen
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
@@ -184,9 +183,10 @@ fun App() {
                 exitTransition = { fadeOut(tween(100)) },
             ) {
                 composable<Route.Map>(
-                    // quando entra l'SOS o un sentiero la mappa scivola un po' a sinistra e lascia il posto (parallasse)
+                    // quando entra l'SOS, un sentiero o un rifugio la mappa scivola un po' a sinistra e lascia il posto (parallasse)
                     exitTransition = {
-                        if (targetState.destination.hasRoute<Route.SosEmergency>() || targetState.destination.hasRoute<Route.TrailDetail>()) {
+                        val destination = targetState.destination
+                        if (destination.hasRoute<Route.SosEmergency>() || destination.hasRoute<Route.TrailDetail>() || destination.hasRoute<Route.RefugeDetail>()) {
                             slideOutHorizontally(tween(PushMillis)) { -it / 4 }
                         } else {
                             fadeOut(tween(100))
@@ -204,6 +204,12 @@ fun App() {
                         },
                         // /hazards/** richiede il login: l'ospite non ha il livello né "Pericoli vicini"
                         showHazards = role != UserRole.GUEST,
+                        // /refuges/** richiede il login: l'ospite non vede i rifugi
+                        onOpenRefuge = if (role.canViewRefuges()) {
+                            { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } }
+                        } else {
+                            null
+                        },
                     )
                 }
                 composable<Route.TrailDetail>(
@@ -225,8 +231,20 @@ fun App() {
                     val route = entry.toRoute<Route.ReportHazard>()
                     ReportHazardScreen(route.trailId, GeoPoint(route.lat, route.lon), route.zoom, onBack = { navController.popBackStack() })
                 }
-                composable<Route.Refuges> {
-                    PlaceholderScreen(Icons.Filled.Home, Res.string.placeholder_refuges_title, Res.string.placeholder_refuges_body)
+                composable<Route.Refuges>(
+                    // come la mappa: il dettaglio entra da destra e la lista scivola via in parallasse
+                    exitTransition = {
+                        if (targetState.destination.hasRoute<Route.RefugeDetail>()) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
+                    },
+                    popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
+                ) {
+                    RefugeListScreen(onOpenRefuge = { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } })
+                }
+                composable<Route.RefugeDetail>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    RefugeDetailScreen(entry.toRoute<Route.RefugeDetail>().refugeId, onBack = { navController.popBackStack() })
                 }
                 composable<Route.Alerts> {
                     PlaceholderScreen(Icons.Filled.Notifications, Res.string.placeholder_alerts_title, Res.string.placeholder_alerts_body)
