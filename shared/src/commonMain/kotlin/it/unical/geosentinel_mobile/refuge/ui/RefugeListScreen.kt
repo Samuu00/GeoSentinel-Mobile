@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
@@ -26,6 +27,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -49,6 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.hazards_distance
+import geosentinel_mobile.shared.generated.resources.my_bookings_open
 import geosentinel_mobile.shared.generated.resources.refuge_beds
 import geosentinel_mobile.shared.generated.resources.refuge_open
 import geosentinel_mobile.shared.generated.resources.refuges_empty
@@ -85,7 +88,7 @@ private val FixWait = 3.seconds
  * altrimenti dall'area di partenza della mappa, senza chiedere il permesso (lo chiede la mappa, quando serve).
  */
 @Composable
-fun RefugeListScreen(onOpenRefuge: (String) -> Unit) {
+fun RefugeListScreen(onOpenRefuge: (String) -> Unit, onOpenBookings: () -> Unit) {
     val viewModel = koinViewModel<RefugeListViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val location = rememberLocationState()
@@ -108,6 +111,8 @@ fun RefugeListScreen(onOpenRefuge: (String) -> Unit) {
     ) {
         item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
         item(key = "title") { Title(nearMe = (state as? RefugeList.Loaded)?.nearMe) }
+        // le proprie prenotazioni stanno qui, prima della lista (M5.2)
+        item(key = "bookings") { BookingsLink(onOpenBookings) }
         when (val list = state) {
             RefugeList.Loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
@@ -180,6 +185,36 @@ private fun RefugeCard(refuge: RefugeResponse, from: GeoPoint, onClick: () -> Un
             )
         }
         Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
+    }
+}
+
+// "Le mie prenotazioni": una card come quelle dei rifugi, in evidenza nel verde del tema
+@Composable
+private fun BookingsLink(onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .widthIn(max = ContentMaxWidth)
+            .fillMaxWidth()
+            .padding(horizontal = 20.dp)
+            .clip(CardShape)
+            .background(colors.primaryContainer)
+            .clickable(role = Role.Button, onClick = onClick)
+            .heightIn(min = 56.dp)
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        // decorativa: il testo dice già cosa apre
+        Icon(Icons.Filled.DateRange, contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(14.dp))
+        Text(
+            stringResource(Res.string.my_bookings_open),
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = colors.onPrimaryContainer,
+            modifier = Modifier.weight(1f),
+        )
+        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onPrimaryContainer)
     }
 }
 

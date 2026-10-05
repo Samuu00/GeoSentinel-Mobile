@@ -11,6 +11,7 @@ import it.unical.geosentinel_mobile.core.db.createAppDatabase
 import it.unical.geosentinel_mobile.core.network.HttpClientFactory
 import it.unical.geosentinel_mobile.core.network.platformHttpEngine
 import it.unical.geosentinel_mobile.core.session.SessionManager
+import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.SecureTokenStore
 import it.unical.geosentinel_mobile.core.session.createSecureTokenStore
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeSettings
@@ -24,7 +25,10 @@ import it.unical.geosentinel_mobile.hazard.ui.ReportHazardViewModel
 import it.unical.geosentinel_mobile.media.data.ImageEncoder
 import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.media.data.MediaUploader
+import it.unical.geosentinel_mobile.refuge.data.BookingRepository
 import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
+import it.unical.geosentinel_mobile.refuge.ui.BookRefugeViewModel
+import it.unical.geosentinel_mobile.refuge.ui.MyBookingsViewModel
 import it.unical.geosentinel_mobile.refuge.ui.RefugeDetailViewModel
 import it.unical.geosentinel_mobile.refuge.ui.RefugeListViewModel
 import it.unical.geosentinel_mobile.refuge.ui.RefugeMapViewModel
@@ -60,6 +64,9 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     single { HazardRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { MediaRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { RefugeRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    // Prenotazioni (M5.2) con l'outbox nel database: un solo repository, così un solo invio alla volta in tutta l'app
+    single { get<AppDatabase>().outboxDao() }
+    single { BookingRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl, outbox = get()) }
     // Upload delle foto (M4.2): l'API sul client autenticato, lo storage su un client suo, senza Auth
     single {
         MediaUploader(
@@ -86,7 +93,19 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     viewModel { RefugeMapViewModel(get()) }
     // l'id del rifugio arriva dalla rotta, come per il sentiero
     viewModel { (refugeId: String) -> RefugeDetailViewModel(refugeId, get()) }
+    // id e posti del rifugio dalla rotta; l'utente dalla sessione, letto al momento dell'invio
+    viewModel { (refugeId: String, capacity: Int) ->
+        val session = get<SessionManager>()
+        BookRefugeViewModel(refugeId, capacity, get(), ownerId = { session.userId() })
+    }
+    viewModel {
+        val session = get<SessionManager>()
+        MyBookingsViewModel(get(), get(), ownerId = { session.userId() })
+    }
 }
+
+// L'id dell'utente loggato (null da ospite o senza profilo letto): l'outbox lega a lui le azioni in coda
+private fun SessionManager.userId(): String? = (state.value as? SessionState.LoggedIn)?.profile?.id
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su
 // iOS. filesDir e il database arrivano dalla piattaforma (filesDir e databases/ su Android, Documents e Application

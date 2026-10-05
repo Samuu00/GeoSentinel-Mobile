@@ -102,6 +102,9 @@ import it.unical.geosentinel_mobile.profile.ui.ChangePasswordScreen
 import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
+import it.unical.geosentinel_mobile.refuge.data.BookingRepository
+import it.unical.geosentinel_mobile.refuge.ui.BookRefugeScreen
+import it.unical.geosentinel_mobile.refuge.ui.MyBookingsScreen
 import it.unical.geosentinel_mobile.refuge.ui.RefugeDetailScreen
 import it.unical.geosentinel_mobile.refuge.ui.RefugeListScreen
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
@@ -134,6 +137,11 @@ fun App() {
 
     // Sessione salvata letta una volta all'avvio (una seconda chiamata non fa nulla)
     LaunchedEffect(session) { session.restore() }
+    // Prenotazioni rimaste in coda (app chiusa prima della risposta, M5.2): ripartono appena si sa chi è l'utente,
+    // con la stessa Idempotency-Key, quindi senza doppioni
+    val bookings = koinInject<BookingRepository>()
+    val userId = (sessionState as? SessionState.LoggedIn)?.profile?.id
+    LaunchedEffect(userId) { if (userId != null) bookings.resendPending(userId) }
     // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa
     // (non durante il caricamento: si vedrebbe GUEST e una scheda del personale ripristinata verrebbe chiusa)
     val loading = sessionState == SessionState.Loading
@@ -234,17 +242,38 @@ fun App() {
                 composable<Route.Refuges>(
                     // come la mappa: il dettaglio entra da destra e la lista scivola via in parallasse
                     exitTransition = {
-                        if (targetState.destination.hasRoute<Route.RefugeDetail>()) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
+                        val pushed = targetState.destination.hasRoute<Route.RefugeDetail>() || targetState.destination.hasRoute<Route.MyBookings>()
+                        if (pushed) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
-                    RefugeListScreen(onOpenRefuge = { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } })
+                    RefugeListScreen(
+                        onOpenRefuge = { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } },
+                        onOpenBookings = { navController.navigate(Route.MyBookings) { launchSingleTop = true } },
+                    )
                 }
                 composable<Route.RefugeDetail>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
                     popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
                 ) { entry ->
-                    RefugeDetailScreen(entry.toRoute<Route.RefugeDetail>().refugeId, onBack = { navController.popBackStack() })
+                    RefugeDetailScreen(
+                        entry.toRoute<Route.RefugeDetail>().refugeId,
+                        onBack = { navController.popBackStack() },
+                        onBook = { id, name, capacity -> navController.navigate(Route.BookRefuge(id, name, capacity)) { launchSingleTop = true } },
+                    )
+                }
+                composable<Route.BookRefuge>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.BookRefuge>()
+                    BookRefugeScreen(route.refugeId, route.name, route.capacity, onBack = { navController.popBackStack() })
+                }
+                composable<Route.MyBookings>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    MyBookingsScreen(onBack = { navController.popBackStack() })
                 }
                 composable<Route.Alerts> {
                     PlaceholderScreen(Icons.Filled.Notifications, Res.string.placeholder_alerts_title, Res.string.placeholder_alerts_body)

@@ -247,7 +247,7 @@
     <string name="report_photo_failed">Foto %1$d, non caricata</string>
     <string name="report_photo_retry">Riprova</string>
     <string name="report_photo_rejected_message">Una foto non è stata accettata: il server non la riconosce come immagine.</string>
-    <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un\'altra.</string>
+    <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un'altra.</string>
 
     <!-- M5.1: rifugi -->
     <string name="refuges_title">Rifugi</string>
@@ -273,5 +273,48 @@
     <string name="weekday_5">ven</string>
     <string name="weekday_6">sab</string>
     <string name="weekday_7">dom</string>
+
+    <!-- M5.2: prenotazioni -->
+    <string name="booking_open">Prenota</string>
+    <string name="booking_title">Prenota</string>
+    <string name="booking_body">Scegli quando arrivi, quante notti resti e quante persone siete.</string>
+    <string name="booking_arrival">Arrivo</string>
+    <string name="booking_arrival_change">Cambia data</string>
+    <string name="booking_departure">Partenza: %1$s</string>
+    <string name="booking_nights">Notti</string>
+    <string name="booking_guests">Persone</string>
+    <string name="booking_guests_max">Al massimo %1$d, i posti del rifugio.</string>
+    <string name="booking_nights_max">Al massimo %1$d notti di fila.</string>
+    <string name="booking_less">Una in meno</string>
+    <string name="booking_more">Una in più</string>
+    <string name="booking_send">Prenota</string>
+    <string name="booking_date_ok">OK</string>
+    <string name="booking_arrival_past">L'arrivo non può essere nel passato.</string>
+    <string name="booking_no_profile">Non riesco a leggere il tuo profilo. Riprova quando c'è rete.</string>
+    <string name="booking_done_title">Prenotazione confermata</string>
+    <string name="booking_done_body">Il posto è tuo. La trovi in Le mie prenotazioni, dove puoi anche annullarla.</string>
+    <string name="booking_queued_title">Prenotazione in invio</string>
+    <string name="booking_queued_body">Adesso non riesco a raggiungere il server: la prenotazione è salvata e parte da sola appena torna la connessione, anche se chiudi l'app. In Le mie prenotazioni la vedi come “In invio”.</string>
+    <string name="booking_done">Fatto</string>
+    <plurals name="booking_nights_count">
+        <item quantity="one">%1$d notte</item>
+        <item quantity="other">%1$d notti</item>
+    </plurals>
+    <plurals name="booking_guests_count">
+        <item quantity="one">%1$d persona</item>
+        <item quantity="other">%1$d persone</item>
+    </plurals>
+    <string name="my_bookings_open">Le mie prenotazioni</string>
+    <string name="my_bookings_title">Le mie prenotazioni</string>
+    <string name="my_bookings_empty">Non hai ancora prenotazioni. Scegli un rifugio dalla lista o dalla mappa.</string>
+    <string name="my_bookings_refuge_unknown">Rifugio</string>
+    <string name="booking_status_confirmed">Confermata</string>
+    <string name="booking_status_cancelled">Annullata</string>
+    <string name="booking_status_pending">In invio</string>
+    <string name="booking_status_unknown">Stato non disponibile</string>
+    <string name="booking_cancel">Annulla prenotazione</string>
+    <string name="booking_cancel_title">Annullare la prenotazione?</string>
+    <string name="booking_cancel_body">Il posto torna libero per altri escursionisti.</string>
+    <string name="booking_keep">Tienila</string>
 
 </resources>

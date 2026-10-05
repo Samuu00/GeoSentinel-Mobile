@@ -1077,9 +1077,28 @@ data class PendingAction(
   201 e 200 (retry) sono entrambi un successo. 409 `capacity-exceeded` e 422 si mostrano e chiudono l'azione.
 - "Le mie prenotazioni" con `findMyBookings` paginato (la pagina successiva si carica in fondo alla lista),
   cancellazione con `cancelBooking`.
-- Checkpoint:
-  - [ ] prenoto, chiudo l'app prima della risposta (rete lenta simulata), la riapro: nessun doppione, la prenotazione c'è.
-  - [ ] con il rifugio pieno compare il messaggio di `capacity-exceeded` e non resta nessuna azione in coda.
+- **Fatto (05/10)**: prima bozza dell'utente, corretta e completata da Claude su richiesta (non compilava:
+  `java.util.UUID` nel codice comune, `kotlinx.datetime.Clock`, `UiMessage.Dynamic`, campi che il contratto non ha
+  — `checkInDate`, `numGuests`, `specialRequests`, `refugeName` — e `by lazy { httpClient }`; l'entità nuova senza
+  alzare la versione del database avrebbe fatto crashare chi aveva già l'app; niente rimandava le azioni in coda).
+  - Outbox: `PendingActionEntity` in `core/db/OutboxDao.kt` con **`ownerId`** (il server lega la chiave all'utente:
+    con un altro account un retry creerebbe una prenotazione a nome suo). Database alla versione 2 con
+    `AutoMigration(1 → 2)` (schema `2.json` committato), verificata installando sopra il database vecchio.
+  - `BookingRepository`: `book(ownerId, payload)` salva la chiave (`kotlin.uuid`) e poi manda; `resendPending(ownerId)`
+    all'avvio da loggati (`App`) e all'apertura di "Le mie prenotazioni"; un invio alla volta (`Mutex`). In coda restano
+    rete, 429, 409 `resource-busy`, 5xx e 401; ogni altro 4xx chiude l'azione.
+  - Form `BookRefugeScreen` (dal dettaglio del rifugio, "Prenota" fisso in fondo): arrivo con il `DatePicker` (da oggi),
+    notti 1–14, persone 1–posti; conferma "confermata" o "in invio"; posti finiti → messaggio con il form compilato.
+  - "Le mie prenotazioni" (`MyBookingsScreen`, dalla scheda Rifugi): "in invio" in cima, lista paginata con lo stato in
+    parole e il nome del rifugio (chiesto una volta per rifugio), annullamento con conferma fino al giorno d'arrivo.
+  - Corrette anche le stringhe con `\'`: le risorse di Compose mostrano la barra (anche `report_photo_unreadable`).
+  - `BookingTest` (15). 227 test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 05/10):
+  - [x] prenoto in modalità aereo (2 persone, 13→15/10): "Prenotazione in invio"; chiudo l'app, torna la rete, la
+    riapro: le notti del 13 e 14 passano da 4 a 2 posti (una sola prenotazione), in "Le mie prenotazioni" è confermata e
+    niente "in invio". Poi annullata dall'app ("Annullata").
+  - [x] con il rifugio pieno (stanotte) compare "Non ci sono abbastanza posti liberi" e non resta nessuna azione in coda.
+  - [ ] (con il Mac) form, date e lista sul simulatore iPhone.
 
 ### Milestone 6: SOS (escursionista)
 

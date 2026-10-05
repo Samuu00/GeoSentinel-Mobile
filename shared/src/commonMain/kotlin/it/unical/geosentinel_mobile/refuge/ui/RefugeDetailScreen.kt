@@ -41,6 +41,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
+import geosentinel_mobile.shared.generated.resources.booking_open
 import geosentinel_mobile.shared.generated.resources.refuge_beds
 import geosentinel_mobile.shared.generated.resources.refuge_free_beds
 import geosentinel_mobile.shared.generated.resources.refuge_full
@@ -74,17 +75,20 @@ private val ContentMaxWidth = 600.dp
 
 /**
  * Dettaglio di un rifugio (M5.1), spinto dalla scheda Rifugi o dalla mappa: nome, posti letto e i posti liberi delle
- * prossime 14 notti. La prenotazione arriva con M5.2.
+ * prossime 14 notti. "Prenota" (M5.2) sta in fondo, fisso, e apre il form con nome e posti del rifugio.
  */
 @Composable
-fun RefugeDetailScreen(refugeId: String, onBack: () -> Unit) {
+fun RefugeDetailScreen(refugeId: String, onBack: () -> Unit, onBook: (refugeId: String, name: String, capacity: Int) -> Unit) {
     val viewModel = koinViewModel<RefugeDetailViewModel> { parametersOf(refugeId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val bottomInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()
+    val loaded = state.refuge as? Section.Loaded
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             horizontalAlignment = Alignment.CenterHorizontally,
-            contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
+            // spazio per il pulsante "Prenota" fisso in basso
+            contentPadding = PaddingValues(bottom = bottomInset + if (loaded != null) 104.dp else 24.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
@@ -123,6 +127,23 @@ fun RefugeDetailScreen(refugeId: String, onBack: () -> Unit) {
             }
         }
         BackButton(onBack)
+        // l'azione principale in fondo, nella zona del pollice (§2), sopra uno sfondo pieno
+        if (loaded != null) {
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp + bottomInset),
+                contentAlignment = Alignment.Center,
+            ) {
+                PrimaryPillButton(
+                    stringResource(Res.string.booking_open),
+                    onClick = { onBook(loaded.value.id, loaded.value.name, loaded.value.capacity) },
+                    modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(),
+                )
+            }
+        }
     }
 }
 
@@ -156,7 +177,7 @@ private fun NightRow(night: NightAvailability, tonight: Boolean, first: Boolean,
                 .semantics(mergeDescendants = true) { },
         ) {
             Text(
-                if (tonight) stringResource(Res.string.refuge_tonight) else "${stringResource(night.date.weekday())} ${night.date.day}/${night.date.month.number}",
+                if (tonight) stringResource(Res.string.refuge_tonight) else night.date.shortLabel(),
                 style = MaterialTheme.typography.bodyLarge,
             )
             Text(
@@ -169,6 +190,10 @@ private fun NightRow(night: NightAvailability, tonight: Boolean, first: Boolean,
         if (!last) HorizontalDivider(color = colors.outlineVariant)
     }
 }
+
+/** "sab 10/10": giorno della settimana e data, nel calendario, nel form e nelle prenotazioni. */
+@Composable
+internal fun LocalDate.shortLabel(): String = "${stringResource(weekday())} $day/${month.number}"
 
 private fun LocalDate.weekday(): StringResource = when (dayOfWeek.isoDayNumber) {
     1 -> Res.string.weekday_1

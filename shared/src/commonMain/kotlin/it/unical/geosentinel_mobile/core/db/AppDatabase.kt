@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.core.db
 
+import androidx.room.AutoMigration
 import androidx.room.ConstructedBy
 import androidx.room.Database
 import androidx.room.RoomDatabase
@@ -20,16 +21,20 @@ import kotlinx.coroutines.IO
         TrailDetailEntity::class,
         PoiEntity::class,
         CatalogEtagEntity::class,
-        // + PendingActionEntity da M5/M6
+        // outbox (M5.2): prenotazioni, poi SOS
+        PendingActionEntity::class,
     ],
-    version = 1,
-    exportSchema = true
+    version = 2,
+    exportSchema = true,
+    // 1 → 2 aggiunge solo la tabella dell'outbox: la cache del catalogo resta (schemi in shared/schemas, da committare)
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
 )
 @TypeConverters(Converters::class)
 // Sui target non Android Room crea il database da qui (l'actual lo genera il compilatore di Room)
 @ConstructedBy(AppDatabaseConstructor::class)
 abstract class AppDatabase : RoomDatabase() {
     abstract fun catalogDao(): CatalogDao
+    abstract fun outboxDao(): OutboxDao
 }
 
 @Suppress("KotlinNoActualForExpect")
