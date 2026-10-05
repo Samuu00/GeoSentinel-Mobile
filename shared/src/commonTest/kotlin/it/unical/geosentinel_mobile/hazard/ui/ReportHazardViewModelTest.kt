@@ -4,6 +4,8 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_forbidden
 import geosentinel_mobile.shared.generated.resources.error_network
 import geosentinel_mobile.shared.generated.resources.error_validation
+import geosentinel_mobile.shared.generated.resources.report_photo_unreadable
+import it.unical.geosentinel_mobile.core.ui.UiMessage
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
@@ -15,6 +17,7 @@ import it.unical.geosentinel_mobile.core.session.FakeBackend
 import it.unical.geosentinel_mobile.core.session.TEST_BASE_URL
 import it.unical.geosentinel_mobile.core.session.sessionWith
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
+import it.unical.geosentinel_mobile.media.data.FakeMedia
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -54,10 +57,24 @@ class ReportHazardViewModelTest {
                 null
             }
         }
+        // dopo le rotte dei pericoli: FakeMedia le tiene e aggiunge quelle dei media
+        media = FakeMedia(backend)
         val (session, client) = sessionWith(backend)
         session.restore()
         assertTrue(session.login("hiker@test.dev", "password-giusta-1").isSuccess)
-        return ReportHazardViewModel(HazardRepository({ client }, TEST_BASE_URL), trailId)
+        return ReportHazardViewModel(HazardRepository({ client }, TEST_BASE_URL), with(media) { uploader(client) }, trailId)
+    }
+
+    private lateinit var media: FakeMedia
+    private val jpeg = byteArrayOf(1, 2, 3, 4)
+
+    private suspend fun TestScope.sentViewModel(): ReportHazardViewModel {
+        val viewModel = viewModel()
+        viewModel.fill()
+        viewModel.submit()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.sent)
+        return viewModel
     }
 
     private fun problem(status: Int, slug: String, field: String? = null): String {
@@ -219,6 +236,90 @@ class ReportHazardViewModelTest {
         val text = viewModel.state.value.toString()
         assertFalse("39.3" in text || "16.5" in text, text)
         assertFalse("Mario" in text, text)
+    }
+
+    @Test
+    fun `una foto dopo l'invio si allega alla segnalazione appena creata`() = runTest {
+        val viewModel = sentViewModel()
+
+        viewModel.addPhoto { jpeg }
+        assertEquals(PhotoStatus.UPLOADING, viewModel.state.value.photos.single().status)
+        advanceUntilIdle()
+
+        assertEquals(PhotoStatus.READY, viewModel.state.value.photos.single().status)
+        val request = media.uploadRequests.single()
+        assertTrue("\"entityType\":\"HAZARD_REPORT\"" in request && "\"entityId\":\"h9\"" in request, request)
+        assertEquals(1, media.confirms)
+    }
+
+    @Test
+    fun `prima dell'invio non si caricano foto`() = runTest {
+        val viewModel = viewModel()
+
+        viewModel.addPhoto { jpeg }
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.photos.isEmpty())
+        assertTrue(media.uploadRequests.isEmpty())
+    }
+
+    @Test
+    fun `senza rete la foto resta non caricata e Riprova la manda una volta sola`() = runTest {
+        val viewModel = sentViewModel()
+        media.storageOffline = true
+
+        viewModel.addPhoto { jpeg }
+        advanceUntilIdle()
+        val photo = viewModel.state.value.photos.single()
+        assertEquals(PhotoStatus.FAILED, photo.status)
+        assertEquals(UiMessage(Res.string.error_network), viewModel.state.value.photoError)
+
+        media.storageOffline = false
+        viewModel.retryPhoto(photo.id)
+        viewModel.retryPhoto(photo.id) // doppio tocco
+        advanceUntilIdle()
+
+        assertEquals(PhotoStatus.READY, viewModel.state.value.photos.single().status)
+        assertNull(viewModel.state.value.photoError)
+        assertEquals(1, media.confirms)
+    }
+
+    @Test
+    fun `una foto in quarantena e non accettata senza Riprova`() = runTest {
+        val viewModel = sentViewModel()
+        media.mediaStatus = "QUARANTINED"
+
+        viewModel.addPhoto { jpeg }
+        advanceUntilIdle()
+
+        val photo = viewModel.state.value.photos.single()
+        assertEquals(PhotoStatus.REJECTED, photo.status)
+        viewModel.retryPhoto(photo.id)
+        advanceUntilIdle()
+        assertEquals(1, media.uploadRequests.size)
+    }
+
+    @Test
+    fun `una foto illeggibile non entra in lista e da un messaggio`() = runTest {
+        val viewModel = sentViewModel()
+
+        viewModel.addPhoto { throw IOException("formato non supportato") }
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.photos.isEmpty())
+        assertEquals(UiMessage(Res.string.report_photo_unreadable), viewModel.state.value.photoError)
+        assertTrue(media.uploadRequests.isEmpty())
+    }
+
+    @Test
+    fun `oltre il limite di foto non se ne aggiungono altre`() = runTest {
+        val viewModel = sentViewModel()
+
+        repeat(MAX_HAZARD_PHOTOS + 1) { viewModel.addPhoto { jpeg } }
+        advanceUntilIdle()
+
+        assertEquals(MAX_HAZARD_PHOTOS, viewModel.state.value.photos.size)
+        assertEquals(MAX_HAZARD_PHOTOS, media.uploadRequests.size)
     }
 
     private companion object {

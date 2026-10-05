@@ -17,7 +17,9 @@ Keychain controllato solo a occhio) e le prove sul simulatore. Backend: periodo 
 test host. M3.3 scritta (04/10): cache Room del catalogo, ETag per rotta (`catalog_etag`) con `If-None-Match`, review di M3 applicata, 153 test
 host, checkpoint verificati sull'emulatore (304, modalità aereo, SQL di Room). M4.1 fatta (04/10, anticipata):
 segnalazione di un pericolo (`hazard/ui`), posizione = centro di una mappa con gesti in Compose, 164 test host,
-verificata sull'emulatore. Prossimo: M4.3 (le mie segnalazioni: prima `GET /hazards/mine` nel backend), poi M6 (SOS).
+verificata sull'emulatore. M4.2 scritta (05/10, anticipata): foto dalla schermata "Segnalazione inviata"
+(`MediaUploader`, storage client senza `Auth`, `ImageEncoder`, `rememberPhotoPicker`), 178 test host, verificata sull'emulatore con MinIO (READY, niente EXIF GPS); resta il job `ios`.
+Prossimo: M4.3 (le mie segnalazioni: prima `GET /hazards/mine` nel backend), poi M6 (SOS).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

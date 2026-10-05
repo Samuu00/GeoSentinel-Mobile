@@ -132,6 +132,19 @@ object HttpClientFactory {
         }
     }
 
+    /**
+     * Client per lo storage delle foto (M4.2): niente `Auth` (il bearer non deve arrivare a MinIO/S3), niente
+     * redirect, niente log (il modulo contiene la firma) e tempi più lunghi per l'upload di qualche MB.
+     */
+    fun createStorageClient(engine: HttpClientEngine): HttpClient = HttpClient(engine) {
+        followRedirects = false
+        install(HttpTimeout) {
+            connectTimeoutMillis = 10_000L
+            requestTimeoutMillis = 120_000L
+            socketTimeoutMillis = 60_000L
+        }
+    }
+
     // Le uniche rotte /auth senza bearer: un 401 lì non è un token scaduto
     private val publicAuthPaths = listOf("/auth/login", "/auth/register", "/auth/refresh")
 

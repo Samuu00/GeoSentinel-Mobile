@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Solo la cartella delle foto scattate (rememberCameraCapture), nient'altro della cache -->
+<paths>
+    <cache-path name="camera" path="camera/"/>
+</paths>

@@ -19,7 +19,9 @@ import it.unical.geosentinel_mobile.profile.ui.EditNameViewModel
 import it.unical.geosentinel_mobile.profile.ui.ProfileViewModel
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardViewModel
+import it.unical.geosentinel_mobile.media.data.ImageEncoder
 import it.unical.geosentinel_mobile.media.data.MediaRepository
+import it.unical.geosentinel_mobile.media.data.MediaUploader
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailViewModel
@@ -51,6 +53,15 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     single { TrailRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl, dao = get()) }
     single { HazardRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { MediaRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    // Upload delle foto (M4.2): l'API sul client autenticato, lo storage su un client suo, senza Auth
+    single {
+        MediaUploader(
+            httpClient = { get<HttpClient>() },
+            storageClient = { HttpClientFactory.createStorageClient(platformHttpEngine()) },
+            apiBaseUrl = config.apiBaseUrl,
+        )
+    }
+    single { ImageEncoder() }
 
     viewModel { LoginViewModel(get()) }
     viewModel { RegisterViewModel(get()) }
@@ -61,7 +72,7 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
     // l'id del sentiero arriva dalla rotta (koinViewModel { parametersOf(id) })
     viewModel { (trailId: String) -> TrailDetailViewModel(trailId, get(), get(), get(), get()) }
     // trailId facoltativo: null se la segnalazione parte dalla mappa
-    viewModel { params -> ReportHazardViewModel(get(), params.getOrNull<String>()) }
+    viewModel { params -> ReportHazardViewModel(get(), get(), params.getOrNull<String>()) }
 }
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su

@@ -9,7 +9,14 @@ import geosentinel_mobile.shared.generated.resources.report_error_description
 import geosentinel_mobile.shared.generated.resources.report_error_location
 import geosentinel_mobile.shared.generated.resources.report_error_severity
 import geosentinel_mobile.shared.generated.resources.report_error_type
+import geosentinel_mobile.shared.generated.resources.report_photo_rejected_message
+import geosentinel_mobile.shared.generated.resources.report_photo_unreadable
 import it.unical.geosentinel_mobile.api.model.CreateHazardRequest
+import it.unical.geosentinel_mobile.api.model.InitUploadRequest
+import it.unical.geosentinel_mobile.api.model.MediaResponse
+import it.unical.geosentinel_mobile.media.data.MediaTarget
+import it.unical.geosentinel_mobile.media.data.MediaUploader
+import kotlin.coroutines.cancellation.CancellationException
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
@@ -38,17 +45,42 @@ data class ReportHazardUiState(
     val fieldErrors: Map<HazardField, UiMessage> = emptyMap(),
     val error: UiMessage? = null,
     val sent: Boolean = false,
+    // Foto allegate dopo l'invio (M4.2), nell'ordine in cui sono state scelte
+    val photos: List<PhotoUpload> = emptyList(),
+    val photoError: UiMessage? = null,
 ) {
     // niente posizione né descrizione nei log
     override fun toString() =
-        "ReportHazardUiState(type=$type, severity=$severity, submitting=$submitting, sent=$sent, fieldErrors=${fieldErrors.keys}, error=$error)"
+        "ReportHazardUiState(type=$type, severity=$severity, submitting=$submitting, sent=$sent, fieldErrors=${fieldErrors.keys}, error=$error, photos=$photos)"
 }
 
-/** Form della segnalazione di un pericolo (M4.1). [trailId] c'è se si parte dal dettaglio di un sentiero. */
-class ReportHazardViewModel(private val hazards: HazardRepository, private val trailId: String?) : ViewModel() {
+// Un limite dell'app, non del backend (che ha la quota di 1 GB per utente): bastano a mostrare il pericolo
+const val MAX_HAZARD_PHOTOS = 5
+
+enum class PhotoStatus { UPLOADING, READY, REJECTED, FAILED }
+
+/** Una foto della segnalazione. [jpeg] arriva dopo la ricodifica: serve alla miniatura e a "Riprova". */
+data class PhotoUpload(val id: Int, val status: PhotoStatus, val jpeg: ByteArray? = null) {
+    // niente byte nei log
+    override fun toString() = "PhotoUpload(id=$id, status=$status)"
+}
+
+/**
+ * Form della segnalazione di un pericolo (M4.1) e, dopo l'invio, le foto (M4.2): il backend accetta l'upload su
+ * `HAZARD_REPORT` solo da chi ha fatto la segnalazione, quindi servono l'id appena creato e la stessa sessione.
+ * [trailId] c'è se si parte dal dettaglio di un sentiero.
+ */
+class ReportHazardViewModel(
+    private val hazards: HazardRepository,
+    private val uploader: MediaUploader,
+    private val trailId: String?,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(ReportHazardUiState())
     val state: StateFlow<ReportHazardUiState> = _state.asStateFlow()
+
+    private var hazardId: String? = null
+    private var nextPhotoId = 0
 
     fun onTypeChange(value: CreateHazardRequest.Type) = edit(HazardField.TYPE) { copy(type = value) }
     fun onSeverityChange(value: CreateHazardRequest.Severity) = edit(HazardField.SEVERITY) { copy(severity = value) }
@@ -75,11 +107,70 @@ class ReportHazardViewModel(private val hazards: HazardRepository, private val t
             val result = hazards.report(type, severity, location, current.description, trailId)
             _state.update { state ->
                 result.fold(
-                    onSuccess = { state.copy(submitting = false, sent = true) },
+                    onSuccess = { hazard ->
+                        hazardId = hazard.id
+                        state.copy(submitting = false, sent = true)
+                    },
                     onFailure = { state.withServerError(it).copy(submitting = false) },
                 )
             }
         }
+    }
+
+    /** Nuova foto per la segnalazione inviata. [encode] è la ricodifica in JPEG della foto scelta (ImageEncoder). */
+    fun addPhoto(encode: suspend () -> ByteArray) {
+        val hazardId = hazardId ?: return
+        if (_state.value.photos.size >= MAX_HAZARD_PHOTOS) return
+        val photoId = nextPhotoId++
+        _state.update { it.copy(photos = it.photos + PhotoUpload(photoId, PhotoStatus.UPLOADING), photoError = null) }
+        viewModelScope.launch {
+            val jpeg = try {
+                encode()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // foto illeggibile (formato strano, file sparito): non c'è niente da riprovare
+                _state.update { state ->
+                    state.copy(photos = state.photos.filterNot { it.id == photoId }, photoError = UiMessage(Res.string.report_photo_unreadable))
+                }
+                return@launch
+            }
+            // la miniatura compare subito, mentre l'upload parte
+            _state.update { state -> state.copy(photos = state.photos.map { if (it.id == photoId) it.copy(jpeg = jpeg) else it }) }
+            upload(hazardId, photoId, jpeg)
+        }
+    }
+
+    fun retryPhoto(photoId: Int) {
+        val hazardId = hazardId ?: return
+        val photo = _state.value.photos.firstOrNull { it.id == photoId }
+        // solo le foto non partite: un doppio tocco trova già UPLOADING
+        val jpeg = photo?.jpeg?.takeIf { photo.status == PhotoStatus.FAILED } ?: return
+        setPhotoStatus(photoId, PhotoStatus.UPLOADING)
+        _state.update { it.copy(photoError = null) }
+        viewModelScope.launch { upload(hazardId, photoId, jpeg) }
+    }
+
+    private suspend fun upload(hazardId: String, photoId: Int, jpeg: ByteArray) {
+        uploader.upload(jpeg, MediaTarget(InitUploadRequest.EntityType.HAZARD_REPORT, hazardId)).fold(
+            onSuccess = { media ->
+                if (media.status == MediaResponse.Status.READY) {
+                    setPhotoStatus(photoId, PhotoStatus.READY)
+                } else {
+                    // QUARANTINED: il server non l'ha riconosciuta come immagine, ripeterla non cambia l'esito
+                    setPhotoStatus(photoId, PhotoStatus.REJECTED)
+                    _state.update { it.copy(photoError = UiMessage(Res.string.report_photo_rejected_message)) }
+                }
+            },
+            onFailure = { failure ->
+                setPhotoStatus(photoId, PhotoStatus.FAILED)
+                _state.update { it.copy(photoError = (failure as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic)) }
+            },
+        )
+    }
+
+    private fun setPhotoStatus(photoId: Int, status: PhotoStatus) = _state.update { state ->
+        state.copy(photos = state.photos.map { if (it.id == photoId) it.copy(status = status) else it })
     }
 
     private fun localErrors(state: ReportHazardUiState): Map<HazardField, UiMessage> = buildMap {

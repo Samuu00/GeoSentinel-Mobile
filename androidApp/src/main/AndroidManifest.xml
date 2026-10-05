@@ -25,6 +25,17 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <!-- Foto dalla fotocamera (M4.2): l'app della fotocamera scrive in cache/camera/ attraverso questo Uri.
+             Niente permesso CAMERA: dichiararlo obbligherebbe a chiederlo anche per l'intent di sistema -->
+        <provider
+                android:name="androidx.core.content.FileProvider"
+                android:authorities="${applicationId}.photos"
+                android:exported="false"
+                android:grantUriPermissions="true">
+            <meta-data
+                    android:name="android.support.FILE_PROVIDER_PATHS"
+                    android:resource="@xml/photo_paths"/>
+        </provider>
     </application>
 
 </manifest>

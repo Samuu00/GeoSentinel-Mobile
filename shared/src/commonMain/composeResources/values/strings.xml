@@ -221,5 +221,16 @@
     <string name="report_sent_title">Segnalazione inviata</string>
     <string name="report_sent_body">Grazie. Un gestore del parco la verificherà: dopo comparirà tra i pericoli del sentiero.</string>
     <string name="report_sent_done">Fatto</string>
+    <string name="report_photos">Foto</string>
+    <string name="report_photos_hint">Una foto aiuta il gestore a capire il pericolo. La posizione salvata nella foto non viene inviata.</string>
+    <string name="report_photo_take">Scatta</string>
+    <string name="report_photo_pick">Galleria</string>
+    <string name="report_photo_uploading">Foto %1$d, in invio</string>
+    <string name="report_photo_ready">Foto %1$d, caricata</string>
+    <string name="report_photo_rejected">Foto %1$d, non accettata</string>
+    <string name="report_photo_failed">Foto %1$d, non caricata</string>
+    <string name="report_photo_retry">Riprova</string>
+    <string name="report_photo_rejected_message">Una foto non è stata accettata: il server non la riconosce come immagine.</string>
+    <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un\'altra.</string>
 
 </resources>

@@ -5,6 +5,12 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
+import geosentinel_mobile.shared.generated.resources.report_photos
+import geosentinel_mobile.shared.generated.resources.report_photos_hint
+import it.unical.geosentinel_mobile.media.data.ImageEncoder
+import it.unical.geosentinel_mobile.media.ui.rememberCameraCapture
+import it.unical.geosentinel_mobile.media.ui.rememberPhotoPicker
+import org.koin.compose.koinInject
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -126,12 +132,31 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
     val state by viewModel.state.collectAsStateWithLifecycle()
 
     if (state.sent) {
+        val encoder = koinInject<ImageEncoder>()
+        val pickPhoto = rememberPhotoPicker { picked -> viewModel.addPhoto { encoder.toJpeg(picked) } }
+        val takePhoto = rememberCameraCapture { captured -> viewModel.addPhoto { encoder.toJpeg(captured) } }
+        // "Fatto" chiude la schermata e annullerebbe gli upload in corso
+        val uploading = state.photos.any { it.status == PhotoStatus.UPLOADING }
         FormScaffold(
             onBack = onBack,
             title = Res.string.report_sent_title,
             body = Res.string.report_sent_body,
-            actions = { PrimaryPillButton(text = stringResource(Res.string.report_sent_done), onClick = onBack) },
-        ) {}
+            actions = {
+                PrimaryPillButton(text = stringResource(Res.string.report_sent_done), onClick = onBack, loading = uploading)
+            },
+        ) {
+            Field(Res.string.report_photos, error = null) {
+                Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Text(
+                        stringResource(Res.string.report_photos_hint),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    HazardPhotos(state.photos, onTakePhoto = takePhoto, onPickPhoto = pickPhoto, onRetry = viewModel::retryPhoto)
+                }
+            }
+            FormErrorBanner(state.photoError?.resolve())
+        }
         return
     }
 

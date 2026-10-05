@@ -885,9 +885,45 @@ class MediaUploader(mediaApi: MediaApi, storageClient: HttpClient) {
   `Content-Length` (niente chunked), infine `confirmUpload`.
 - Per MinIO si usa un `HttpClient` separato, senza il plugin `Auth`: il bearer non deve arrivare allo storage.
 - Dopo `expiresAt` (10 minuti) si riparte da `createUploadRequest`. `confirmUpload` si può ripetere.
+- **Scritta (05/10, anticipata rispetto a M4.3/M6; prima bozza dell'utente, corretta e completata da Claude su richiesta)**:
+  - Contratti cambiati: `ImageEncoder()` senza argomenti in tutte e due le piattaforme (così Koin lo crea in common);
+    `PickedImage` è Uri + `ContentResolver` dell'applicazione su Android, `NSData` su iOS. `MediaTarget(type, entityId)`
+    usa l'enum generato `InitUploadRequest.EntityType` (tolto `MediaEntityType` scritto a mano). `MediaUploader` riceve i
+    client come funzioni (come i repository) e un `Clock` per i test.
+  - `HttpClientFactory.createStorageClient(engine)`: niente `Auth`, niente redirect, niente log, timeout di 120 s.
+    Multipart con un `ByteArray`: Ktor conosce la lunghezza e manda `Content-Length`.
+  - Storage rifiutato dopo `expiresAt` → una nuova richiesta di upload, una volta. Conferma ritentata (fino a 3 volte)
+    solo su errore di rete: ricominciare caricherebbe la foto due volte. Oltre 10 MB non parte (`media-payload-too-large`).
+  - Encoder Android: dimensioni con `inJustDecodeBounds` (la bozza lanciava sempre: con quel flag `decodeStream`
+    restituisce null), orientamento EXIF con `android.media.ExifInterface` (API 24, niente dipendenza), campionamento a
+    potenze di 2 e scala fine, su `Dispatchers.IO`. iOS: `UIImage.imageWithData`, sempre ridisegnata (orientamento nei
+    pixel, metadati fuori), `UIImageJPEGRepresentation`.
+  - Picker: `media/ui/PhotoPicker.kt`, `rememberPhotoPicker(onPicked)` expect/actual: Photo Picker (`activity-compose`
+    ora anche in `shared`) e `PHPickerViewController` ("public.image", anche HEIC). Nessun permesso sulla galleria.
+  - Dove: nella schermata "Segnalazione inviata" (serve l'id appena creato), sezione Foto, fino a 5
+    (`MAX_HAZARD_PHOTOS`); "Fatto" in attesa mentre un upload è in corso. `ReportHazardViewModel.addPhoto(encode)` /
+    `retryPhoto(id)`; `PhotoUpload` tiene il JPEG (miniatura e Riprova).
+  - Interfaccia (05/10, `hazard/ui/HazardPhotos.kt`, rivista dopo il primo giro: le righe "Foto 1: caricata" erano
+    poco chiare): miniature da 88 dp che vanno a capo (`FlowRow`, niente scorrimento con foto tagliate), badge
+    nell'angolo con una piccola molla: anello in invio, **spunta verde** (`primary`) caricata, ✕ prugna non accettata
+    (con il motivo nel banner), freccia prugna per riprovare (si tocca la miniatura). Sopra le miniature una sola barra
+    come i campi dei form (card a 20 dp, filo `outlineVariant`) divisa a metà: "Scatta" | "Galleria" (solo Galleria senza
+    fotocamera); resta ferma mentre le foto si aggiungono sotto. Lo stato è detto a parole a TalkBack/VoiceOver ("Foto 1, caricata").
+  - **Fotocamera** (`rememberCameraCapture`, null senza fotocamera): Android `TakePicture` con un `FileProvider` di
+    androidApp (`${applicationId}.photos`, solo `cache/camera/`), senza il permesso `CAMERA`; iOS
+    `UIImagePickerController` con `NSCameraUsageDescription` in `Info.plist`.
+  - Verificata sull'emulatore (dopo l'allargamento del disco dell'AVD a 8 GB): foto dalla fotocamera e dalla galleria
+    con la spunta, `READY` sul server, senza EXIF.
+  - Test: `MediaUploaderTest` (8: flusso e bearer solo verso l'API, ordine dei campi e `Content-Length`, QUARANTINED,
+    scadenza, rifiuto dello storage, rete, conferma ritentata, 10 MB) e 6 test delle foto in `ReportHazardViewModelTest`.
+    178 test host.
+  - Aperti: compilazione iOS (picker e encoder scritti senza Mac: li controlla il job `ios`) e HEIC sul simulatore.
 - Checkpoint (backend locale e MinIO del compose, con `MINIO_PUBLIC_ENDPOINT=http://10.0.2.2:9000`):
-  - [ ] una foto dalla galleria dell'emulatore arriva a `READY` ed è visibile nel dettaglio della segnalazione.
-  - [ ] il JPEG caricato non ha EXIF GPS (controllo sul file scaricato).
+  - [x] (05/10, `Medium_Phone`, avvio a freddo) una foto dalla galleria dell'emulatore arriva a `READY` dalla schermata
+    "Segnalazione inviata": "Foto 1: caricata", `GET /media/my` dà `READY`, `HAZARD_REPORT` con l'id della segnalazione
+    appena creata. Visibile nel dettaglio della segnalazione quando c'è (M4.3).
+  - [x] il JPEG caricato non ha EXIF GPS (controllo sul file scaricato): foto di prova 4000×3000 con GPS in Sila e
+    orientamento 6, scaricata dall'URL firmato è 1920×2560, ruotata nel verso giusto, nessun tag EXIF.
   - [ ] una foto HEIC dal simulatore iOS arriva come JPEG (serve il Mac).
   - [ ] chiude il checkpoint aperto del backend (M7) "foto da emulatore/simulatore → `READY`".
 
