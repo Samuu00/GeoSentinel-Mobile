@@ -61,7 +61,10 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.sos_button
 import geosentinel_mobile.shared.generated.resources.sos_call_112
@@ -78,6 +81,7 @@ import geosentinel_mobile.shared.generated.resources.sos_guest
 import geosentinel_mobile.shared.generated.resources.sos_hold
 import geosentinel_mobile.shared.generated.resources.sos_hold_description
 import geosentinel_mobile.shared.generated.resources.sos_intro
+import geosentinel_mobile.shared.generated.resources.sos_keep_open
 import geosentinel_mobile.shared.generated.resources.sos_locating
 import geosentinel_mobile.shared.generated.resources.sos_login
 import geosentinel_mobile.shared.generated.resources.sos_login_question
@@ -120,11 +124,13 @@ import kotlin.time.Duration.Companion.seconds
 private val FixTimeout = 10.seconds
 // Senza risposta dopo 30 s "Chiama 112" passa in primo piano
 private val LateAfter = 30.seconds
+// Finché mancano le push (M7) lo stato si rilegge ogni 30 s con la schermata aperta (M6.2)
+private val RefreshEvery = 30.seconds
 private const val HoldMillis = 3_000
 private const val EmergencyNumber = "112"
 
 /**
- * SOS (M6.1). Niente paesaggio in testata: qui conta solo lo stato. Lo stato dice sempre se il soccorso ha la
+ * SOS (M6.1, stato aggiornato in M6.2). Niente paesaggio in testata: qui conta solo lo stato. Lo stato dice sempre se il soccorso ha la
  * richiesta; "Chiama 112" è sempre visibile e passa in primo piano (pieno, rosso) quando l'app non basta: ospite,
  * sessione scaduta, invio senza risposta dopo 30 s, risposta negativa, posizione assente.
  */
@@ -157,6 +163,19 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
         if (since != null) {
             delay(LateAfter - (Clock.System.now() - since))
             late = true
+        }
+    }
+
+    // la posizione la manda App (SosLocationUpdates); qui si rilegge lo stato, per vedere la squadra anche senza push
+    val raised = state is SosState.Raised
+    val lifecycleOwner = LocalLifecycleOwner.current
+    LaunchedEffect(raised, lifecycleOwner) {
+        if (!raised) return@LaunchedEffect
+        lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                delay(RefreshEvery)
+                viewModel.refresh()
+            }
         }
     }
 
@@ -288,6 +307,7 @@ private fun RaisedStatus(alert: SosAlertResponse) {
         StatusTitle(stringResource(Res.string.sos_raised_title))
     }
     Body(stringResource(Res.string.sos_raised_body))
+    Body(stringResource(Res.string.sos_keep_open))
 }
 
 // "Chiama 112": 72 dp (azione d'emergenza, §2). In primo piano pieno e rosso, altrimenti con il solo bordo rosso.

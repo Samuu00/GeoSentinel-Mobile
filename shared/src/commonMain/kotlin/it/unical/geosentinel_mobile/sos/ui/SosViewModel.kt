@@ -28,6 +28,9 @@ class SosViewModel(private val controller: SosController, val session: StateFlow
         viewModelScope.launch { controller.raise(at, medicalNotes) }
     }
 
+    /** M6.2: rilegge l'allerta attiva (la chiama la schermata ogni 30 s, finché è aperta). */
+    suspend fun refresh() = controller.refresh()
+
     fun cancelSos() {
         if (_cancel.value.running) return
         _cancel.value = CancelUi(running = true)

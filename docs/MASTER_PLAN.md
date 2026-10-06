@@ -1162,10 +1162,32 @@ class SosController(sos: SosRepository, outbox: OutboxDao, ownerId: suspend () -
 - Lo stato si aggiorna dalle push (M7) e, se le push non arrivano, da `getMyActiveSos` ogni 30 s mentre la schermata
   è aperta.
 - Annullamento con conferma (`cancelSos`).
-- Checkpoint:
-  - [ ] l'operatore vede la posizione aggiornarsi (`locationUpdatedAt` recente).
-  - [ ] dopo il dispatch dell'operatore, la schermata dell'escursionista mostra la squadra (`assignedTeam`) entro 30 s
-    anche senza push.
+```kotlin
+// in SosController (06/10): la posizione arriva dalla UI (A11); entrambe girano nello scope del controller (IO)
+suspend fun updateLocation(at: GeoPoint)   // solo con Raised; la risposta aggiorna lo stato; 404/422 → si rilegge active()
+suspend fun refresh()                      // solo con Raised: getMyActiveSos, 404 → Idle, rete → stato invariato
+```
+- **Fatto (06/10)**: bozza dell'utente (`SosRepository.updateSosLocatio`, `AppLifecycleObserver`) corretta e completata da
+  Claude su richiesta. Non compilava: parametri del client generato sbagliati (`id`, `UpdateSosLocationRequest(newLocation)`),
+  osservatore senza `@Composable` e con `LifecycleEventObserver` come tipo dell'owner; `withContext(IO)` incoerente con il
+  resto del repository. L'osservatore è sostituito da `repeatOnLifecycle(STARTED)` (già in `lifecycle-runtime-compose`):
+  riparte a ogni ritorno in primo piano, quindi invio subito e poi ogni 60 s.
+  - `SosLocationUpdates` (in `App`, solo con `SosState.Raised`): provider creato solo lì, così il GPS lavora solo con un
+    SOS attivo; vale su ogni schermata, non solo su quella dell'SOS. Senza permesso o fix si salta il giro.
+  - `SosScreen`: `refresh()` ogni 30 s con la schermata aperta e l'app in primo piano; testo "Tieni l'app aperta".
+  - La richiesta gira senza il lock del controller (un annullamento non aspetta una rete lenta); il risultato si applica
+    solo se l'allerta è ancora quella.
+  - Allerta chiusa dal soccorso: torna "Idle" (la schermata ripropone il pulsante). Un messaggio "il soccorso ha chiuso
+    l'allerta" arriva con le push (M7). Il contratto di `PUT /sos/{id}/location` non elenca il 422 che il dominio dà
+    su un'allerta chiusa (lacuna dell'openapi del backend).
+  - `SosControllerTest` (21). 248 test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 06/10):
+  - [x] l'operatore vede la posizione aggiornarsi (`locationUpdatedAt` recente): GPS spostato con `geo fix`, aggiornamento
+    dopo 60 s anche dalla mappa e subito al ritorno in primo piano; nessun invio in background. Richieste su thread IO,
+    nel logcat solo gli URL (niente coordinate).
+  - [x] dopo il dispatch dell'operatore, la schermata dell'escursionista mostra la squadra (`assignedTeam`) entro 30 s
+    anche senza push ("CNSAS Stazione Sila (AQUILA-1)"); dopo il `resolve` torna al pulsante entro 30 s.
+  - [ ] (con il Mac) `SosLocationUpdates` e polling sul simulatore iPhone.
 
 ### Milestone 7: push e soccorso
 

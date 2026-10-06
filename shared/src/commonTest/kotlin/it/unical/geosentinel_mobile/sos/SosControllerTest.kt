@@ -6,6 +6,7 @@ import io.ktor.http.HttpMethod
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
+import it.unical.geosentinel_mobile.api.model.SosAlertResponse
 import it.unical.geosentinel_mobile.core.db.ActionKind
 import it.unical.geosentinel_mobile.core.db.FakeOutboxDao
 import it.unical.geosentinel_mobile.core.db.PendingActionEntity
@@ -52,6 +53,11 @@ class SosControllerTest {
     private val created = mutableMapOf<String, String>() // chiave -> id dell'allerta
     private val cancelled = mutableListOf<String>()
     private var cancelOffline = false
+    // M6.2: stato dell'allerta sul server, PUT della posizione ricevuti (id, body), rete assente per PUT e GET active
+    private var serverStatus = "ACTIVE"
+    private val locationPuts = mutableListOf<Pair<String, String>>()
+    private var locationOffline = false
+    private var activeOffline = false
 
     private fun alertJson(id: String, status: String = "ACTIVE") =
         """{"id":"$id","hikerId":"$owner","location":{"lat":39.278,"lon":16.452},"status":"$status","createdAt":"2026-10-06T10:00:00Z","locationUpdatedAt":"2026-10-06T10:00:00Z"}"""
@@ -78,8 +84,17 @@ class SosControllerTest {
                     }
                 }
                 request.method == HttpMethod.Get && path == "/api/v1/sos/active" -> {
+                    if (activeOffline) throw IOException("rete assente")
                     val id = activeOnServer
-                    if (id == null) with(backend) { problem(HttpStatusCode.NotFound, "not-found") } else respond(alertJson(id), HttpStatusCode.OK, json)
+                    if (id == null) with(backend) { problem(HttpStatusCode.NotFound, "not-found") } else respond(alertJson(id, serverStatus), HttpStatusCode.OK, json)
+                }
+                request.method == HttpMethod.Put && path.startsWith("/api/v1/sos/") && path.endsWith("/location") -> {
+                    val id = path.removePrefix("/api/v1/sos/").removeSuffix("/location")
+                    locationPuts += id to (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
+                    if (locationOffline) throw IOException("rete assente")
+                    // chiusa dal soccorso: il dominio la rifiuta con 422
+                    if (activeOnServer != id) with(backend) { problem(HttpStatusCode.UnprocessableEntity, "business-rule") }
+                    else respond(alertJson(id, serverStatus), HttpStatusCode.OK, json)
                 }
                 request.method == HttpMethod.Delete && path.startsWith("/api/v1/sos/") -> {
                     if (cancelOffline) throw IOException("rete assente")
@@ -302,5 +317,84 @@ class SosControllerTest {
         assertEquals("3f1c-utente", jwtSubject("eyJhbGciOiJIUzI1NiJ9.$payload.firma"))
         assertNull(jwtSubject("a1"))
         assertNull(jwtSubject("x.%%%.y"))
+    }
+
+    // ---- Posizione e stato (M6.2) ----
+
+    private suspend fun TestScope.raised(): SosController {
+        val (sos) = controller()
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Raised }
+        return sos
+    }
+
+    @Test
+    fun `la posizione nuova va all'allerta attiva e la risposta aggiorna lo stato`() = runTest {
+        val sos = raised()
+        serverStatus = "DISPATCHED"
+
+        sos.updateLocation(GeoPoint(lat = 39.31, lon = 16.47))
+
+        val (id, body) = locationPuts.single()
+        assertEquals("s1", id)
+        assertTrue(""""newLocation":{""" in body && """"lat":39.31""" in body && """"lon":16.47""" in body)
+        assertEquals(SosAlertResponse.Status.DISPATCHED, assertIs<SosState.Raised>(sos.state.value).alert.status)
+    }
+
+    @Test
+    fun `senza allerta attiva la posizione non parte`() = runTest {
+        val (sos) = controller()
+        sosOffline = true
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Sending }
+
+        sos.updateLocation(here)
+
+        assertTrue(locationPuts.isEmpty(), "in coda non c'è ancora un id")
+    }
+
+    @Test
+    fun `posizione senza rete lascia l'allerta com'è`() = runTest {
+        val sos = raised()
+        locationOffline = true
+
+        sos.updateLocation(here)
+
+        assertEquals("s1", assertIs<SosState.Raised>(sos.state.value).alert.id)
+    }
+
+    @Test
+    fun `allerta chiusa dal soccorso con il 422 sulla posizione si torna a Idle`() = runTest {
+        val sos = raised()
+        activeOnServer = null // risolta dall'operatore
+
+        sos.updateLocation(here)
+
+        assertIs<SosState.Idle>(sos.state.value)
+    }
+
+    @Test
+    fun `il refresh porta la squadra in arrivo senza push`() = runTest {
+        val sos = raised()
+        serverStatus = "DISPATCHED"
+
+        sos.refresh()
+
+        assertEquals(SosAlertResponse.Status.DISPATCHED, assertIs<SosState.Raised>(sos.state.value).alert.status)
+    }
+
+    @Test
+    fun `refresh senza rete non cambia nulla e senza allerta non chiama`() = runTest {
+        val sos = raised()
+        activeOffline = true
+
+        sos.refresh()
+        assertIs<SosState.Raised>(sos.state.value)
+
+        activeOffline = false
+        assertTrue(sos.cancel().isSuccess)
+        activeOffline = true // se il refresh chiamasse il server, la rete assente lancerebbe
+        sos.refresh()
+        assertIs<SosState.Idle>(sos.state.value)
     }
 }

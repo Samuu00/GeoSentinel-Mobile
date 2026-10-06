@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.sos.ui
 
+import it.unical.geosentinel_mobile.api.model.SosAlertResponse
 import it.unical.geosentinel_mobile.core.db.ActionKind
 import it.unical.geosentinel_mobile.core.db.OutboxDao
 import it.unical.geosentinel_mobile.core.db.PendingActionEntity
@@ -29,7 +30,7 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * L'SOS dell'escursionista (M6.1). Una sola istanza per processo (singleton Koin) con un suo [scope]: l'invio va avanti
+ * L'SOS dell'escursionista (M6.1, posizione e stato in M6.2). Una sola istanza per processo (singleton Koin) con un suo [scope]: l'invio va avanti
  * anche se l'utente lascia la schermata. La regola è una: l'utente deve sempre sapere se il soccorso ha la richiesta,
  * e [state] lo dice.
  *
@@ -93,7 +94,40 @@ class SosController(
             startSending(queued)
             return@withLock
         }
-        sos.active().fold(
+        applyActive(sos.active())
+    }
+
+    /**
+     * M6.2: manda la posizione nuova dell'allerta attiva (dalla UI, ogni 60 s in primo piano). La risposta aggiorna anche
+     * lo stato (es. la squadra assegnata). Senza allerta non fa nulla; un errore di rete si lascia al giro successivo.
+     * Gira nello [scope] del controller (IO, non il thread della UI che la chiama) e senza il lock durante la richiesta,
+     * così un annullamento non aspetta una rete lenta.
+     */
+    suspend fun updateLocation(at: GeoPoint): Unit = scope.async {
+        val alertId = raisedAlertId() ?: return@async
+        val result = sos.updateLocation(alertId, at)
+        lock.withLock {
+            if (raisedAlertId() != alertId) return@withLock // annullata (o cambiata) nel frattempo
+            result.fold(
+                onSuccess = { _state.value = SosState.Raised(it) },
+                // 404 o 422: l'allerta non è più attiva (chiusa dal soccorso), si chiede al server com'è adesso
+                onFailure = { if (it.apiError().let { e -> e is ApiError.NotFound || e is ApiError.BusinessRule }) applyActive(sos.active()) },
+            )
+        }
+    }.await()
+
+    /** M6.2: rilegge l'allerta attiva (stato, squadra) se ce n'è una. Ogni 30 s con la schermata aperta, finché mancano le push (M7). */
+    suspend fun refresh(): Unit = scope.async {
+        val alertId = raisedAlertId() ?: return@async
+        val result = sos.active()
+        lock.withLock { if (raisedAlertId() == alertId) applyActive(result) }
+    }.await()
+
+    private fun raisedAlertId(): String? = (_state.value as? SosState.Raised)?.alert?.id
+
+    // 404 = nessuna allerta attiva (chiusa dal soccorso o annullata altrove); senza rete lo stato resta com'è
+    private fun applyActive(result: Result<SosAlertResponse>) {
+        result.fold(
             onSuccess = { _state.value = SosState.Raised(it) },
             onFailure = { if (it.apiError() is ApiError.NotFound) _state.value = SosState.Idle },
         )

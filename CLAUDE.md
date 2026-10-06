@@ -27,7 +27,9 @@ pericoli sulla mappa e "Pericoli vicini" (`HazardMapViewModel`), 203 test host, 
 database versione 2 con AutoMigration, chiave legata all'utente), form "Prenota", "Le mie prenotazioni", 227 test host,
 verificata sull'emulatore. M6.1 fatta (06/10): SOS con l'outbox (`SosController` singleton, owner anche dal `sub` del
 JWT senza profilo), pressione di 3 s nella schermata, "Chiama 112" con `rememberDialer`, 242 test host, verificata
-sull'emulatore (offline → una sola allerta dopo il riavvio). Prossimo: M6.2 (posizione e stato).
+sull'emulatore (offline → una sola allerta dopo il riavvio). M6.2 fatta (06/10): posizione ogni 60 s in primo piano
+(`SosLocationUpdates` in `App`, `repeatOnLifecycle`) e stato ogni 30 s dalla schermata SOS, 248 test host, verificata
+sull'emulatore (operatore vede la posizione, squadra entro 30 s senza push). Prossimo: review di M6 (§6), poi M7.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

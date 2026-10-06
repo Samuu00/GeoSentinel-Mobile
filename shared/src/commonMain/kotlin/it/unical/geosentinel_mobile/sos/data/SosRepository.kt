@@ -5,6 +5,8 @@ import it.unical.geosentinel_mobile.api.SOSAlertsApi
 import it.unical.geosentinel_mobile.api.model.GeoPointDto
 import it.unical.geosentinel_mobile.api.model.RaiseSosRequest
 import it.unical.geosentinel_mobile.api.model.SosAlertResponse
+import it.unical.geosentinel_mobile.api.model.UpdateSosLocationRequest
+import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.network.apiCall
 
 /** Le rotte SOS dell'escursionista. La logica (outbox, retry, stato) sta in `SosController`. */
@@ -21,6 +23,11 @@ class SosRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
             RaiseSosRequest(location = GeoPointDto(lat = payload.lat, lon = payload.lon), medicalNotes = payload.medicalNotes),
             idempotencyKey = idempotencyKey,
         )
+    }
+
+    /** M6.2: la posizione nuova di un'allerta attiva. 404 se non è sua, 422 se è già chiusa. Risponde con l'allerta. */
+    suspend fun updateLocation(alertId: String, at: GeoPoint): Result<SosAlertResponse> = apiCall {
+        sosApi.updateSosLocation(alertId, UpdateSosLocationRequest(newLocation = GeoPointDto(lat = at.lat, lon = at.lon)))
     }
 
     suspend fun cancel(alertId: String): Result<Unit> = apiCall { sosApi.cancelSos(alertId) }

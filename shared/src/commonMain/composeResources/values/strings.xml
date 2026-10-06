@@ -26,6 +26,7 @@
     <string name="sos_sending_late">Sono passati più di 30 secondi: chiama il 112.</string>
     <string name="sos_raised_title">Il soccorso ha ricevuto la richiesta</string>
     <string name="sos_raised_body">Resta dove sei e tieni il telefono acceso: il soccorso ha la tua posizione.</string>
+    <string name="sos_keep_open">Tieni l'app aperta: la posizione si aggiorna ogni minuto solo mentre l'app è in primo piano.</string>
     <string name="sos_dispatched_title">Una squadra sta arrivando</string>
     <string name="sos_dispatched_team">Squadra: %1$s</string>
     <string name="sos_failed">La richiesta non è arrivata al soccorso. Chiama il 112.</string>

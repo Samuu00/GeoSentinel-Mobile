@@ -108,7 +108,9 @@ import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
 import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.sos.data.SosState
 import it.unical.geosentinel_mobile.sos.ui.SosController
+import it.unical.geosentinel_mobile.sos.ui.SosLocationUpdates
 import it.unical.geosentinel_mobile.sos.ui.SosScreen
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -152,6 +154,9 @@ fun App() {
         if (loading) return@LaunchedEffect
         if (loggedIn) sos.restore() else sos.reset()
     }
+    // M6.2: con un'allerta attiva la posizione va al soccorso ogni 60 s, in primo piano e su ogni schermata
+    val sosState by sos.state.collectAsState()
+    if (sosState is SosState.Raised) SosLocationUpdates(sos)
     LaunchedEffect(role, destination, loading) {
         if (loading) return@LaunchedEffect
         val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
