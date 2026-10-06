@@ -154,6 +154,16 @@ class SessionManager(
 
     override suspend fun getTokens(): AuthTokens? = readTokens()
 
+    /**
+     * L'id dell'utente loggato, anche prima di aver letto il profilo (avvio senza rete): allora dal `sub` del token,
+     * che il backend riempie con lo stesso id. Null da ospite o con la sessione scaduta. Serve all'SOS (M6.1), che
+     * con poca rete non può aspettare `GET /users/me`.
+     */
+    suspend fun currentUserId(): String? = when (val current = _state.value) {
+        is SessionState.LoggedIn -> current.profile?.id ?: readTokens()?.accessToken?.let(::jwtSubject)
+        else -> null
+    }
+
     // Tiene il mutex per tutta la richiesta: login, logout, cambio password e cancellazione scrivono lo store prima o
     // dopo, mai a metà di un refresh (niente sessione riscritta dopo un logout, né una nuova chiusa da un 401 vecchio).
     override suspend fun refreshTokens(refreshToken: String): AuthTokens? = refreshMutex.withLock {

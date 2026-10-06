@@ -35,7 +35,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -79,8 +78,6 @@ import geosentinel_mobile.shared.generated.resources.placeholder_management_body
 import geosentinel_mobile.shared.generated.resources.placeholder_management_title
 import geosentinel_mobile.shared.generated.resources.placeholder_map_body
 import geosentinel_mobile.shared.generated.resources.placeholder_map_title
-import geosentinel_mobile.shared.generated.resources.placeholder_sos_body
-import geosentinel_mobile.shared.generated.resources.placeholder_sos_title
 import geosentinel_mobile.shared.generated.resources.sos_button
 import geosentinel_mobile.shared.generated.resources.sos_button_description
 import it.unical.geosentinel_mobile.auth.ui.LoginScreen
@@ -111,6 +108,8 @@ import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
 import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.sos.ui.SosController
+import it.unical.geosentinel_mobile.sos.ui.SosScreen
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
@@ -142,9 +141,17 @@ fun App() {
     val bookings = koinInject<BookingRepository>()
     val userId = (sessionState as? SessionState.LoggedIn)?.profile?.id
     LaunchedEffect(userId) { if (userId != null) bookings.resendPending(userId) }
+    // SOS (M6.1): da loggati riparte quello rimasto in coda o si rilegge l'allerta attiva (anche senza profilo letto:
+    // con poca rete non si aspetta /users/me); da ospite o con la sessione chiusa si smette di inviare
+    val sos = koinInject<SosController>()
+    val loggedIn = sessionState is SessionState.LoggedIn
     // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa
     // (non durante il caricamento: si vedrebbe GUEST e una scheda del personale ripristinata verrebbe chiusa)
     val loading = sessionState == SessionState.Loading
+    LaunchedEffect(loggedIn, loading) {
+        if (loading) return@LaunchedEffect
+        if (loggedIn) sos.restore() else sos.reset()
+    }
     LaunchedEffect(role, destination, loading) {
         if (loading) return@LaunchedEffect
         val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
@@ -170,7 +177,7 @@ fun App() {
                 }
             },
             floatingActionButton = {
-                // Solo sopra la mappa (§2). Per l'ospite la schermata propone 112 e accesso (M6).
+                // Solo sopra la mappa (§2). Il tocco apre la schermata, dove l'SOS parte tenendo premuto 3 s (M6.1).
                 if (destination?.hasRoute<Route.Map>() == true) {
                     SosButton { navController.navigate(Route.SosEmergency) }
                 }
@@ -351,13 +358,7 @@ fun App() {
                     popEnterTransition = { EnterTransition.None },
                     popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
                 ) {
-                    PlaceholderScreen(
-                        Icons.Filled.Warning,
-                        Res.string.placeholder_sos_title,
-                        Res.string.placeholder_sos_body,
-                        emergency = true,
-                        onBack = { navController.popBackStack() },
-                    )
+                    SosScreen(onBack = { navController.popBackStack() }, onLogin = { navController.navigate(Route.Login) })
                 }
             }
         }
@@ -443,7 +444,7 @@ private fun SosButton(onClick: () -> Unit) {
     val description = stringResource(Res.string.sos_button_description)
     val haptics = LocalHapticFeedback.current
     // Capsula con la scritta "SOS": si capisce subito, anche al sole. 72 dp = azione d'emergenza (§2).
-    // La pressione lunga di 3 secondi arriva in M6.
+    // Un tocco apre la schermata SOS e basta: lì l'invio vuole 3 secondi di pressione (niente SOS dalla tasca).
     Surface(
         onClick = {
             haptics.performHapticFeedback(HapticFeedbackType.LongPress)

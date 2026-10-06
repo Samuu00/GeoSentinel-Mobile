@@ -7,9 +7,9 @@ import it.unical.geosentinel_mobile.api.model.PagedModelBookingResponse
 import it.unical.geosentinel_mobile.core.db.ActionKind
 import it.unical.geosentinel_mobile.core.db.OutboxDao
 import it.unical.geosentinel_mobile.core.db.PendingActionEntity
-import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.network.apiCall
+import it.unical.geosentinel_mobile.core.network.isTransient
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.sync.Mutex
@@ -78,7 +78,7 @@ class BookingRepository(
                 outbox.delete(key)
                 BookingOutcome.Booked(result.getOrThrow())
             }
-            failure.isTransient() -> BookingOutcome.Queued
+            (failure as? ApiException)?.error?.isTransient() == true -> BookingOutcome.Queued
             else -> {
                 outbox.delete(key)
                 BookingOutcome.Rejected(failure)
@@ -91,13 +91,4 @@ class BookingRepository(
         apiCall { bookingsApi.findMyBookings(page = page, size = size) }
 
     suspend fun cancel(bookingId: String): Result<Unit> = apiCall { bookingsApi.cancelBooking(bookingId) }
-}
-
-// Senza risposta definitiva la chiave resta: rete, 429, 409 resource-busy, 5xx (il client ha già ritentato quelli che
-// il contratto permette) e 401 (sessione da rinnovare: dopo il login dello stesso utente la chiave vale ancora).
-// Ogni altro 4xx è definitivo e ripeterlo uguale non serve.
-private fun Throwable.isTransient(): Boolean = when (val error = (this as? ApiException)?.error) {
-    ApiError.Network, is ApiError.RateLimited, is ApiError.Server, is ApiError.Unauthorized -> true
-    is ApiError.Conflict -> error.slug == "resource-busy"
-    else -> false
 }

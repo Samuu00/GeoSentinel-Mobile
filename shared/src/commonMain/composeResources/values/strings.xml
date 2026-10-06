@@ -12,6 +12,33 @@
     <!-- SOS -->
     <string name="sos_button">SOS</string>
     <string name="sos_button_description">SOS, richiedi soccorso</string>
+    <string name="sos_title">Richiesta di soccorso</string>
+    <string name="sos_intro">Tieni premuto il pulsante per 3 secondi: il soccorso riceve la tua posizione.</string>
+    <string name="sos_hold">Tieni premuto</string>
+    <string name="sos_hold_description">Invia SOS. Tieni premuto 3 secondi</string>
+    <string name="sos_notes_label">Note mediche (facoltative)</string>
+    <string name="sos_notes_hint">Allergie, farmaci, ferite: le vede solo il soccorso.</string>
+    <string name="sos_locating">Cerco la tua posizione…</string>
+    <string name="sos_no_location">Posizione non disponibile: senza non si può inviare l’SOS. Attiva la posizione e riprova, o chiama il 112.</string>
+    <string name="sos_sending_title">Invio in corso</string>
+    <string name="sos_sending_body">Il soccorso NON ha ancora ricevuto la richiesta. Continuo a provare anche senza rete: resta dove sei.</string>
+    <string name="sos_sending_attempts">Tentativi senza risposta: %1$d</string>
+    <string name="sos_sending_late">Sono passati più di 30 secondi: chiama il 112.</string>
+    <string name="sos_raised_title">Il soccorso ha ricevuto la richiesta</string>
+    <string name="sos_raised_body">Resta dove sei e tieni il telefono acceso: il soccorso ha la tua posizione.</string>
+    <string name="sos_dispatched_title">Una squadra sta arrivando</string>
+    <string name="sos_dispatched_team">Squadra: %1$s</string>
+    <string name="sos_failed">La richiesta non è arrivata al soccorso. Chiama il 112.</string>
+    <string name="sos_guest">Per inviare un SOS dall’app serve l’accesso. Se sei in pericolo chiama subito il 112.</string>
+    <string name="sos_expired">La sessione è scaduta: accedi di nuovo per inviare l’SOS. Se sei in pericolo chiama subito il 112.</string>
+    <string name="sos_login_question">Hai un account?</string>
+    <string name="sos_login">Accedi</string>
+    <string name="sos_call_112">Chiama 112</string>
+    <string name="sos_cancel">Annulla SOS</string>
+    <string name="sos_cancel_dialog_title">Annullare l’SOS?</string>
+    <string name="sos_cancel_dialog_body">Il soccorso smette di cercarti. Annulla solo se non hai più bisogno di aiuto.</string>
+    <string name="sos_cancel_confirm">Sì, annulla</string>
+    <string name="sos_cancel_dismiss">No, mantieni</string>
 
     <!-- Schermate segnaposto, sostituite milestone per milestone -->
     <string name="placeholder_map_title">Mappa dei sentieri</string>
@@ -21,8 +48,6 @@
     <string name="placeholder_management_title">Gestione del parco</string>
     <string name="placeholder_management_body">Qui potrai verificare le segnalazioni e gestire sentieri, ticket e rifugi.</string>
     <string name="placeholder_profile_title">Profilo</string>
-    <string name="placeholder_sos_title">Richiesta di soccorso</string>
-    <string name="placeholder_sos_body">In caso di pericolo immediato chiama subito il 112.</string>
 
     <!-- Ruoli -->
     <string name="role_guest">Ospite</string>

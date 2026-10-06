@@ -10,8 +10,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import it.unical.geosentinel_mobile.api.model.BookingResponse
-import it.unical.geosentinel_mobile.core.db.ActionKind
-import it.unical.geosentinel_mobile.core.db.OutboxDao
+import it.unical.geosentinel_mobile.core.db.FakeOutboxDao
 import it.unical.geosentinel_mobile.core.db.PendingActionEntity
 import it.unical.geosentinel_mobile.core.session.FakeBackend
 import it.unical.geosentinel_mobile.core.session.TEST_BASE_URL
@@ -26,9 +25,6 @@ import it.unical.geosentinel_mobile.refuge.ui.BookingDone
 import it.unical.geosentinel_mobile.refuge.ui.MyBookingsViewModel
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
@@ -44,30 +40,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
-
-// L'outbox in memoria: la SQL vera di Room si prova sull'emulatore
-private class FakeOutboxDao : OutboxDao {
-    val rows = MutableStateFlow<Map<String, PendingActionEntity>>(emptyMap())
-
-    override suspend fun insert(action: PendingActionEntity) {
-        check(action.idempotencyKey !in rows.value) { "chiave già presente" }
-        rows.value += action.idempotencyKey to action
-    }
-
-    override suspend fun pending(kind: ActionKind, ownerId: String) =
-        rows.value.values.filter { it.kind == kind && it.ownerId == ownerId }.sortedBy { it.createdAt }
-
-    override fun observePending(kind: ActionKind, ownerId: String): Flow<List<PendingActionEntity>> =
-        rows.map { all -> all.values.filter { it.kind == kind && it.ownerId == ownerId }.sortedBy { it.createdAt } }
-
-    override suspend fun incrementAttempts(key: String) {
-        rows.value[key]?.let { rows.value += key to it.copy(attempts = it.attempts + 1) }
-    }
-
-    override suspend fun delete(key: String) {
-        rows.value -= key
-    }
-}
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BookingTest {

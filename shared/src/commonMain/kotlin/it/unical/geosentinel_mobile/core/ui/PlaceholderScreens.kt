@@ -35,7 +35,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.back
-import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
@@ -46,24 +45,16 @@ import org.jetbrains.compose.resources.stringResource
 private val ContentMaxWidth = 600.dp
 
 // Stato vuoto: il paesaggio in testata, poi titolo "da cartello" e testo, allineati a sinistra sul "terreno".
-// emergency = true solo per la schermata SOS: niente paesaggio, simbolo rosso (l'unico rosso oltre al pulsante).
 @Composable
 fun PlaceholderScreen(
     icon: ImageVector,
     title: StringResource,
     body: StringResource,
-    emergency: Boolean = false,
     onBack: (() -> Unit)? = null,
 ) {
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-            if (emergency) {
-                Spacer(Modifier.windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top)).height(88.dp))
-                Icon(icon, contentDescription = null, tint = EmergencyRed, modifier = Modifier.padding(horizontal = 28.dp).size(56.dp))
-                Spacer(Modifier.size(20.dp))
-            } else {
-                ForestHeader(Modifier.fillMaxWidth().height(340.dp))
-            }
+            ForestHeader(Modifier.fillMaxWidth().height(340.dp))
             Column(Modifier.padding(horizontal = 28.dp).widthIn(max = 480.dp)) {
                 Text(
                     text = stringResource(title),

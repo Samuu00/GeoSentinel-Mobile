@@ -1107,17 +1107,18 @@ richiesta.**
 
 **M6.1 Invio**
 ```kotlin
-class SosController(sosApi: SosApi, outbox: OutboxDao, location: LocationProvider) {
-    val state: StateFlow<SosState>   // Idle | Sending(attempt) | Active(alert) | Dispatched(alert) | Failed(reason)
-    suspend fun raise(medicalNotes: String?)
-    suspend fun cancel()
+// firma decisa il 06/10: la posizione arriva dalla UI (A11), il controller è un singleton con uno scope suo
+class SosController(sos: SosRepository, outbox: OutboxDao, ownerId: suspend () -> String?, scope: CoroutineScope) {
+    val state: StateFlow<SosState>   // Idle | Sending(attempts, since) | Raised(alert: ACTIVE o DISPATCHED) | Failed(error)
+    suspend fun raise(at: GeoPoint, medicalNotes: String?): Boolean   // false da ospite
+    suspend fun restore()            // all'avvio da loggati: SOS in coda o allerta attiva
+    suspend fun reset()              // logout: si smette di inviare, la coda resta
+    suspend fun cancel(): Result<Unit>
 }
 ```
-- **Contratto da rivedere prima di iniziare:** con A11 il `LocationProvider` si crea nella UI
-  (`rememberLocationState`, su Android serve l'Activity per il permesso), quindi Koin non può passarlo al costruttore
-  di `SosController`. Strade possibili: la posizione (o il provider) come parametro di `raise()` e di
-  `updateLocation()`, oppure un provider creato a livello di Activity e registrato a parte. Si decide qui e si
-  aggiorna la firma.
+- **Contratto rivisto (06/10):** con A11 il `LocationProvider` si crea nella UI, quindi la posizione è un parametro
+  di `raise()` (e in M6.2 di `updateLocation()`). Active e Dispatched sono uno stato solo (`Raised`, con
+  `alert.status`).
 - Pressione lunga di 3 s sul FAB, poi posizione corrente (timeout di 10 s; senza fix, l'ultima nota), poi azione `SOS`
   nell'outbox con la sua `Idempotency-Key`, poi `raiseSos`. Si ritenta finché non c'è una risposta, anche dopo un
   riavvio.
@@ -1125,10 +1126,34 @@ class SosController(sosApi: SosApi, outbox: OutboxDao, location: LocationProvide
 - La schermata dell'SOS è sempre raggiungibile mentre c'è un'allerta (`getMyActiveSos` all'avvio).
 - **"Chiama 112"** è sempre visibile in questa schermata, e passa in primo piano se dopo 30 s l'invio non è riuscito,
   se la sessione è scaduta o se l'utente non è loggato. Apre il dialer (`tel:112`), non chiama da solo.
-- Checkpoint:
-  - [ ] in modalità aereo l'SOS resta in coda come "in invio"; quando torna la rete arriva **una** allerta.
-  - [ ] dieci tocchi veloci producono una sola allerta (outbox più idempotenza del server).
-  - [ ] da non loggato la schermata propone 112 e login, senza crash.
+- **Fatto (06/10)**: prima bozza dell'utente, corretta e completata da Claude su richiesta (non compilava:
+  `java.util.UUID` e `kotlinx.datetime.Clock` nel codice comune, `SosApi`/`getMyActive`/`SosModels` inesistenti,
+  `PendingActionEntity` senza `ownerId`, `getAllPending()` che il DAO non ha; `DialHelper` Android con un
+  `lateinit appContext` mai assegnato, cioè un crash al primo "Chiama 112"; retry di ogni errore, anche dei 4xx
+  definitivi; schermata e ViewModel vuoti).
+  - `SosController` (in `sos/ui`, singleton Koin con scope `SupervisorJob + IO`): chiave salvata prima della richiesta,
+    retry con attesa crescente fino a 30 s finché non c'è una risposta definitiva (`ApiError.isTransient()`, ora in
+    `ApiError.kt` e condivisa con le prenotazioni), un invio alla volta (`Mutex`), `restore()` all'avvio da loggati
+    e `reset()` all'uscita (da `App`). L'owner dell'outbox è `SessionManager.currentUserId()`: il profilo, oppure il
+    `sub` del JWT se `/users/me` non è ancora arrivato (avvio senza rete). `GET /sos/active` dà 404 senza allerta.
+  - Annullamento: in coda → si toglie e, se la richiesta era arrivata, si chiude anche l'allerta; attiva →
+    `cancelSos`, 404 e 422 (già chiusa) contano come fatto, la rete no (errore mostrato, l'allerta resta).
+  - `SosScreen`: il FAB apre la schermata e basta; lì l'SOS parte tenendo premuto 3 s il pulsante rosso con l'anello
+    (con TalkBack/VoiceOver l'azione "tieni premuto"). Permesso della posizione chiesto all'apertura, fix atteso 10 s
+    (`lastLocation`, che parte dall'ultima nota); senza fix niente invio e 112 in primo piano. Note mediche
+    facoltative (max 2000). Stato in una live region. "Chiama 112" (`rememberDialer`, `ACTION_DIAL`/`tel:`) sempre
+    visibile, pieno e rosso da ospite, con la sessione scaduta, dopo 30 s senza risposta, con un 4xx o senza posizione.
+  - `SosControllerTest` (15). 242 test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 06/10):
+  - [x] in modalità aereo l'SOS resta in coda come "in invio" (dopo 30 s "Chiama 112" in primo piano); app chiusa,
+    rete di nuovo accesa, app riaperta: all'avvio parte l'SOS in coda e nel database c'è **una** allerta in più, con
+    la posizione giusta. Nel logcat né posizione né note.
+  - [x] dieci tocchi veloci sul pulsante non mandano nulla (serve la pressione di 3 s); dieci `raise()` insieme fanno
+    una sola chiave (test). Durante la prova un'allerta è partita ed è stata annullata senza un input dello script
+    (12:52 e 12:55 UTC, tramite il dialogo di annullamento): non riprodotto in tre giri successivi, forse tocchi
+    sulla finestra dell'emulatore. Da ricontrollare a mano.
+  - [x] da non loggato la schermata propone 112 (apre il compositore con 112, non chiama) e "Accedi", senza crash.
+  - [ ] (con il Mac) schermata, pressione e compositore sul simulatore iPhone; `DialHelper.ios.kt` mai compilato qui.
 
 **M6.2 Posizione e stato**
 - Mentre l'allerta è `ACTIVE` o `DISPATCHED`, `updateSosLocation` ogni 60 s **con l'app in primo piano** e a ogni

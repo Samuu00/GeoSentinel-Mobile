@@ -36,6 +36,13 @@ import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailViewModel
 import it.unical.geosentinel_mobile.trail.ui.TrailMapViewModel
+import it.unical.geosentinel_mobile.sos.data.SosRepository
+import it.unical.geosentinel_mobile.sos.ui.SosController
+import it.unical.geosentinel_mobile.sos.ui.SosViewModel
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
+import kotlinx.coroutines.SupervisorJob
 import okio.Path.Companion.toPath
 import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.viewModel
@@ -76,6 +83,13 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
         )
     }
     single { ImageEncoder() }
+    // SOS (M6.1): un solo controller per processo, con uno scope suo, così l'invio continua fuori dalla schermata.
+    // L'utente anche senza profilo letto (avvio senza rete): l'SOS non può aspettare GET /users/me
+    single { SosRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    single {
+        val session = get<SessionManager>()
+        SosController(get(), get(), ownerId = { session.currentUserId() }, scope = CoroutineScope(SupervisorJob() + Dispatchers.IO))
+    }
 
     viewModel { LoginViewModel(get()) }
     viewModel { RegisterViewModel(get()) }
@@ -102,6 +116,7 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
         val session = get<SessionManager>()
         MyBookingsViewModel(get(), get(), ownerId = { session.userId() })
     }
+    viewModel { SosViewModel(get(), get<SessionManager>().state) }
 }
 
 // L'id dell'utente loggato (null da ospite o senza profilo letto): l'outbox lega a lui le azioni in coda

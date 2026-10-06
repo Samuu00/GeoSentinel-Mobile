@@ -53,3 +53,12 @@ class ApiException(val error: ApiError) :
  */
 class ContractViolationException(cause: Throwable) :
     Exception("Risposta del server fuori contratto (${cause::class.simpleName})")
+
+// Per l'outbox (prenotazioni M5.2, SOS M6.1): senza risposta definitiva l'azione resta in coda. Rete, 429, 409
+// resource-busy, 5xx (il client ha già ritentato quelli che il contratto permette) e 401 (sessione da rinnovare: dopo
+// il login dello stesso utente la chiave vale ancora). Ogni altro 4xx è definitivo e ripeterlo uguale non serve.
+fun ApiError.isTransient(): Boolean = when (this) {
+    ApiError.Network, is ApiError.RateLimited, is ApiError.Server, is ApiError.Unauthorized -> true
+    is ApiError.Conflict -> slug == "resource-busy"
+    else -> false
+}
