@@ -1210,9 +1210,45 @@ sealed interface PushEvent {
 - Il tocco sulla notifica apre il dettaglio dell'allerta (deep link con `alertId`). Un `type` sconosciuto si ignora;
   una notifica doppia non fa danni, apre lo stesso dettaglio.
 - `google-services.json` e `GoogleService-Info.plist` restano **fuori dal repo**.
-- Checkpoint:
-  - [ ] con il backend a `PUSH_ENABLED=true`, un SOS di `hiker@` arriva come push sull'emulatore di `rescuer@`.
-  - [ ] la stessa cosa su un iPhone vero (sul simulatore le push servono la configurazione APNs: serve il Mac).
+- **Fatto (07/10)**: bozza dell'utente corretta e completata da Claude su richiesta. Non compilava: `PushTokenSink` annidata
+  in `PushEvent`, `alertdId`, `registerCurrentTokenIfLoggedIn` con `return@withContext` fuori da `withContext`,
+  `PushPlatform` al posto dell'enum generato, `lazy { httpClientProvider }` (la funzione, non il client); un secondo
+  `logout()` in `SessionManager` che chiamava API autenticate con il mutex del refresh preso (deadlock) e duplicava quello
+  esistente (che toglie già il dispositivo con `pushToken`); nel servizio `koin-android` assente, icona inesistente,
+  package diverso dalla cartella, extra del deep link che nessuno leggeva; nessuna dipendenza Firebase.
+  - `PushManager` (`core/push`, singleton): token in uno `StateFlow`, `register()`, push in primo piano (`received`) e
+    notifica toccata (`opened`, resta finché `App` non la apre). La registrazione la decide `App`: da loggati a ogni avvio
+    e a ogni token nuovo; al logout `SessionManager` toglie il dispositivo. `pushManager()` per il codice di piattaforma.
+  - Android: Firebase BOM 35 + plugin google-services 4.5.0 applicato **solo se c'è** `google-services.json` (CI e chi
+    non ha il progetto compilano lo stesso, push spente). Canale "Allerte SOS" in `GeoSentinelApplication`, token chiesto
+    a ogni avvio, `MainActivity` `singleTop` con `type`/`alertId` dagli extra (notifica di FCM in background, nostra in
+    primo piano con testi italiani). Permesso `POST_NOTIFICATIONS` (`RequestNotificationPermission`, expect/actual):
+    l'operatore da loggato, l'escursionista dal primo SOS.
+  - Deep link: `SOS_RAISED` → scheda Allerte (il dettaglio con M7.2); `SOS_DISPATCHED`/`SOS_RESOLVED` → schermata SOS e
+    `refresh()`; in primo piano lo stato si rilegge subito. `type` sconosciuto ignorato.
+  - Backend (07/10): testi della notifica in italiano in `SosNotificationListener` (con l'app in background li mostra
+    FCM), push spente nel profilo test (`application-test.properties`: il `.env` locale ha `PUSH_ENABLED=true`).
+    Nelle prove: al massimo 3 push per escursionista ogni 15 minuti (ADR-0021), oltre l'allerta c'è ma la push no.
+  - `PushManagerTest` (7). 255 test host.
+  - iOS (07/10, scritto su Windows: Swift e target iOS di Kotlin mai compilati qui). Pacchetto `firebase-ios-sdk`
+    (prodotto `FirebaseMessaging`, 12.x: la 13.0.0 era uscita lo stesso giorno) nel `project.pbxproj`;
+    `GoogleService-Info.plist` in `iosApp/iosApp/` (cartella sincronizzata: incluso se c'è, ignorato da git; senza,
+    le push restano spente come su Android). `AppDelegate.swift` con `@UIApplicationDelegateAdaptor`: `startShared()`
+    (Koin, idempotente, così il tocco su una notifica ad app chiusa trova `PushManager`), `FirebaseApp.configure()`,
+    registrazione APNs, token FCM, notifica in primo piano e tocco verso `PushBridge` (`iosMain/core/push`).
+    `iosApp.entitlements` con `aps-environment`, `UIBackgroundModes` `remote-notification` in `Info.plist`.
+    Bundle id `it.unical.geosentinel-mobile.geosentinel-mobile` (il trattino basso non è valido su iOS).
+    Servono un account Apple Developer a pagamento (la capability Push non c'è con il team gratuito) e la chiave APNs
+    (.p8) caricata nella console Firebase.
+- Checkpoint (emulatore `Medium_Phone` con Play Store, backend locale con FCM, progetto Firebase `geo-sentinel-6a4e1`, 07/10):
+  - [x] con il backend a `PUSH_ENABLED=true`, un SOS di `hiker@` arriva come push sull'emulatore di `rescuer@` (app in
+    background: notifica di FCM; in primo piano: "Nuovo SOS"); il tocco apre le Allerte, anche ad app chiusa.
+    Dispatch e resolve arrivano a `hiker@`: il tocco apre la schermata SOS con la squadra, e con l'app aperta la chiusura
+    riporta il pulsante in 4 s. Logout: la riga in `device_tokens` sparisce; login: torna con l'utente nuovo.
+  - [ ] (con il Mac) Xcode risolve il pacchetto Firebase e compila; job `ios` della CI verde (`PushBridge`,
+    `startShared`, `RequestNotificationPermission`).
+  - [ ] la stessa cosa su un iPhone vero, con la chiave APNs nella console Firebase: push in background e in primo
+    piano, tocco che apre Allerte o SOS anche ad app chiusa.
   - [ ] chiude il checkpoint aperto del backend (M7) "push FCM vere".
 
 **M7.2 Schermate del soccorso**

@@ -1,7 +1,7 @@
 TEAM_ID=
 
 PRODUCT_NAME=geosentinel_mobile
-PRODUCT_BUNDLE_IDENTIFIER=it.unical.geosentinel_mobile.geosentinel_mobile$(TEAM_ID)
+PRODUCT_BUNDLE_IDENTIFIER=it.unical.geosentinel-mobile.geosentinel-mobile$(TEAM_ID)
 
 // In un xcconfig "//" apre un commento: $() spezza la doppia barra dell'URL.
 // Sul simulatore localhost è il Mac.

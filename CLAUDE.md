@@ -29,7 +29,10 @@ verificata sull'emulatore. M6.1 fatta (06/10): SOS con l'outbox (`SosController`
 JWT senza profilo), pressione di 3 s nella schermata, "Chiama 112" con `rememberDialer`, 242 test host, verificata
 sull'emulatore (offline → una sola allerta dopo il riavvio). M6.2 fatta (06/10): posizione ogni 60 s in primo piano
 (`SosLocationUpdates` in `App`, `repeatOnLifecycle`) e stato ogni 30 s dalla schermata SOS, 248 test host, verificata
-sull'emulatore (operatore vede la posizione, squadra entro 30 s senza push). Prossimo: review di M6 (§6), poi M7.
+sull'emulatore (operatore vede la posizione, squadra entro 30 s senza push). M7.1 fatta (07/10, review di M6 ancora da
+lanciare): push FCM (`core/push/PushManager`, Firebase solo se c'è `google-services.json`), registrazione da loggati,
+rimozione al logout, deep link, 255 test host, push vere verificate sull'emulatore; iOS (SPM, APNs) da fare con il Mac.
+Prossimo: review di M6 (§6), poi M7.2.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

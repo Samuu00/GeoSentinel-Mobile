@@ -1,3 +1,13 @@
 <resources>
     <string name="app_name">GeoSentinel</string>
+    <!-- Push (M7.1) -->
+    <string name="sos_channel_id" translatable="false">sos_alerts</string>
+    <string name="sos_channel_name">Allerte SOS</string>
+    <string name="sos_channel_description">Nuovi SOS per il soccorso, squadra in arrivo e allerta chiusa per chi l’ha lanciato</string>
+    <string name="push_sos_raised_title">Nuovo SOS</string>
+    <string name="push_sos_raised_body">Un escursionista ha chiesto aiuto. Tocca per aprire le allerte.</string>
+    <string name="push_sos_dispatched_title">Soccorso in arrivo</string>
+    <string name="push_sos_dispatched_body">Una squadra è stata inviata verso di te. Tieni l’app aperta.</string>
+    <string name="push_sos_resolved_title">Allerta chiusa</string>
+    <string name="push_sos_resolved_body">Il soccorso ha chiuso la tua richiesta di aiuto.</string>
 </resources>

@@ -28,6 +28,9 @@ maplibre-compose = "0.19.0"
 maplibre-native-ffi = "0.202609.5"
 navigation = "2.9.2"
 openapiGenerator = "7.14.0"
+# push (M7.1): BOM di Firebase e plugin che legge google-services.json
+firebase-bom = "35.0.0"
+googleServices = "4.5.0"
 room = "2.8.5"
 sqlite = "2.7.1"
 turbine = "1.2.1"
@@ -86,6 +89,9 @@ kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 # test
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
 
+firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
+firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
+
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }
@@ -96,3 +102,4 @@ kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", versio
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
 room = { id = "androidx.room", version.ref = "room" }
 openapiGenerator = { id = "org.openapi.generator", version.ref = "openapiGenerator" }
+googleServices = { id = "com.google.gms.google-services", version.ref = "googleServices" }

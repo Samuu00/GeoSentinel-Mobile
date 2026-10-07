@@ -137,9 +137,13 @@ class FakeBackend {
 }
 
 // SessionManager e client collegati come in Koin, con il motore finto sul dispatcher del test (tempo virtuale)
-fun TestScope.sessionWith(backend: FakeBackend, store: SecureTokenStore = FakeSecureTokenStore()): Pair<SessionManager, HttpClient> {
+fun TestScope.sessionWith(
+    backend: FakeBackend,
+    store: SecureTokenStore = FakeSecureTokenStore(),
+    pushToken: suspend () -> String? = { null },
+): Pair<SessionManager, HttpClient> {
     lateinit var client: HttpClient
-    val manager = SessionManager(store, { client }, TEST_BASE_URL)
+    val manager = SessionManager(store, { client }, TEST_BASE_URL, pushToken)
     val engine = MockEngine(MockEngineConfig().apply {
         dispatcher = StandardTestDispatcher(testScheduler)
         addHandler { request -> with(backend) { handle(request) } }

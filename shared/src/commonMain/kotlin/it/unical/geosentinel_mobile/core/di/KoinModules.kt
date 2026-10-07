@@ -10,6 +10,9 @@ import it.unical.geosentinel_mobile.core.db.AppDatabase
 import it.unical.geosentinel_mobile.core.db.createAppDatabase
 import it.unical.geosentinel_mobile.core.network.HttpClientFactory
 import it.unical.geosentinel_mobile.core.network.platformHttpEngine
+import it.unical.geosentinel_mobile.api.model.RegisterDeviceRequest
+import it.unical.geosentinel_mobile.core.push.PushManager
+import it.unical.geosentinel_mobile.core.push.PushTokenSink
 import it.unical.geosentinel_mobile.core.session.SessionManager
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.SecureTokenStore
@@ -47,9 +50,15 @@ import okio.Path.Companion.toPath
 import org.koin.core.context.startKoin
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
+import org.koin.mp.KoinPlatform
 
 // databaseBuilder arriva dalla piattaforma: su Android Room vuole il Context
-fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomDatabase.Builder<AppDatabase>) = module {
+fun coreModule(
+    config: AppConfig,
+    filesDir: String,
+    pushPlatform: RegisterDeviceRequest.Platform,
+    databaseBuilder: () -> RoomDatabase.Builder<AppDatabase>,
+) = module {
     single { config }
     // un solo database per processo (cache del catalogo, poi outbox)
     single { createAppDatabase(databaseBuilder()) }
@@ -63,7 +72,15 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
 
     // Un solo client autenticato e una sola sessione per tutta l'app: il refresh token vale una volta sola.
     // SessionManager riceve il client come funzione perché il client, a sua volta, usa SessionManager per i token.
-    single { SessionManager(store = get(), httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    // Al logout il dispositivo si toglie dalle push (M7.1) con il token che la piattaforma ha passato a PushManager
+    single {
+        SessionManager(
+            store = get(),
+            httpClient = { get<HttpClient>() },
+            apiBaseUrl = config.apiBaseUrl,
+            pushToken = { get<PushManager>().token.value },
+        )
+    }
     single { HttpClientFactory.createHttpClient(config, get<SessionManager>(), platformHttpEngine()) }
 
     // Repository del catalogo (M3.2): tutti sul client condiviso; i sentieri anche con la cache (M3.3)
@@ -82,6 +99,9 @@ fun coreModule(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomD
             apiBaseUrl = config.apiBaseUrl,
         )
     }
+    // Push (M7.1): il token arriva dalla piattaforma, la registrazione la decide App in base alla sessione
+    single { PushManager(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl, platform = pushPlatform) }
+    single<PushTokenSink> { get<PushManager>() }
     single { ImageEncoder() }
     // SOS (M6.1): un solo controller per processo, con uno scope suo, così l'invio continua fuori dalla schermata.
     // L'utente anche senza profilo letto (avvio senza rete): l'SOS non può aspettare GET /users/me
@@ -125,8 +145,16 @@ private fun SessionManager.userId(): String? = (state.value as? SessionState.Log
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su
 // iOS. filesDir e il database arrivano dalla piattaforma (filesDir e databases/ su Android, Documents e Application
 // Support su iOS). Restituisce Unit perché androidApp non dipende da Koin.
-internal fun startKoinWith(config: AppConfig, filesDir: String, databaseBuilder: () -> RoomDatabase.Builder<AppDatabase>) {
-    startKoin { modules(coreModule(config, filesDir, databaseBuilder)) }
+internal fun startKoinWith(
+    config: AppConfig,
+    filesDir: String,
+    pushPlatform: RegisterDeviceRequest.Platform,
+    databaseBuilder: () -> RoomDatabase.Builder<AppDatabase>,
+) {
+    startKoin { modules(coreModule(config, filesDir, pushPlatform, databaseBuilder)) }
 }
+
+// Per il codice di piattaforma che non usa Koin: FirebaseMessagingService e MainActivity (Android), AppDelegate (Swift)
+fun pushManager(): PushManager = KoinPlatform.getKoin().get()
 
 const val PREFERENCES_FILE_NAME = "geosentinel.preferences_pb"

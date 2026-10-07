@@ -83,6 +83,9 @@ import geosentinel_mobile.shared.generated.resources.sos_button_description
 import it.unical.geosentinel_mobile.auth.ui.LoginScreen
 import it.unical.geosentinel_mobile.auth.ui.RegisterScreen
 import it.unical.geosentinel_mobile.core.session.SessionManager
+import it.unical.geosentinel_mobile.core.push.PushEvent
+import it.unical.geosentinel_mobile.core.push.PushManager
+import it.unical.geosentinel_mobile.core.push.RequestNotificationPermission
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
@@ -157,6 +160,46 @@ fun App() {
     // M6.2: con un'allerta attiva la posizione va al soccorso ogni 60 s, in primo piano e su ogni schermata
     val sosState by sos.state.collectAsState()
     if (sosState is SosState.Raised) SosLocationUpdates(sos)
+
+    // Push (M7.1): da loggati il token si registra a ogni avvio e a ogni rinnovo (il server tollera i doppioni);
+    // al logout lo toglie SessionManager
+    val push = koinInject<PushManager>()
+    val pushToken by push.token.collectAsState()
+    LaunchedEffect(loggedIn, pushToken) {
+        val token = pushToken
+        if (loggedIn && token != null) push.register(token)
+    }
+    // Il permesso delle notifiche la prima volta che serve: l'operatore da loggato, l'escursionista dal primo SOS
+    if (role.canViewAlerts() || sosState !is SosState.Idle) RequestNotificationPermission()
+    // Con l'app aperta lo stato dell'SOS si rilegge subito, senza aspettare il giro dei 30 s
+    LaunchedEffect(push) {
+        push.received.collect { event -> if (event !is PushEvent.SosRaised) sos.refresh() }
+    }
+    // Notifica toccata (anche ad app chiusa: resta in PushManager finché la sessione non è letta).
+    // Una notifica doppia apre la stessa schermata.
+    val openedPush by push.opened.collectAsState()
+    LaunchedEffect(openedPush, role, loading) {
+        val event = openedPush ?: return@LaunchedEffect
+        if (loading) return@LaunchedEffect
+        when (event) {
+            // all'operatore: la scheda Allerte, quando il profilo dice che può vederla (il dettaglio arriva con M7.2)
+            is PushEvent.SosRaised -> {
+                if (!role.canViewAlerts()) return@LaunchedEffect
+                push.consumeOpened(event)
+                navController.navigate(Route.Alerts) {
+                    popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                    launchSingleTop = true
+                }
+            }
+            // all'escursionista: la sua allerta. Prima si naviga: consumeOpened cambia la chiave e annulla questo effetto
+            // (refresh() gira nello scope del controller e finisce lo stesso)
+            is PushEvent.SosDispatched, is PushEvent.SosResolved -> {
+                navController.navigate(Route.SosEmergency) { launchSingleTop = true }
+                push.consumeOpened(event)
+                sos.refresh()
+            }
+        }
+    }
     LaunchedEffect(role, destination, loading) {
         if (loading) return@LaunchedEffect
         val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }

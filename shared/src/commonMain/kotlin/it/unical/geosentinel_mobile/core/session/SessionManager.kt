@@ -56,7 +56,7 @@ class SessionManager(
     private val store: SecureTokenStore,
     httpClient: () -> HttpClient,
     apiBaseUrl: String,
-    // M7: il token push registrato, da togliere al logout. Finché le push non ci sono, nessuno.
+    // M7.1: il token push registrato, da togliere al logout (da PushManager; nei test nessuno)
     private val pushToken: suspend () -> String? = { null },
 ) : SessionRepository {
 

@@ -2,6 +2,8 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Push (M7.1), Android 13+: chiesto la prima volta che serve (operatore da loggato, escursionista al primo SOS) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <!-- Posizione solo in primo piano: mappa, sentieri vicini, SOS (niente background in questa versione) -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
@@ -16,8 +18,24 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
             android:theme="@android:style/Theme.Material.Light.NoActionBar">
+        <!-- Push (M7.1). Con l'app in background la notifica la mostra FCM: canale e icona da qui -->
+        <service
+                android:name=".push.GeoSentinelFirebaseService"
+                android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.firebase.MESSAGING_EVENT"/>
+            </intent-filter>
+        </service>
+        <meta-data
+                android:name="com.google.firebase.messaging.default_notification_channel_id"
+                android:value="@string/sos_channel_id"/>
+        <meta-data
+                android:name="com.google.firebase.messaging.default_notification_icon"
+                android:resource="@drawable/ic_notification"/>
+        <!-- singleTop: il tocco su una notifica con l'app aperta arriva in onNewIntent, senza una seconda App sopra -->
         <activity
                 android:exported="true"
+                android:launchMode="singleTop"
                 android:name=".MainActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
