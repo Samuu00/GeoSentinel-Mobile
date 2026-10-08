@@ -54,6 +54,8 @@ compose-material3 = { module = "org.jetbrains.compose.material3:material3", vers
 # ultima versione pubblicata: le icone non seguono più le release di Compose
 compose-materialIconsCore = { module = "org.jetbrains.compose.material:material-icons-core", version = "1.7.3" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
+# Indietro di sistema intercettabile anche su iOS (BackHandler): parte di Compose Multiplatform, stessa versione
+compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "composeMultiplatform" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 

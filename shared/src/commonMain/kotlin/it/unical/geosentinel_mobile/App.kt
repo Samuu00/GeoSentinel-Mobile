@@ -33,7 +33,6 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -71,9 +70,9 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import coil3.SingletonImageLoader
+import coil3.compose.LocalPlatformContext
 import geosentinel_mobile.shared.generated.resources.Res
-import geosentinel_mobile.shared.generated.resources.placeholder_alerts_body
-import geosentinel_mobile.shared.generated.resources.placeholder_alerts_title
 import geosentinel_mobile.shared.generated.resources.placeholder_management_body
 import geosentinel_mobile.shared.generated.resources.placeholder_management_title
 import geosentinel_mobile.shared.generated.resources.placeholder_map_body
@@ -107,6 +106,8 @@ import it.unical.geosentinel_mobile.refuge.ui.BookRefugeScreen
 import it.unical.geosentinel_mobile.refuge.ui.MyBookingsScreen
 import it.unical.geosentinel_mobile.refuge.ui.RefugeDetailScreen
 import it.unical.geosentinel_mobile.refuge.ui.RefugeListScreen
+import it.unical.geosentinel_mobile.rescue.ui.RescueAlertDetailScreen
+import it.unical.geosentinel_mobile.rescue.ui.RescueAlertsListScreen
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
@@ -144,8 +145,9 @@ fun App() {
     // Prenotazioni rimaste in coda (app chiusa prima della risposta, M5.2): ripartono appena si sa chi è l'utente,
     // con la stessa Idempotency-Key, quindi senza doppioni
     val bookings = koinInject<BookingRepository>()
-    val userId = (sessionState as? SessionState.LoggedIn)?.profile?.id
-    LaunchedEffect(userId) { if (userId != null) bookings.resendPending(userId) }
+    // l'utente anche senza profilo letto (dal token), come per l'SOS: con poca rete /users/me può non arrivare
+    val loggedInNow = sessionState is SessionState.LoggedIn
+    LaunchedEffect(loggedInNow) { if (loggedInNow) session.currentUserId()?.let { bookings.resendPending(it) } }
     // SOS (M6.1): da loggati riparte quello rimasto in coda o si rilegge l'allerta attiva (anche senza profilo letto:
     // con poca rete non si aspetta /users/me); da ospite o con la sessione chiusa si smette di inviare
     val sos = koinInject<SosController>()
@@ -153,9 +155,19 @@ fun App() {
     // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa
     // (non durante il caricamento: si vedrebbe GUEST e una scheda del personale ripristinata verrebbe chiusa)
     val loading = sessionState == SessionState.Loading
+    // Da ospite (avvio o dopo un logout) le foto dei pericoli e dei sentieri, scaricate da loggati, non restano in cache
+    val imageContext = LocalPlatformContext.current
     LaunchedEffect(loggedIn, loading) {
         if (loading) return@LaunchedEffect
-        if (loggedIn) sos.restore() else sos.reset()
+        if (loggedIn) {
+            sos.restore()
+        } else {
+            sos.reset()
+            SingletonImageLoader.get(imageContext).run {
+                memoryCache?.clear()
+                diskCache?.clear()
+            }
+        }
     }
     // M6.2: con un'allerta attiva la posizione va al soccorso ogni 60 s, in primo piano e su ogni schermata
     val sosState by sos.state.collectAsState()
@@ -178,18 +190,33 @@ fun App() {
     // Notifica toccata (anche ad app chiusa: resta in PushManager finché la sessione non è letta).
     // Una notifica doppia apre la stessa schermata.
     val openedPush by push.opened.collectAsState()
-    LaunchedEffect(openedPush, role, loading) {
+    // il grafo esiste solo con il NavHost composto, cioè dopo che il tema è letto: navigare prima è un crash
+    val navReady = themeMode != null
+    // il ruolo vale solo con il profilo letto: LoggedIn(null) dà HIKER anche a un operatore
+    val roleKnown = when (val current = sessionState) {
+        is SessionState.LoggedIn -> current.profile != null
+        SessionState.Loading -> false
+        SessionState.Anonymous, SessionState.Expired -> true
+    }
+    LaunchedEffect(openedPush, role, roleKnown, navReady) {
         val event = openedPush ?: return@LaunchedEffect
-        if (loading) return@LaunchedEffect
+        if (!roleKnown || !navReady) return@LaunchedEffect
         when (event) {
-            // all'operatore: la scheda Allerte, quando il profilo dice che può vederla (il dettaglio arriva con M7.2)
+            // all'operatore: il dettaglio dell'allerta sopra la scheda Allerte (M7.2). A chi non può vederla la notifica
+            // non serve: si scarta, così non si apre da sola per un operatore che entra dopo
             is PushEvent.SosRaised -> {
-                if (!role.canViewAlerts()) return@LaunchedEffect
                 push.consumeOpened(event)
+                if (!role.canViewAlerts()) return@LaunchedEffect
+                // già aperto sulla stessa allerta (notifica doppia): non si ricrea, un dialogo aperto resta
+                val current = navController.currentBackStackEntry
+                if (current?.destination?.hasRoute<Route.AlertDetail>() == true && current.toRoute<Route.AlertDetail>().alertId == event.alertId) {
+                    return@LaunchedEffect
+                }
                 navController.navigate(Route.Alerts) {
                     popUpTo(navController.graph.findStartDestination().id) { saveState = true }
                     launchSingleTop = true
                 }
+                navController.navigate(Route.AlertDetail(event.alertId)) { launchSingleTop = true }
             }
             // all'escursionista: la sua allerta. Prima si naviga: consumeOpened cambia la chiave e annulla questo effetto
             // (refresh() gira nello scope del controller e finisce lo stesso)
@@ -205,6 +232,9 @@ fun App() {
         val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
         if (tab != null && !tab.isVisible(role)) navController.navigate(Route.Map) { popUpTo(navController.graph.findStartDestination().id) }
     }
+
+    // stessa funzione tra una ricomposizione e l'altra: il livello delle allerte sulla mappa non si riconfigura ogni volta
+    val openAlert: (String) -> Unit = remember(navController) { { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } } }
 
     val mode = themeMode ?: return
     GeoSentinelTheme(mode) {
@@ -246,10 +276,12 @@ fun App() {
                 exitTransition = { fadeOut(tween(100)) },
             ) {
                 composable<Route.Map>(
-                    // quando entra l'SOS, un sentiero o un rifugio la mappa scivola un po' a sinistra e lascia il posto (parallasse)
+                    // quando entra l'SOS, un sentiero, un rifugio o un'allerta la mappa scivola un po' a sinistra e lascia il posto (parallasse)
                     exitTransition = {
                         val destination = targetState.destination
-                        if (destination.hasRoute<Route.SosEmergency>() || destination.hasRoute<Route.TrailDetail>() || destination.hasRoute<Route.RefugeDetail>()) {
+                        if (destination.hasRoute<Route.SosEmergency>() || destination.hasRoute<Route.TrailDetail>() ||
+                            destination.hasRoute<Route.RefugeDetail>() || destination.hasRoute<Route.AlertDetail>()
+                        ) {
                             slideOutHorizontally(tween(PushMillis)) { -it / 4 }
                         } else {
                             fadeOut(tween(100))
@@ -273,6 +305,8 @@ fun App() {
                         } else {
                             null
                         },
+                        // le allerte aperte solo per chi vede la scheda Allerte (M7.2): il tocco apre il dettaglio
+                        onOpenAlert = if (role.canViewAlerts()) openAlert else null,
                     )
                 }
                 composable<Route.TrailDetail>(
@@ -331,7 +365,14 @@ fun App() {
                     MyBookingsScreen(onBack = { navController.popBackStack() })
                 }
                 composable<Route.Alerts> {
-                    PlaceholderScreen(Icons.Filled.Notifications, Res.string.placeholder_alerts_title, Res.string.placeholder_alerts_body)
+                    RescueAlertsListScreen(onOpenAlert = { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } })
+                }
+                composable<Route.AlertDetail>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.AlertDetail>()
+                    RescueAlertDetailScreen(route.alertId, onBack = { navController.popBackStack() })
                 }
                 composable<Route.Management> {
                     PlaceholderScreen(Icons.Filled.Build, Res.string.placeholder_management_title, Res.string.placeholder_management_body)

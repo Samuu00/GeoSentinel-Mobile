@@ -27,6 +27,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 
 // Come il backend (CreateHazardRequest.description, maxLength)
@@ -74,6 +76,9 @@ class ReportHazardViewModel(
     private val hazards: HazardRepository,
     private val uploader: MediaUploader,
     private val trailId: String?,
+    // gli upload girano qui (uno scope dell'app): uscire da "Segnalazione inviata" non li annulla. Null nei test:
+    // allora il viewModelScope
+    private val uploadScope: CoroutineScope? = null,
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(ReportHazardUiState())
@@ -152,7 +157,8 @@ class ReportHazardViewModel(
     }
 
     private suspend fun upload(hazardId: String, photoId: Int, jpeg: ByteArray) {
-        uploader.upload(jpeg, MediaTarget(InitUploadRequest.EntityType.HAZARD_REPORT, hazardId)).fold(
+        val target = MediaTarget(InitUploadRequest.EntityType.HAZARD_REPORT, hazardId)
+        (uploadScope ?: viewModelScope).async { uploader.upload(jpeg, target) }.await().fold(
             onSuccess = { media ->
                 if (media.status == MediaResponse.Status.READY) {
                     setPhotoStatus(photoId, PhotoStatus.READY)

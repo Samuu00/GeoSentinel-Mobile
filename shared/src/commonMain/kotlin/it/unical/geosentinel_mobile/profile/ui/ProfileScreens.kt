@@ -41,6 +41,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -95,6 +96,11 @@ import geosentinel_mobile.shared.generated.resources.profile_deleting
 import geosentinel_mobile.shared.generated.resources.profile_guest_body
 import geosentinel_mobile.shared.generated.resources.profile_login
 import geosentinel_mobile.shared.generated.resources.profile_logout
+import geosentinel_mobile.shared.generated.resources.profile_logout_anyway
+import geosentinel_mobile.shared.generated.resources.profile_logout_sos_raised
+import geosentinel_mobile.shared.generated.resources.profile_logout_sos_sending
+import geosentinel_mobile.shared.generated.resources.profile_logout_sos_title
+import geosentinel_mobile.shared.generated.resources.profile_logout_stay
 import geosentinel_mobile.shared.generated.resources.profile_name
 import geosentinel_mobile.shared.generated.resources.profile_session_expired
 import geosentinel_mobile.shared.generated.resources.role_admin
@@ -121,6 +127,9 @@ import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeMode
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
+import it.unical.geosentinel_mobile.sos.data.SosState
+import it.unical.geosentinel_mobile.sos.ui.SosController
+import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.PI
 import kotlin.math.cos
@@ -148,6 +157,13 @@ fun ProfileScreen(
     val ui by viewModel.state.collectAsStateWithLifecycle()
     var deleteStep by rememberSaveable { mutableIntStateOf(DeleteNone) }
     val profile = (session as? SessionState.LoggedIn)?.profile
+    // Con un SOS in corso uscire ha conseguenze: si chiede prima (in invio: la richiesta smette di partire e si toglie
+    // dal telefono; attivo: l'allerta resta ma la posizione non si aggiorna più)
+    val sosState by koinInject<SosController>().state.collectAsStateWithLifecycle()
+    var confirmLogout by rememberSaveable { mutableStateOf(false) }
+    val onLogout = {
+        if (sosState is SosState.Sending || sosState is SosState.Raised) confirmLogout = true else viewModel.logout()
+    }
 
     Column(
         modifier = Modifier
@@ -200,7 +216,7 @@ fun ProfileScreen(
                     SettingsRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, chevron = true)
                     RowDivider()
                     // "Esci" è un'uscita, non un errore: verde, non prugna
-                    SettingsRow(stringResource(Res.string.profile_logout), onClick = viewModel::logout, color = MaterialTheme.colorScheme.primary)
+                    SettingsRow(stringResource(Res.string.profile_logout), onClick = onLogout, color = MaterialTheme.colorScheme.primary)
                 }
                 // Azione distruttiva da sola, lontana dalle altre e nel colore degli errori (mai il rosso dell'SOS)
                 Spacer(Modifier.size(16.dp))
@@ -239,6 +255,23 @@ fun ProfileScreen(
 
             Spacer(Modifier.size(32.dp))
         }
+    }
+
+    if (confirmLogout) {
+        AlertDialog(
+            onDismissRequest = { confirmLogout = false },
+            title = { Text(stringResource(Res.string.profile_logout_sos_title)) },
+            text = {
+                Text(stringResource(if (sosState is SosState.Sending) Res.string.profile_logout_sos_sending else Res.string.profile_logout_sos_raised))
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmLogout = false
+                    viewModel.logout()
+                }) { Text(stringResource(Res.string.profile_logout_anyway)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmLogout = false }) { Text(stringResource(Res.string.profile_logout_stay)) } },
+        )
     }
 
     when (deleteStep) {

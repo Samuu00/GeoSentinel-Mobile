@@ -12,6 +12,11 @@ object PushBridge {
     fun onMessage(userInfo: Map<Any?, *>) = pushManager().onMessage(userInfo.payload())
 
     fun onNotificationOpened(userInfo: Map<Any?, *>) = pushManager().onNotificationOpened(userInfo.payload())
+
+    // A fine sessione Swift invalida il token FCM e ne chiede uno nuovo (vedi PushManager.sessionEnded)
+    fun setTokenRevoker(revoker: () -> Unit) {
+        pushManager().tokenRevoker = revoker
+    }
 }
 
 private fun Map<Any?, *>.payload(): Map<String, String?> =

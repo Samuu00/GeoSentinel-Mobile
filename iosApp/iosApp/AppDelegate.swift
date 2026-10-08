@@ -18,6 +18,14 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         guard Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist") != nil else { return true }
         FirebaseApp.configure()
         Messaging.messaging().delegate = self
+        // A fine sessione il token si invalida (le push dell'utente uscito non arrivano più qui) e se ne chiede uno nuovo
+        PushBridge.shared.setTokenRevoker {
+            Messaging.messaging().deleteToken { _ in
+                Messaging.messaging().token { token, _ in
+                    if let token { PushBridge.shared.onNewToken(token: token) }
+                }
+            }
+        }
         // Il permesso lo chiede l'app quando serve (RequestNotificationPermission): registrarsi ad APNs non lo richiede
         application.registerForRemoteNotifications()
         return true

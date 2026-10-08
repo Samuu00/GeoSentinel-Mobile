@@ -155,6 +155,23 @@ class HazardMapViewModelTest {
     }
 
     @Test
+    fun `dopo uno zoom indietro e uno avanti nella stessa area i pericoli tornano`() = runTest {
+        val viewModel = viewModel()
+        viewModel.setEnabled(true)
+        viewModel.onCameraIdle(sila, zoom = 12.0)
+        advanceUntilIdle()
+        viewModel.onCameraIdle(sila, zoom = 6.0)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.hazards.isEmpty())
+
+        viewModel.onCameraIdle(sila, zoom = 12.0)
+        advanceUntilIdle()
+
+        assertEquals(2, calls.size)
+        assertEquals(2, viewModel.state.value.hazards.size)
+    }
+
+    @Test
     fun `movimenti rapidi fanno una sola richiesta`() = runTest {
         val viewModel = viewModel()
         viewModel.setEnabled(true)

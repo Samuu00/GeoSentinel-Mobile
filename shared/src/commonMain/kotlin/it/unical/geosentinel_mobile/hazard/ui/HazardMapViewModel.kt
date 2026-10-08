@@ -14,6 +14,7 @@ import it.unical.geosentinel_mobile.core.ui.uiMessage
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
 import it.unical.geosentinel_mobile.hazard.data.MAX_NEARBY_HAZARDS
 import it.unical.geosentinel_mobile.hazard.data.MAX_NEARBY_HAZARDS_RADIUS_METERS
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -113,6 +114,8 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
     private suspend fun load(request: Request) {
         if (request.zoom < MinZoom) {
             _state.update { it.copy(hazards = emptyList(), failed = false) }
+            // la lista è vuota: tornando vicino nella stessa area si deve ricaricare
+            loaded = null
             return
         }
         val previous = loaded
@@ -149,9 +152,14 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
         if (it.nearby == NearbyHazards.WaitingForFix) it.copy(nearby = NearbyHazards.Failed(UiMessage(Res.string.trails_nearby_no_fix))) else it
     }
 
+    // la richiesta di "Pericoli vicini" in corso: chiudendo o ripartendo da un altro punto si annulla, così la risposta
+    // vecchia non riempie un foglio riaperto altrove (con le distanze misurate dal punto sbagliato)
+    private var nearbyJob: Job? = null
+
     fun onNearbyFix(at: GeoPoint) {
         _state.update { it.copy(nearby = NearbyHazards.Loading) }
-        viewModelScope.launch {
+        nearbyJob?.cancel()
+        nearbyJob = viewModelScope.launch {
             val result = hazards.nearby(at)
             _state.update { state ->
                 // chiuso nel frattempo (o logout): la risposta non riapre il foglio
@@ -161,7 +169,10 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
         }
     }
 
-    fun closeNearby() = _state.update { it.copy(nearby = NearbyHazards.Hidden) }
+    fun closeNearby() {
+        nearbyJob?.cancel()
+        _state.update { it.copy(nearby = NearbyHazards.Hidden) }
+    }
 
     companion object {
         val Debounce = 400.milliseconds

@@ -1258,10 +1258,88 @@ sealed interface PushEvent {
   Su 409 `alert-already-taken`: "un altro operatore l'ha già presa", e si ricarica il dettaglio.
 - Chiusura con `resolveSosAlert`.
 - Le note mediche si vedono solo nel dettaglio, mai nella notifica né nella lista.
-- Checkpoint:
-  - [ ] due operatori fanno il dispatch insieme: uno riesce, l'altro vede il messaggio giusto.
+- **Fatto (08/10)**: bozza dell'utente corretta e completata da Claude su richiesta. Non compilava: `RescueApi`/`SosApi`
+  inesistenti (sono `RescueTeamsApi` e `SOSAlertsApi`), `lazy { httpClientProvider }` (la funzione, non il client),
+  `getAlertDetail` con il tipo della pagina, `DispatchRescueTeamRequest` e `ResolveSosAlertRequest` inesistenti (la chiusura
+  non ha body), enum `aCTIVE`; nel file della lista c'era un ViewModel, in quello del ViewModel della lista una copia del
+  dettaglio; schermata con una funzione privata dentro un'altra, testi fissi nel codice, rosso sulle note mediche (§2).
+  `RescueModels.kt` tolto (non usato), rotta `AlertsList` tolta (doppione di `Alerts`), Koin riordinato per categoria.
+  - `RescueRepository` (`rescue/data`): pagine attive, dettaglio, vicine (raggio fino a 100 km), squadre libere entro 50 km,
+    dispatch, resolve.
+  - Scheda Allerte (`RescueAlertsListScreen`): come "Le mie segnalazioni", più rilettura ogni 30 s in primo piano, al ritorno
+    dal dettaglio e a ogni push `SOS_RAISED`. Stato a parole, da quanto è aperta, squadra; niente note mediche.
+  - Dettaglio (`RescueAlertDetailScreen`, rotta `AlertDetail`): posizione con 5 decimali e la sua età, note mediche, squadra
+    o squadre libere (radio), "Invia la squadra" in fondo; "Chiudi l'allerta" con conferma, anche da `ACTIVE` (falso
+    allarme: il backend lo permette). 409 e 422 → messaggio e rilettura; una rilettura vecchia non sovrascrive l'esito di
+    un'azione (contatore). Riletto ogni 30 s.
+  - "Mappa": niente mappa a parte, le allerte aperte sono un livello della mappa principale per chi vede la scheda Allerte
+    (`RescueMapViewModel` + `SosAlertMarkers`, come i rifugi): tondo rosso pieno senza squadra, chiaro con bordo rosso con
+    la squadra; il tocco apre il dettaglio.
+  - Push `SOS_RAISED` toccata: scheda Allerte e sopra il dettaglio di `alertId` (prima apriva solo la scheda).
+  - `RescueViewModelsTest` (10). 265 test host.
+  - **Review Kotlin di M7.2** (08–09/10, `ecc:kotlin-reviewer`): nessun CRITICAL/HIGH, 5 MEDIUM corretti. La lista si
+    rileggeva solo dalla prima pagina (si accorciava e saltava in cima): ora il poll rilegge tutte le allerte a schermo in
+    una richiesta (fino a 100, il massimo del server), senza errori se la lista c'è già, e un caricamento nuovo annulla
+    quello in corso (un poll e una pagina insieme lasciavano un buco). Il dettaglio rilegge anche le squadre a ogni giro
+    (prima, dopo un primo caricamento fallito, restava "nessuna squadra libera"); risposta vecchia delle squadre scartata
+    dopo un invio. Sulla mappa le allerte si rileggono ogni 30 s e a ogni push `SOS_RAISED` anche a mappa ferma
+    (`RescueMapViewModel.refresh`). Rimandati (LOW): avviso quando il raggio supera i 100 km a zoom basso, squadre oltre
+    50 km, lambda `onOpenAlert` non ricordata in `App`. 269 test host; allerta spostata vista comparire a mappa ferma
+    sull'emulatore.
+- Checkpoint (emulatore `Medium_Phone`, backend locale con FCM, 08/10):
+  - [x] due operatori fanno il dispatch insieme: `admin@` via API un attimo prima di `rescuer@` dall'app; l'app mostra
+    "Un altro operatore ha già preso in carico questa allerta." e rilegge il dettaglio con la squadra del collega.
+    Chiusura con conferma: `RESOLVED` sul server, l'app torna alla lista vuota. Push con l'app in background: il tocco
+    apre il dettaglio dell'allerta giusta, Indietro torna alla lista. Allerta sulla mappa. Nel logcat né posizione né note.
+  - [ ] (con il Mac) lista, dettaglio e livello della mappa sul simulatore iPhone.
   - [ ] chiude il checkpoint aperto del backend (M7): flusso completo registrazione → login → sentieri vicini →
     segnalazione con foto → SOS → push all'operatore → cancellazione dell'account, su Android e su iOS.
+
+**Review di M4, M5, M6 e M7** (09/10, §6: `ecc:kotlin-reviewer` + `ecc:security-reviewer` su M4–M5 e su M6–M7;
+M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e circa 12 LOW, tutti corretti su richiesta:
+- **SOS (`SosController`)**: il lock non avvolge più nessuna richiesta di rete (prima `restore()` all'avvio con poca rete
+  bloccava un SOS per decine di secondi, senza "in invio" né 112 in primo piano); `raise()` gira nello scope del
+  controller (uscire dalla schermata non perde l'SOS); annullare un SOS ancora senza risposta smette di inviare e poi
+  verifica sul server finché non risponde, chiudendo l'allerta se la richiesta era arrivata (prima diceva "annullato"
+  anche con l'allerta viva); nessuna eccezione esce dal controller (2xx fuori contratto = errore del server da ritentare,
+  riga illeggibile = `Failed` con il 112, niente crash a ogni avvio); `refresh()` rilegge l'allerta anche da Idle/Failed
+  (push dopo una risposta persa). Note mediche in `remember` e svuotate all'invio. La verifica dell'annullamento è
+  un'azione dell'outbox (`SOS_CANCEL`): se l'app si chiude prima della risposta riparte al riavvio, senza rimostrare
+  l'allerta; un SOS nuovo la toglie (non deve chiudere l'allerta nuova).
+- **Push**: l'effetto della notifica toccata aspetta il grafo di navigazione (crash all'avvio a freddo) e il profilo
+  letto; un evento che il ruolo non può aprire si scarta; `alertId` accettato solo se è un UUID (MainActivity è
+  esportata); una notifica doppia non ricrea il dettaglio già aperto. A ogni fine sessione (`SessionManager`
+  `onSessionEnded`: logout, 401 del refresh, account cancellato) `PushManager.sessionEnded()` svuota l'evento e la
+  piattaforma invalida il token FCM (`deleteToken`, poi uno nuovo): anche senza rete al logout il telefono non riceve
+  più le push dell'utente uscito (verificato sull'emulatore: token nuovo a ogni login, riga tolta al logout). Notifica
+  locale `VISIBILITY_PRIVATE` sulla schermata di blocco.
+- **Outbox a fine sessione** (09/10, `OutboxDao.clearAfterSession`, motivo `SessionEnd`): con il logout e con l'account
+  cancellato l'utente lascia il telefono, quindi le sue azioni con dati personali (SOS con posizione e note mediche,
+  prenotazioni, rifiuti) si tolgono; al logout resta solo la verifica di un annullamento (`SOS_CANCEL`, senza dati
+  personali), che riparte al suo login. Con la sessione scaduta (401 del refresh) resta tutto: l'utente non ha scelto di
+  uscire e l'SOS deve ripartire al login. Uscire con un SOS in corso chiede conferma nel Profilo (in invio: smette di
+  partire; attivo: la posizione non si aggiorna più). Cambia la scelta di M6.1 ("al logout la coda resta").
+- **Prenotazioni**: l'owner è `currentUserId()` (anche senza profilo letto, dal token) in form, lista e App; la lista
+  si carica subito e il reinvio va in parallelo, fermandosi al primo errore di rete; rifiuti dopo la coda (409, 422,
+  404) e prenotazioni in coda da più di 24 ore si mostrano in "Le mie prenotazioni" finché l'utente non le chiude: sono
+  righe `BOOKING_REJECTED` dell'outbox con status e slug del motivo, quindi sopravvivono a un riavvio (`kind` è salvato
+  come testo: nessuna migrazione); righe illeggibili tolte senza crash; prima di inviare si controlla che l'utente
+  loggato sia il proprietario.
+- **Mappa**: rifugi, pericoli e allerte tornano dopo uno zoom indietro e avanti nella stessa area (`loaded` azzerato);
+  "Pericoli vicini" annulla la richiesta vecchia; sulla mappa dell'operatore un avviso quando la vista supera i 100 km
+  o le 50 allerte del server; squadre cercate fino a 150 km. Le allerte sulla mappa si rileggono subito a ogni ritorno
+  sulla mappa (prima la rilettura ripartiva con 30 s d'attesa, quindi dopo la schermata SOS un'allerta appena lanciata
+  o annullata non si vedeva) e a ogni cambio del proprio SOS, che non arriva come push: verificato sull'emulatore,
+  segnaposto presente e sparito entro 1,5 s.
+- **Foto**: l'originale della fotocamera (con EXIF/GPS) si cancella subito dopo la ricodifica, un file per scatto,
+  avanzi di oltre un'ora puliti; gli upload girano in uno scope dell'app (uscire da "Segnalazione inviata" non li
+  annulla) e uscire con foto in caricamento chiede conferma (Fatto, Indietro e gesto di sistema con `BackHandler` di
+  `ui-backhandler`, deprecato a favore di `NavigationEventHandler`: da cambiare quando è stabile); `uploadUrl` deve
+  essere `https` salvo con il backend locale in chiaro; cache di Coil svuotata da ospite.
+- Rimandati a M9.3: payload dell'outbox in chiaro nel database (escluso dal backup, righe transitorie).
+- 287 test host; verificati sull'emulatore SOS lanciato e annullato (nessuna allerta aperta dopo), logout/login con il
+  token push nuovo, avviso al logout con l'SOS attivo.
+- [ ] (con il Mac) `AppDelegate.swift` con `PushBridge.setTokenRevoker`, mai compilato.
 
 ### Milestone 8: personale del parco e amministrazione
 
@@ -1300,6 +1378,9 @@ sealed interface PushEvent {
 
 **M9.3 Privacy e store**
 - Testi dei permessi (posizione, foto, notifiche) chiari e in italiano, in `strings.xml` e in `Info.plist`.
+- Dalla review del 09/10 (M4–M7): il payload dell'outbox (posizione e note mediche di un SOS in coda) è in chiaro nel
+  database, escluso dal backup e cancellato al logout; resta solo finché l'azione è in coda o la sessione è scaduta.
+  Cifrarlo (SQLCipher o una chiave del Keystore/Keychain) se l'App Store o la valutazione d'impatto lo chiedono.
 - Dalla review di sicurezza del 03/10 (rimandati qui):
   - l'informativa dice che le tile della mappa arrivano da OpenFreeMap ed EOX, che vedono IP e zona guardata;
   - EOX è un servizio gratuito senza garanzie: prima del rilascio un'alternativa (tile proprie o un altro fornitore);
@@ -1339,10 +1420,10 @@ perché scriverebbero il codice al posto tuo.
 | 1 | Client e rete | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita il 02/10: nessun CRITICAL/HIGH; correzioni in §M1.2 e §M1.3, note per M2 in §M2.1 e §M2.2, periodo di grazia nel backend) |
 | 2 | Sessione e account | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 | 3 | Mappa e catalogo | `ecc:kotlin-reviewer,ecc:code-reviewer` |
-| 4 | Segnalazioni e foto | `ecc:kotlin-reviewer,ecc:security-reviewer` |
-| 5 | Rifugi | `ecc:kotlin-reviewer,ecc:code-reviewer` |
-| 6 | SOS | `ecc:kotlin-reviewer,ecc:security-reviewer` |
-| 7 | Push e soccorso | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 4 | Segnalazioni e foto | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita il 09/10 con M5–M7: correzioni in fondo a M7) |
+| 5 | Rifugi | `ecc:kotlin-reviewer,ecc:code-reviewer` (eseguita il 09/10, `kotlin-reviewer` + `security-reviewer`) |
+| 6 | SOS | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita il 09/10: 4 HIGH corretti) |
+| 7 | Push e soccorso | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita l'08–09/10) |
 | 8 | Personale | `ecc:kotlin-reviewer,ecc:code-reviewer` |
 | 9 | Qualità e rilascio | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 

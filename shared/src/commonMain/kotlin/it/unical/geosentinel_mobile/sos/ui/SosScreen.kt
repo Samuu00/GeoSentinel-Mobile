@@ -152,7 +152,9 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
     val scope = rememberCoroutineScope()
     var locating by remember { mutableStateOf(false) }
     var noLocation by remember { mutableStateOf(false) }
-    var notes by rememberSaveable { mutableStateOf("") }
+    // remember, non rememberSaveable: le note mediche non finiscono nello stato salvato dell'Activity (si perdono a
+    // una rotazione, prezzo accettato). Si svuotano all'invio: da lì stanno nell'outbox, finché il server non risponde
+    var notes by remember { mutableStateOf("") }
     var confirmCancel by remember { mutableStateOf(false) }
 
     // invio partito da più di 30 s (anche prima di un riavvio) e ancora senza risposta
@@ -234,7 +236,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
                                 if (permission is LocationPermission.NotGranted && permission.canRequest != false) location.requestPermission()
                                 val fix = withTimeoutOrNull(FixTimeout) { snapshotFlow { location.lastLocation }.filterNotNull().first() }
                                 locating = false
-                                if (fix == null) noLocation = true else viewModel.raise(fix.position.toGeoPoint(), notes)
+                                if (fix == null) noLocation = true else viewModel.raise(fix.position.toGeoPoint(), notes).also { notes = "" }
                             }
                         },
                         modifier = Modifier.align(Alignment.CenterHorizontally),

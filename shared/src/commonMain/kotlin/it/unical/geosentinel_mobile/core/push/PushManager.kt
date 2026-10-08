@@ -14,7 +14,8 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Ponte tra le push della piattaforma e `shared` (M7.1), singleton Koin. Non conosce la sessione: la registrazione la
- * decide `App` (da loggati, a ogni avvio e a ogni token nuovo), la rimozione `SessionManager.logout()`.
+ * decide `App` (da loggati, a ogni avvio e a ogni token nuovo), la rimozione `SessionManager.logout()`, e a ogni fine
+ * sessione `SessionManager` chiama [sessionEnded].
  */
 class PushManager(
     httpClient: () -> HttpClient,
@@ -36,6 +37,12 @@ class PushManager(
     private val _opened = MutableStateFlow<PushEvent?>(null)
     val opened: StateFlow<PushEvent?> = _opened.asStateFlow()
 
+    /**
+     * Dalla piattaforma: invalida il token FCM (`deleteToken`) e ne chiede uno nuovo, che torna da [onNewToken].
+     * Null senza Firebase (CI, progetto senza google-services.json) e nei test.
+     */
+    var tokenRevoker: (() -> Unit)? = null
+
     override fun onNewToken(token: String) {
         _token.value = token
     }
@@ -50,6 +57,19 @@ class PushManager(
 
     fun consumeOpened(event: PushEvent) {
         _opened.compareAndSet(event, null)
+    }
+
+    /**
+     * Fine sessione (logout, sessione scaduta, account cancellato). Il token FCM si invalida: se `DELETE /devices` non è
+     * arrivata (senza rete, o token non ancora noto) il server resta con un token morto e questo telefono non riceve più
+     * le push dell'utente uscito. Anche una registrazione in volo finita dopo il logout registra un token morto.
+     * Una notifica toccata e non ancora aperta non deve valere per chi entra dopo.
+     */
+    fun sessionEnded() {
+        _opened.value = null
+        if (_token.value == null && tokenRevoker == null) return
+        _token.value = null
+        tokenRevoker?.invoke()
     }
 
     // Senza rete fallisce e basta: si riprova al prossimo avvio o al prossimo token. Il server tollera i doppioni.

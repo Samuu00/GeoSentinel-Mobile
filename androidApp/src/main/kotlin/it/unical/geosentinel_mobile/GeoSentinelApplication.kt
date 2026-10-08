@@ -34,6 +34,14 @@ class GeoSentinelApplication : Application() {
             getSystemService(NotificationManager::class.java).createNotificationChannel(channel)
         }
         if (FirebaseApp.getApps(this).isEmpty()) return
-        FirebaseMessaging.getInstance().token.addOnSuccessListener { token -> pushManager().onNewToken(token) }
+        val messaging = FirebaseMessaging.getInstance()
+        messaging.token.addOnSuccessListener { token -> pushManager().onNewToken(token) }
+        // A fine sessione il token si invalida (le push dell'utente uscito non arrivano più qui) e se ne chiede uno
+        // nuovo, che App registra al prossimo login
+        pushManager().tokenRevoker = {
+            messaging.deleteToken().addOnCompleteListener {
+                messaging.token.addOnSuccessListener { token -> pushManager().onNewToken(token) }
+            }
+        }
     }
 }

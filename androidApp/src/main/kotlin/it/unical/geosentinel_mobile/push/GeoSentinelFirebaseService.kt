@@ -50,6 +50,15 @@ class GeoSentinelFirebaseService : FirebaseMessagingService() {
             .setCategory(NotificationCompat.CATEGORY_ALARM)
             .setAutoCancel(true)
             .setContentIntent(pending)
+            // Sulla schermata di blocco solo "GeoSentinel": chi guarda il telefono bloccato non scopre un'emergenza in corso
+            .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
+            .setPublicVersion(
+                NotificationCompat.Builder(this, getString(R.string.sos_channel_id))
+                    .setSmallIcon(R.drawable.ic_notification)
+                    .setContentTitle(getString(R.string.app_name))
+                    .setContentText(getString(R.string.push_public_body))
+                    .build(),
+            )
             .build()
         // Senza il permesso (Android 13+) il sistema la scarta da solo
         getSystemService(NotificationManager::class.java).notify(id, notification)

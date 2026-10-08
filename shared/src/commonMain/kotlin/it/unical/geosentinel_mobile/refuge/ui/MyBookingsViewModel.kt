@@ -4,9 +4,11 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.unical.geosentinel_mobile.api.model.BookingResponse
 import it.unical.geosentinel_mobile.core.ui.UiMessage
+import it.unical.geosentinel_mobile.refuge.data.BookingOutcome
 import it.unical.geosentinel_mobile.refuge.data.BookingRepository
 import it.unical.geosentinel_mobile.refuge.data.PendingBooking
 import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
+import it.unical.geosentinel_mobile.refuge.data.RejectedBooking
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -22,6 +24,8 @@ data class MyBookingsUiState(
     val items: List<BookingResponse> = emptyList(),
     // in coda nell'outbox, senza ancora una risposta: in cima come "in invio"
     val pending: List<PendingBooking> = emptyList(),
+    // in coda e poi rifiutate dal server (o scadute): si mostrano finché l'utente non le chiude
+    val rejected: List<RejectedBooking> = emptyList(),
     // il nome dei rifugi (la prenotazione ha solo l'id): si chiede una volta per rifugio
     val refugeNames: Map<String, String> = emptyMap(),
     val loading: Boolean = false,
@@ -34,42 +38,60 @@ data class MyBookingsUiState(
     val cancelError: UiMessage? = null,
 ) {
     // niente date né nomi nei log
-    override fun toString() = "MyBookingsUiState(items=${items.size}, pending=${pending.size}, loading=$loading, error=${error != null})"
+    override fun toString() = "MyBookingsUiState(items=${items.size}, pending=${pending.size}, rejected=${rejected.size}, loading=$loading, error=${error != null})"
 }
 
 /**
- * "Le mie prenotazioni" (M5.2), nella scheda Rifugi. All'apertura prima si rimandano quelle rimaste in coda, poi si
- * carica la prima pagina; le altre in fondo alla lista ([loadMore]). Solo rete per la lista; le "in invio" dall'outbox.
+ * "Le mie prenotazioni" (M5.2), nella scheda Rifugi. All'apertura la prima pagina e, insieme, il reinvio di quelle
+ * rimaste in coda (che con poca rete può durare a lungo: la lista non lo aspetta); se ne parte qualcuna la prima pagina
+ * si rilegge. Le altre pagine in fondo alla lista ([loadMore]). Solo rete per la lista; le "in invio" dall'outbox.
  */
 class MyBookingsViewModel(
     private val bookings: BookingRepository,
     private val refuges: RefugeRepository,
-    ownerId: () -> String?,
+    // l'utente loggato (anche senza profilo letto, dal token): si chiede quando serve, non una volta sola
+    private val ownerId: suspend () -> String?,
     private val today: () -> LocalDate = { Clock.System.todayIn(TimeZone.currentSystemDefault()) },
 ) : ViewModel() {
 
     private val _state = MutableStateFlow(MyBookingsUiState(loading = true))
     val state: StateFlow<MyBookingsUiState> = _state.asStateFlow()
 
-    private val owner = ownerId()
     private var nextPage = 0
     private var loadJob: Job? = null
     private val namesRequested = mutableSetOf<String>()
 
     init {
-        if (owner != null) {
-            viewModelScope.launch {
+        viewModelScope.launch {
+            val owner = ownerId() ?: return@launch
+            launch {
                 bookings.observePending(owner).collect { pending ->
                     _state.update { it.copy(pending = pending) }
                     loadNames(pending.map { it.payload.refugeId })
                 }
             }
+            launch {
+                bookings.observeRejected(owner).collect { rejected ->
+                    _state.update { it.copy(rejected = rejected) }
+                    loadNames(rejected.map { it.payload.refugeId })
+                }
+            }
+            resend(owner)
         }
-        loadJob = viewModelScope.launch {
-            // quelle in coda prima: se partono, compaiono già nella prima pagina
-            if (owner != null) bookings.resendPending(owner)
-            loadPage(reset = true)
-        }
+        loadJob = viewModelScope.launch { loadPage(reset = true) }
+    }
+
+    fun dismissRejected(key: String) {
+        viewModelScope.launch { bookings.dismissRejected(key) }
+    }
+
+    // In parallelo alla lista. Se una prenotazione in coda è partita, la prima pagina si rilegge per mostrarla
+    private suspend fun resend(owner: String) {
+        val booked = bookings.resendPending(owner).any { it is BookingOutcome.Booked }
+        if (!booked) return
+        // dopo il caricamento in corso, che può essere partito prima della risposta
+        loadJob?.join()
+        loadJob = viewModelScope.launch { loadPage(reset = true) }
     }
 
     fun loadMore() {
@@ -83,10 +105,8 @@ class MyBookingsViewModel(
         if (_state.value.refreshing) return
         _state.update { it.copy(refreshing = true, error = null) }
         loadJob?.cancel()
-        loadJob = viewModelScope.launch {
-            if (owner != null) bookings.resendPending(owner)
-            loadPage(reset = true)
-        }
+        loadJob = viewModelScope.launch { loadPage(reset = true) }
+        viewModelScope.launch { ownerId()?.let { resend(it) } }
     }
 
     fun retry() {

@@ -18,29 +18,36 @@ import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.StringResource
 
 sealed interface Route {
+    // ---- schede della barra in basso ----
     @Serializable data object Map : Route
-    // scheda Rifugi: la lista dei rifugi vicini (M5.1)
+    // la lista dei rifugi vicini (M5.1)
     @Serializable data object Refuges : Route
+    // le allerte aperte per l'operatore (M7.2)
     @Serializable data object Alerts : Route
     @Serializable data object Management : Route
     @Serializable data object Profile : Route
-    @Serializable data object SosEmergency : Route
-    // "spinta" sopra la mappa (M3.2), senza barra in basso
+
+    // ---- mappa e sentieri: "spinte" sopra la mappa, senza barra in basso ----
     @Serializable data class TrailDetail(val id: String) : Route
-    // "spinta" sopra la scheda Rifugi o la mappa (M5.1), senza barra in basso
-    @Serializable data class RefugeDetail(val refugeId: String) : Route
-    // form "spinto" dal dettaglio del rifugio (M5.2): nome e posti per il form, senza richiederli
-    @Serializable data class BookRefuge(val refugeId: String, val name: String, val capacity: Int) : Route
-    // "spinta" sopra la scheda Rifugi (M5.2)
-    @Serializable data object MyBookings : Route
-    // form "spinto" (M4.1): la mappa del form parte da lat/lon/zoom; trailId se si parte da un sentiero
+    // form (M4.1): la mappa del form parte da lat/lon/zoom; trailId se si parte da un sentiero
     @Serializable data class ReportHazard(val lat: Double, val lon: Double, val zoom: Double, val trailId: String? = null) : Route
-    // "spinte" sopra il Profilo, senza barra in basso
-    @Serializable data object MyHazards : Route
+    @Serializable data object SosEmergency : Route
+
+    // ---- rifugi: "spinte" sopra la scheda Rifugi o la mappa ----
+    @Serializable data class RefugeDetail(val refugeId: String) : Route
+    // form dal dettaglio del rifugio (M5.2): nome e posti per il form, senza richiederli
+    @Serializable data class BookRefuge(val refugeId: String, val name: String, val capacity: Int) : Route
+    @Serializable data object MyBookings : Route
+
+    // ---- soccorso: "spinta" sopra la scheda Allerte, dalla mappa o da una push (M7.2) ----
+    @Serializable data class AlertDetail(val alertId: String) : Route
+
+    // ---- account: "spinte" sopra il Profilo ----
     @Serializable data object Login : Route
     @Serializable data object Register : Route
     @Serializable data object EditName : Route
     @Serializable data object ChangePassword : Route
+    @Serializable data object MyHazards : Route
 }
 
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
@@ -49,8 +56,9 @@ val FormRoutes = setOf(
     Route.BookRefuge::class,
 )
 
-// Schermate senza barra in basso: i form, i dettagli di sentiero e rifugio e le liste "mie" (con il loro Indietro)
-val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.RefugeDetail::class + Route.MyHazards::class + Route.MyBookings::class
+// Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta e le liste "mie" (con il loro Indietro)
+val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.RefugeDetail::class + Route.AlertDetail::class +
+    Route.MyHazards::class + Route.MyBookings::class
 
 data class BottomNavItem(
     val route: Route,

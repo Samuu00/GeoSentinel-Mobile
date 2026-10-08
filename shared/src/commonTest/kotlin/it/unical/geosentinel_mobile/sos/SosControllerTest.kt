@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.sos
 
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -22,6 +23,7 @@ import it.unical.geosentinel_mobile.sos.data.SosState
 import it.unical.geosentinel_mobile.sos.ui.SosController
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.runTest
@@ -58,6 +60,14 @@ class SosControllerTest {
     private val locationPuts = mutableListOf<Pair<String, String>>()
     private var locationOffline = false
     private var activeOffline = false
+    // il server crea l'allerta ma la risposta si perde per strada
+    private var loseRaiseResponse = false
+    // 2xx con un corpo fuori contratto (un bug): non deve far crashare l'app
+    private var raiseMalformed = false
+    // GET /sos/active lento (rete scarsa in montagna), in ms di tempo virtuale
+    private var activeDelayMs = 0L
+    // il client dell'ultimo controller: un controller nuovo sulla stessa outbox simula un riavvio dell'app
+    private var httpClient: HttpClient? = null
 
     private fun alertJson(id: String, status: String = "ACTIVE") =
         """{"id":"$id","hikerId":"$owner","location":{"lat":39.278,"lon":16.452},"status":"$status","createdAt":"2026-10-06T10:00:00Z","locationUpdatedAt":"2026-10-06T10:00:00Z"}"""
@@ -74,17 +84,21 @@ class SosControllerTest {
                     val problem = raiseProblem
                     if (problem != null) {
                         with(backend) { problem(problem.first, problem.second) }
+                    } else if (raiseMalformed) {
+                        respond("""{"id":42}""", HttpStatusCode.Created, json)
                     } else {
                         // stessa chiave o allerta già attiva: 200 con quella; altrimenti 201 con una nuova
                         val existing = created[key] ?: activeOnServer
                         val id = existing ?: "s${created.size + 1}"
                         created[key ?: id] = id
                         activeOnServer = id
+                        if (loseRaiseResponse) throw IOException("risposta persa")
                         respond(alertJson(id), if (existing == null) HttpStatusCode.Created else HttpStatusCode.OK, json)
                     }
                 }
                 request.method == HttpMethod.Get && path == "/api/v1/sos/active" -> {
                     if (activeOffline) throw IOException("rete assente")
+                    if (activeDelayMs > 0) delay(activeDelayMs)
                     val id = activeOnServer
                     if (id == null) with(backend) { problem(HttpStatusCode.NotFound, "not-found") } else respond(alertJson(id, serverStatus), HttpStatusCode.OK, json)
                 }
@@ -106,6 +120,7 @@ class SosControllerTest {
             }
         }
         val (session, client) = sessionWith(backend)
+        httpClient = client
         session.restore()
         if (login) assertTrue(session.login("hiker@test.dev", "password-giusta-1").isSuccess)
         val controller = SosController(
@@ -302,9 +317,159 @@ class SosControllerTest {
         sosOffline = false
 
         assertIs<SosState.Idle>(sos.state.value)
-        assertTrue(outbox.rows.value.isEmpty())
+        assertTrue(outbox.rows.value.values.none { it.kind == ActionKind.SOS })
         assertEquals(before, posts.size)
         assertTrue(created.isEmpty())
+        // la verifica sul server (nessuna allerta) finisce e toglie anche la sua riga
+        testScheduler.advanceTimeBy(30_000)
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `la verifica di un annullamento riparte dopo un riavvio e chiude l'allerta senza mostrarla`() = runTest {
+        val (sos, session) = controller()
+        loseRaiseResponse = true
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Sending && it.attempts >= 1 }
+        activeOffline = true
+        assertTrue(sos.cancel().isSuccess)
+        assertEquals(listOf(ActionKind.SOS_CANCEL), outbox.rows.value.values.map { it.kind })
+
+        // app chiusa prima che la rete torni: un controller nuovo sulla stessa outbox
+        activeOffline = false
+        val client = httpClient!!
+        val restarted = SosController(
+            SosRepository({ client }, TEST_BASE_URL),
+            outbox,
+            ownerId = { session.currentUserId() },
+            scope = backgroundScope,
+        )
+        restarted.restore()
+
+        assertIs<SosState.Idle>(restarted.state.value, "l'utente aveva annullato: niente allerta a schermo")
+        testScheduler.advanceTimeBy(30_000)
+        assertEquals(1, cancelled.size)
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `un SOS nuovo toglie la verifica di un annullamento precedente`() = runTest {
+        val (sos) = controller()
+        loseRaiseResponse = true
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Sending && it.attempts >= 1 }
+        activeOffline = true
+        sos.cancel()
+
+        loseRaiseResponse = false
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Raised }
+        activeOffline = false
+        testScheduler.advanceTimeBy(60_000)
+
+        assertTrue(cancelled.isEmpty(), "l'allerta nuova non si chiude")
+        assertIs<SosState.Raised>(sos.state.value)
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `annullare un SOS arrivato al server con la risposta persa chiude anche l'allerta`() = runTest {
+        val (sos) = controller()
+        loseRaiseResponse = true
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Sending && it.attempts >= 1 }
+        val alertId = activeOnServer!!
+
+        assertTrue(sos.cancel().isSuccess)
+        assertIs<SosState.Idle>(sos.state.value)
+
+        // la verifica in background trova l'allerta e la chiude: il soccorso non cerca chi ha annullato
+        testScheduler.advanceTimeBy(30_000)
+        assertEquals(listOf(alertId), cancelled)
+        assertNull(activeOnServer)
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `annullare in coda senza rete continua a verificare e chiude quando la rete torna`() = runTest {
+        val (sos) = controller()
+        loseRaiseResponse = true
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Sending && it.attempts >= 1 }
+        activeOffline = true
+        cancelOffline = true
+
+        assertTrue(sos.cancel().isSuccess)
+        testScheduler.advanceTimeBy(60_000)
+        assertTrue(cancelled.isEmpty())
+
+        activeOffline = false
+        cancelOffline = false
+        testScheduler.advanceTimeBy(60_000)
+        assertEquals(1, cancelled.size)
+    }
+
+    @Test
+    fun `un SOS non aspetta il restore lento all'avvio`() = runTest {
+        val (sos) = controller()
+        activeDelayMs = 60_000
+        val restoring = backgroundScope.async { sos.restore() }
+        testScheduler.runCurrent()
+
+        assertTrue(sos.raise(here, null))
+        assertIs<SosState.Sending>(sos.state.value, "in invio subito, senza aspettare la rete del restore")
+        testScheduler.runCurrent()
+        assertEquals(1, posts.size)
+
+        restoring.await()
+        // la risposta del restore (nessuna allerta prima dell'SOS, o quella nuova) non riporta indietro lo stato
+        assertTrue(sos.state.value is SosState.Raised || sos.state.value is SosState.Sending)
+    }
+
+    @Test
+    fun `l'SOS parte anche se chi lo lancia viene annullato subito`() = runTest {
+        val (sos) = controller()
+        val screen = backgroundScope.async { sos.raise(here, null) }
+        testScheduler.runCurrent()
+        screen.cancel() // la schermata si chiude subito dopo il tocco
+
+        sos.awaitState { it is SosState.Raised }
+        assertEquals(1, created.size)
+    }
+
+    @Test
+    fun `una risposta fuori contratto non fa crashare e si ritenta`() = runTest {
+        val (sos) = controller()
+        raiseMalformed = true
+        sos.raise(here, null)
+        sos.awaitState { it is SosState.Sending && it.attempts >= 1 }
+        assertEquals(1, outbox.rows.value.size, "resta in coda")
+
+        raiseMalformed = false
+        sos.awaitState { it is SosState.Raised }
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `una riga illeggibile nell'outbox non fa crashare il restore e lo dice`() = runTest {
+        val (sos) = controller()
+        outbox.insert(PendingActionEntity("rotta", ActionKind.SOS, owner, "non è json", Instant.parse("2026-10-06T10:00:00Z")))
+
+        sos.restore()
+
+        assertIs<SosState.Failed>(sos.state.value)
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `una push dopo una risposta persa e un riavvio porta l'allerta anche da Idle`() = runTest {
+        val (sos) = controller()
+        activeOnServer = "s9" // creata prima del riavvio, risposta mai arrivata, riga persa
+        assertIs<SosState.Idle>(sos.state.value)
+
+        sos.refresh() // push SOS_DISPATCHED
+
+        assertEquals("s9", assertIs<SosState.Raised>(sos.state.value).alert.id)
     }
 
     // ---- Id dell'utente dal token ----
@@ -384,7 +549,7 @@ class SosControllerTest {
     }
 
     @Test
-    fun `refresh senza rete non cambia nulla e senza allerta non chiama`() = runTest {
+    fun `refresh senza rete non cambia nulla`() = runTest {
         val sos = raised()
         activeOffline = true
 
@@ -393,7 +558,7 @@ class SosControllerTest {
 
         activeOffline = false
         assertTrue(sos.cancel().isSuccess)
-        activeOffline = true // se il refresh chiamasse il server, la rete assente lancerebbe
+        activeOffline = true // da Idle il refresh chiede al server: senza rete lo stato resta com'è
         sos.refresh()
         assertIs<SosState.Idle>(sos.state.value)
     }

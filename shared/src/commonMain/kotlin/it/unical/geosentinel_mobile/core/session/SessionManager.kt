@@ -28,6 +28,12 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Duration.Companion.seconds
 import kotlinx.datetime.LocalDate
 
+/**
+ * Perché una sessione è finita. Decide cosa si pulisce: con LOGOUT l'utente lascia il telefono (via i suoi dati in coda),
+ * con EXPIRED no (non l'ha scelto: rientrando, un SOS in coda deve ripartire).
+ */
+enum class SessionEnd { LOGOUT, EXPIRED, ACCOUNT_DELETED }
+
 sealed interface SessionState {
     // all'avvio, finché non si è letto lo store
     data object Loading : SessionState
@@ -58,6 +64,9 @@ class SessionManager(
     apiBaseUrl: String,
     // M7.1: il token push registrato, da togliere al logout (da PushManager; nei test nessuno)
     private val pushToken: suspend () -> String? = { null },
+    // A ogni fine sessione, con l'id dell'utente uscito e il motivo: pulizia locale (token push, outbox, cache).
+    // Gira con il mutex del refresh preso: niente richieste autenticate qui dentro.
+    private val onSessionEnded: suspend (userId: String?, reason: SessionEnd) -> Unit = { _, _ -> },
 ) : SessionRepository {
 
     private val client by lazy(httpClient)
@@ -109,7 +118,7 @@ class SessionManager(
                 }
             }
         } finally {
-            endSession(SessionState.Anonymous)
+            endSession(SessionState.Anonymous, SessionEnd.LOGOUT)
         }
     }
 
@@ -149,7 +158,7 @@ class SessionManager(
     // Il server annulla prenotazioni future e SOS attivo, toglie i dispositivi e revoca tutti i token:
     // qui basta chiudere la sessione locale, anche se l'utente lascia la schermata a metà.
     suspend fun deleteAccount(): Result<Unit> = withContext(NonCancellable) {
-        apiCall { usersApi.deleteMyAccount() }.map { endSession(SessionState.Anonymous) }
+        apiCall { usersApi.deleteMyAccount() }.map { endSession(SessionState.Anonymous, SessionEnd.ACCOUNT_DELETED) }
     }
 
     override suspend fun getTokens(): AuthTokens? = readTokens()
@@ -185,7 +194,7 @@ class SessionManager(
                 // Durante un cambio password il 401 viene dalla revoca appena fatta dal server: la sessione la tiene in
                 // piedi la risposta del cambio. Se il cambio fallisce, il refresh successivo riprende 401 e la chiude.
                 if ((failure as? ApiException)?.error is ApiError.Unauthorized && passwordChanges == 0) {
-                    endSessionLocked(SessionState.Expired, clearClient = false)
+                    endSessionLocked(SessionState.Expired, clearClient = false, reason = SessionEnd.EXPIRED)
                 }
                 null
             },
@@ -216,12 +225,13 @@ class SessionManager(
         }
     }
 
-    private suspend fun endSession(next: SessionState) = withContext(NonCancellable) {
-        refreshMutex.withLock { endSessionLocked(next, clearClient = true) }
+    private suspend fun endSession(next: SessionState, reason: SessionEnd) = withContext(NonCancellable) {
+        refreshMutex.withLock { endSessionLocked(next, clearClient = true, reason = reason) }
     }
 
     // Da chiamare con refreshMutex già preso
-    private suspend fun endSessionLocked(next: SessionState, clearClient: Boolean) = withContext(NonCancellable) {
+    private suspend fun endSessionLocked(next: SessionState, clearClient: Boolean, reason: SessionEnd) = withContext(NonCancellable) {
+        val endedUserId = currentUserId()
         // Un secondo tentativo per un errore momentaneo. Se fallisce ancora la sessione si chiude lo stesso in memoria,
         // ma i token restano su disco e al prossimo avvio si riaprirebbe: ponytail: raro (disco o Keychain guasti),
         // un flag "sessione chiusa" letto da restore() se mai succede davvero.
@@ -236,6 +246,13 @@ class SessionManager(
         }
         if (clearClient) clearClientTokens()
         _state.value = next
+        try {
+            onSessionEnded(endedUserId, reason)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            // la pulizia locale non deve impedire di chiudere la sessione
+        }
     }
 
     // Lo store può fallire (file danneggiato, disco pieno, Keychain non disponibile): un errore, mai un crash

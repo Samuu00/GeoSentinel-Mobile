@@ -5,10 +5,20 @@ import androidx.room.Entity
 import androidx.room.Insert
 import androidx.room.PrimaryKey
 import androidx.room.Query
+import it.unical.geosentinel_mobile.core.session.SessionEnd
 import kotlinx.coroutines.flow.Flow
 import kotlin.time.Instant
 
-enum class ActionKind { BOOKING, SOS }
+// Salvato come testo (il nome): un valore nuovo non cambia lo schema e non serve una migrazione
+enum class ActionKind {
+    BOOKING,
+    SOS,
+    // prenotazione in coda rifiutata dopo (o scaduta): resta finché l'utente non l'ha letta in "Le mie prenotazioni"
+    BOOKING_REJECTED,
+    // SOS annullato prima della risposta: si verifica sul server (e si chiude l'allerta) anche dopo un riavvio.
+    // Nessun dato personale nel payload
+    SOS_CANCEL,
+}
 
 /**
  * Un'azione dell'utente in attesa di una risposta definitiva (outbox, M5.2/M6). La `Idempotency-Key` si salva qui
@@ -46,4 +56,24 @@ interface OutboxDao {
 
     @Query("DELETE FROM pending_actions WHERE idempotencyKey = :key")
     suspend fun delete(key: String)
+
+    // Logout o account cancellato: le azioni di quell'utente con i dati personali (posizione, note mediche, date) non
+    // restano sul telefono
+    @Query("DELETE FROM pending_actions WHERE ownerId = :ownerId AND kind IN (:kinds)")
+    suspend fun deleteOwner(ownerId: String, kinds: List<ActionKind>)
+
+    // Un'azione cambia tipo (es. prenotazione in coda rifiutata): stessa chiave, payload nuovo
+    @Query("UPDATE pending_actions SET kind = :kind, payloadJson = :payloadJson WHERE idempotencyKey = :key")
+    suspend fun replace(key: String, kind: ActionKind, payloadJson: String)
+}
+
+/**
+ * Pulizia a fine sessione. Logout e account cancellato: l'utente lascia il telefono, le sue azioni con dati personali
+ * (posizione e note mediche di un SOS, date delle prenotazioni) non restano. Al logout resta solo la verifica di un SOS
+ * annullato (nessun dato personale), che riparte al suo login. Sessione scaduta: nulla, rientrando l'SOS deve ripartire.
+ */
+suspend fun OutboxDao.clearAfterSession(ownerId: String, reason: SessionEnd) = when (reason) {
+    SessionEnd.LOGOUT -> deleteOwner(ownerId, ActionKind.entries - ActionKind.SOS_CANCEL)
+    SessionEnd.ACCOUNT_DELETED -> deleteOwner(ownerId, ActionKind.entries)
+    SessionEnd.EXPIRED -> Unit
 }

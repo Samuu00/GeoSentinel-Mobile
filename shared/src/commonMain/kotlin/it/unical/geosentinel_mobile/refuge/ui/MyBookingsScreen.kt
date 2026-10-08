@@ -60,7 +60,11 @@ import geosentinel_mobile.shared.generated.resources.booking_keep
 import geosentinel_mobile.shared.generated.resources.booking_nights_count
 import geosentinel_mobile.shared.generated.resources.booking_status_cancelled
 import geosentinel_mobile.shared.generated.resources.booking_status_confirmed
+import geosentinel_mobile.shared.generated.resources.booking_rejected_expired
+import geosentinel_mobile.shared.generated.resources.booking_rejected_ok
+import geosentinel_mobile.shared.generated.resources.booking_status_expired
 import geosentinel_mobile.shared.generated.resources.booking_status_pending
+import geosentinel_mobile.shared.generated.resources.booking_status_rejected
 import geosentinel_mobile.shared.generated.resources.booking_status_unknown
 import geosentinel_mobile.shared.generated.resources.my_bookings_empty
 import geosentinel_mobile.shared.generated.resources.my_bookings_refuge_unknown
@@ -72,6 +76,7 @@ import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
+import it.unical.geosentinel_mobile.core.ui.uiMessage
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.filter
 import kotlinx.datetime.LocalDate
@@ -128,6 +133,31 @@ fun MyBookingsScreen(onBack: () -> Unit) {
                         }
                     }
                 }
+                // in coda e poi rifiutate (o scadute): l'utente le aveva viste "in invio", qui sa che non ci sono
+                items(state.rejected, key = { "rejected-" + it.key }) { rejected ->
+                    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                        BookingCard(
+                            refugeName = state.refugeNames[rejected.payload.refugeId],
+                            stay = stayLabel(rejected.payload.checkIn, rejected.payload.checkOut, null, rejected.payload.guests),
+                            status = if (rejected.error == null) Res.string.booking_status_expired else Res.string.booking_status_rejected,
+                            statusColors = MaterialTheme.colorScheme.errorContainer to MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                        ) {
+                            Text(
+                                rejected.error?.uiMessage()?.resolve() ?: stringResource(Res.string.booking_rejected_expired),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
+                            )
+                            TextButton(onClick = { viewModel.dismissRejected(rejected.key) }, modifier = Modifier.heightIn(min = 48.dp)) {
+                                Text(stringResource(Res.string.booking_rejected_ok))
+                            }
+                        }
+                    }
+                }
                 items(state.pending, key = { "pending-" + it.key }) { pending ->
                     BookingCard(
                         refugeName = state.refugeNames[pending.payload.refugeId],
@@ -143,7 +173,7 @@ fun MyBookingsScreen(onBack: () -> Unit) {
                             PrimaryPillButton(stringResource(Res.string.trail_retry), onClick = viewModel::retry)
                         }
                     }
-                    state.items.isEmpty() && state.pending.isEmpty() -> item(key = "empty") { Message(stringResource(Res.string.my_bookings_empty)) }
+                    state.items.isEmpty() && state.pending.isEmpty() && state.rejected.isEmpty() -> item(key = "empty") { Message(stringResource(Res.string.my_bookings_empty)) }
                     else -> {
                         items(state.items, key = { it.id }) { booking ->
                             val (status, colors) = booking.status.presentation()

@@ -79,11 +79,15 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.repeatOnLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.hazards_load_failed
 import geosentinel_mobile.shared.generated.resources.hazards_nearby_button
+import geosentinel_mobile.shared.generated.resources.rescue_map_partial
 import geosentinel_mobile.shared.generated.resources.location_denied_body
 import geosentinel_mobile.shared.generated.resources.location_denied_title
 import geosentinel_mobile.shared.generated.resources.location_open_settings
@@ -118,6 +122,8 @@ import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
+import it.unical.geosentinel_mobile.core.push.PushEvent
+import it.unical.geosentinel_mobile.core.push.PushManager
 import it.unical.geosentinel_mobile.hazard.ui.HazardCard
 import it.unical.geosentinel_mobile.hazard.ui.HazardMapViewModel
 import it.unical.geosentinel_mobile.hazard.ui.HazardMarkers
@@ -125,6 +131,9 @@ import it.unical.geosentinel_mobile.hazard.ui.NearbyHazards
 import it.unical.geosentinel_mobile.hazard.ui.NearbyHazardsSheet
 import it.unical.geosentinel_mobile.refuge.ui.RefugeMapViewModel
 import it.unical.geosentinel_mobile.refuge.ui.RefugeMarkers
+import it.unical.geosentinel_mobile.rescue.ui.RescueMapViewModel
+import it.unical.geosentinel_mobile.rescue.ui.RescueRefreshEvery
+import it.unical.geosentinel_mobile.rescue.ui.SosAlertMarkers
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
 import kotlin.math.max
@@ -133,7 +142,13 @@ import kotlin.time.Duration.Companion.seconds
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.filterNotNull
+import it.unical.geosentinel_mobile.sos.data.SosState
+import it.unical.geosentinel_mobile.sos.ui.SosController
+import kotlinx.coroutines.flow.drop
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -225,6 +240,7 @@ private const val HazardZoom = 15.0
 /**
  * [showHazards]: pericoli sulla mappa e "Pericoli vicini", solo da loggati (M4.4). Al logout spariscono.
  * [onOpenRefuge]: i rifugi sulla mappa (M5.1), null per l'ospite (le rotte dei rifugi richiedono il login).
+ * [onOpenAlert]: le allerte SOS aperte (M7.2), solo per gli operatori; null per tutti gli altri.
  */
 @Composable
 fun MapScreen(
@@ -232,6 +248,7 @@ fun MapScreen(
     onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?,
     showHazards: Boolean,
     onOpenRefuge: ((String) -> Unit)?,
+    onOpenAlert: ((String) -> Unit)?,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
@@ -249,6 +266,33 @@ fun MapScreen(
     val refugeViewModel = koinViewModel<RefugeMapViewModel>()
     val refuges by refugeViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(onOpenRefuge != null) { refugeViewModel.setEnabled(onOpenRefuge != null) }
+    val alertViewModel = koinViewModel<RescueMapViewModel>()
+    val alerts by alertViewModel.state.collectAsStateWithLifecycle()
+    val alertsPartial by alertViewModel.partial.collectAsStateWithLifecycle()
+    LaunchedEffect(onOpenAlert != null) { alertViewModel.setEnabled(onOpenAlert != null) }
+    // A mappa ferma le allerte si rileggono come nella scheda Allerte: subito a ogni ritorno sulla mappa (dalla schermata
+    // SOS, da un dettaglio, dal background), poi ogni 30 s, e a ogni SOS nuovo (push). Il proprio SOS non arriva come
+    // push: si rilegge quando cambia (lanciato, annullato, chiuso)
+    if (onOpenAlert != null) {
+        val push = koinInject<PushManager>()
+        val sos = koinInject<SosController>()
+        val lifecycleOwner = LocalLifecycleOwner.current
+        LaunchedEffect(lifecycleOwner) {
+            lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (true) {
+                    alertViewModel.refresh()
+                    delay(RescueRefreshEvery)
+                }
+            }
+        }
+        LaunchedEffect(push) { push.received.filterIsInstance<PushEvent.SosRaised>().collect { alertViewModel.refresh() } }
+        LaunchedEffect(sos) {
+            sos.state.map { (it as? SosState.Raised)?.alert?.let { alert -> alert.id to alert.status } }
+                .distinctUntilChanged()
+                .drop(1)
+                .collect { alertViewModel.refresh() }
+        }
+    }
     var choosingType by rememberSaveable { mutableStateOf(false) }
     var selectedPoiId by rememberSaveable { mutableStateOf<String?>(null) }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
@@ -283,6 +327,10 @@ fun MapScreen(
             selectedPoiId = null
             hazardViewModel.select(id)
         }
+        // le allerte sopra i pericoli: per l'operatore sono la cosa più importante della mappa
+        if (onOpenAlert != null) {
+            SosAlertMarkers(alerts, light = colors.surfaceContainerLowest, onAlertClick = onOpenAlert)
+        }
         // il pallino sopra tutto
         LocationIndicatorLayer(id = "posizione", locationState = location)
     }
@@ -301,6 +349,7 @@ fun MapScreen(
             viewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
             hazardViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
             refugeViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
+            alertViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
         }
     }
 
@@ -419,6 +468,8 @@ fun MapScreen(
                 ui.failed != null -> stringResource(Res.string.trails_load_failed)
                 ui.zoomTooLow -> stringResource(Res.string.trails_zoom_in_hint)
                 hazardsFailed -> stringResource(Res.string.hazards_load_failed)
+                // l'operatore deve sapere che sulla mappa non ci sono tutte le allerte (la scheda Allerte sì)
+                onOpenAlert != null && alertsPartial -> stringResource(Res.string.rescue_map_partial)
                 ui.truncated -> stringResource(Res.string.trails_too_many)
                 ui.loading -> stringResource(Res.string.trails_loading)
                 else -> null

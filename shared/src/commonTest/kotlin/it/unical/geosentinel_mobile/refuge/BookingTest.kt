@@ -33,6 +33,13 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.test.setMain
 import kotlinx.datetime.LocalDate
 import kotlinx.io.IOException
+import it.unical.geosentinel_mobile.core.session.SessionEnd
+import it.unical.geosentinel_mobile.core.db.clearAfterSession
+import it.unical.geosentinel_mobile.core.network.ApiError
+import kotlin.time.Instant
+import kotlinx.serialization.json.Json
+import kotlinx.coroutines.flow.first
+import it.unical.geosentinel_mobile.core.db.ActionKind
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -166,6 +173,104 @@ class BookingTest {
 
         assertEquals(BookingOutcome.Queued, bookings.book("u1", payload))
         assertEquals(setOf("k1"), outbox.rows.value.keys)
+    }
+
+    @Test
+    fun `il reinvio si ferma al primo errore di rete`() = runTest {
+        val (bookings) = client()
+        offline = true
+        bookings.book("u1", payload)
+        bookings.book("u1", payload.copy(guests = 3))
+        posts.clear()
+
+        val outcomes = bookings.resendPending("u1")
+
+        assertEquals(listOf<BookingOutcome>(BookingOutcome.Queued), outcomes)
+        // i retry del client sulla stessa chiave sì, la seconda prenotazione no: fallirebbe uguale
+        assertEquals(setOf("k1"), posts.map { it.first }.toSet())
+        assertEquals(2, outbox.rows.value.size)
+    }
+
+    @Test
+    fun `una prenotazione in coda rifiutata dopo resta visibile finche l'utente non la chiude`() = runTest {
+        val (bookings, refuges) = client()
+        offline = true
+        bookings.book("u1", payload)
+        offline = false
+        bookingReply = HttpStatusCode.Conflict
+        bookingSlug = "capacity-exceeded"
+
+        val viewModel = MyBookingsViewModel(bookings, refuges, ownerId = { "u1" }, today = { today })
+        advanceUntilIdle()
+
+        val rejected = viewModel.state.value.rejected.single()
+        assertEquals(payload, rejected.payload)
+        assertEquals(ApiError.Conflict("capacity-exceeded", null), rejected.error)
+        // non più in coda, ma salvata come rifiutata finché l'utente non la legge
+        assertEquals(listOf(ActionKind.BOOKING_REJECTED), outbox.rows.value.values.map { it.kind })
+        viewModel.dismissRejected(rejected.key)
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.rejected.isEmpty())
+        assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    @Test
+    fun `una prenotazione in coda da piu di 24 ore non parte e si dice scaduta`() = runTest {
+        val (bookings) = client()
+        val json = Json.encodeToString(BookingPayload.serializer(), payload)
+        outbox.insert(PendingActionEntity("vecchia", ActionKind.BOOKING, "u1", json, Instant.parse("2020-01-01T00:00:00Z")))
+
+        bookings.resendPending("u1")
+
+        assertTrue(posts.isEmpty())
+        assertEquals(listOf(ActionKind.BOOKING_REJECTED), outbox.rows.value.values.map { it.kind })
+        assertNull(bookings.observeRejected("u1").first().single().error)
+    }
+
+    @Test
+    fun `un rifiuto resta anche dopo un riavvio e solo per il suo utente`() = runTest {
+        val (bookings) = client()
+        offline = true
+        bookings.book("u1", payload)
+        offline = false
+        bookingReply = HttpStatusCode.NotFound
+        bookings.resendPending("u1")
+
+        // un repository nuovo sulla stessa outbox: come dopo un riavvio dell'app
+        val afterRestart = BookingRepository({ error("nessuna richiesta") }, TEST_BASE_URL, outbox)
+        assertEquals(ApiError.NotFound(null), afterRestart.observeRejected("u1").first().single().error)
+        assertTrue(afterRestart.observeRejected("u2").first().isEmpty())
+        assertTrue(afterRestart.observePending("u1").first().isEmpty(), "un rifiuto non è più in invio")
+    }
+
+    @Test
+    fun `al logout spariscono le azioni dell'utente tranne la verifica di un annullamento`() = runTest {
+        val at = Instant.parse("2099-01-01T00:00:00Z")
+        fun row(key: String, kind: ActionKind, owner: String = "u1") = PendingActionEntity(key, kind, owner, "{}", at)
+        listOf(
+            row("b", ActionKind.BOOKING), row("r", ActionKind.BOOKING_REJECTED), row("s", ActionKind.SOS),
+            row("c", ActionKind.SOS_CANCEL), row("altro", ActionKind.SOS, owner = "u2"),
+        ).forEach { outbox.insert(it) }
+
+        outbox.clearAfterSession("u1", SessionEnd.EXPIRED)
+        assertEquals(5, outbox.rows.value.size, "sessione scaduta: l'SOS deve ripartire al login")
+
+        outbox.clearAfterSession("u1", SessionEnd.LOGOUT)
+        assertEquals(setOf("c", "altro"), outbox.rows.value.keys)
+
+        outbox.clearAfterSession("u1", SessionEnd.ACCOUNT_DELETED)
+        assertEquals(setOf("altro"), outbox.rows.value.keys)
+    }
+
+    @Test
+    fun `una riga illeggibile si toglie senza crash e le altre partono`() = runTest {
+        val (bookings) = client()
+        outbox.insert(PendingActionEntity("rotta", ActionKind.BOOKING, "u1", "non è json", Instant.parse("2099-01-01T00:00:00Z")))
+
+        bookings.resendPending("u1")
+
+        assertTrue(outbox.rows.value.isEmpty())
+        assertTrue(bookings.observePending("u1").first().isEmpty())
     }
 
     @Test

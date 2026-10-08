@@ -64,6 +64,8 @@ class RefugeMapViewModel(private val refuges: RefugeRepository) : ViewModel() {
     private suspend fun load(request: Request) {
         if (request.zoom < MinZoom) {
             _state.value = emptyList()
+            // la lista è vuota: tornando vicino nella stessa area si deve ricaricare
+            loaded = null
             return
         }
         if (loaded?.contains(request.bounds) == true) return

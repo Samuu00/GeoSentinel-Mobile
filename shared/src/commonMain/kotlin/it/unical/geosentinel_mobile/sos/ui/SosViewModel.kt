@@ -25,6 +25,7 @@ class SosViewModel(private val controller: SosController, val session: StateFlow
     val cancel: StateFlow<CancelUi> = _cancel.asStateFlow()
 
     fun raise(at: GeoPoint, medicalNotes: String) {
+        // il controller lo fa girare nel suo scope: uscire dalla schermata non interrompe l'SOS
         viewModelScope.launch { controller.raise(at, medicalNotes) }
     }
 

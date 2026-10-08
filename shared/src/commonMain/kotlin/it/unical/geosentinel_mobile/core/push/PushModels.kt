@@ -14,9 +14,13 @@ sealed interface PushEvent {
     data class SosResolved(override val alertId: String) : PushEvent
 
     companion object {
+        // L'id delle allerte è un UUID. Il payload può arrivare anche da un intent di un'altra app (MainActivity è
+        // esportata): qualunque altra cosa si scarta, così non finisce nel path di una richiesta autenticata
+        private val AlertIdPattern = Regex("^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+
         // Un type sconosciuto (versione nuova del backend) o un payload incompleto si ignorano
         fun fromPayload(data: Map<String, String?>): PushEvent? {
-            val alertId = data["alertId"]?.takeIf { it.isNotBlank() } ?: return null
+            val alertId = data["alertId"]?.takeIf { AlertIdPattern.matches(it) } ?: return null
             return when (data["type"]) {
                 "SOS_RAISED" -> SosRaised(alertId)
                 "SOS_DISPATCHED" -> SosDispatched(alertId)

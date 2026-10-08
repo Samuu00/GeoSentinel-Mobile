@@ -10,4 +10,5 @@
     <string name="push_sos_dispatched_body">Una squadra è stata inviata verso di te. Tieni l’app aperta.</string>
     <string name="push_sos_resolved_title">Allerta chiusa</string>
     <string name="push_sos_resolved_body">Il soccorso ha chiuso la tua richiesta di aiuto.</string>
+    <string name="push_public_body">Nuova notifica</string>
 </resources>

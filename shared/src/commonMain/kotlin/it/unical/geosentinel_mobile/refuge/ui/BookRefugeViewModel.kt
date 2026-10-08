@@ -45,13 +45,13 @@ data class BookRefugeUiState(
 /**
  * Form "Prenota" (M5.2): arrivo, notti (1–14) e persone (1–posti del rifugio). L'invio passa dall'outbox
  * ([BookingRepository.book]): senza risposta la prenotazione resta "in invio" e parte da sola più tardi.
- * [ownerId]: l'id dell'utente loggato (null senza profilo letto).
+ * [ownerId]: l'id dell'utente loggato (dal profilo o, senza rete, dal token; null da ospite).
  */
 class BookRefugeViewModel(
     private val refugeId: String,
     private val capacity: Int,
     private val bookings: BookingRepository,
-    private val ownerId: () -> String?,
+    private val ownerId: suspend () -> String?,
     private val today: () -> LocalDate = { Clock.System.todayIn(TimeZone.currentSystemDefault()) },
 ) : ViewModel() {
 
@@ -74,13 +74,13 @@ class BookRefugeViewModel(
             _state.update { it.copy(error = UiMessage(Res.string.booking_arrival_past)) }
             return
         }
-        val owner = ownerId()
-        if (owner == null) {
-            _state.update { it.copy(error = UiMessage(Res.string.booking_no_profile)) }
-            return
-        }
         _state.update { it.copy(submitting = true, error = null) }
         viewModelScope.launch {
+            val owner = ownerId()
+            if (owner == null) {
+                _state.update { it.copy(submitting = false, error = UiMessage(Res.string.booking_no_profile)) }
+                return@launch
+            }
             val outcome = bookings.book(owner, BookingPayload(refugeId, current.arrival, current.departure, current.guests))
             _state.update { state ->
                 when (outcome) {

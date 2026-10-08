@@ -44,8 +44,6 @@
     <!-- Schermate segnaposto, sostituite milestone per milestone -->
     <string name="placeholder_map_title">Mappa dei sentieri</string>
     <string name="placeholder_map_body">Qui compariranno sentieri, punti di interesse e la tua posizione.</string>
-    <string name="placeholder_alerts_title">Allerte SOS</string>
-    <string name="placeholder_alerts_body">Qui compariranno le richieste di soccorso attive.</string>
     <string name="placeholder_management_title">Gestione del parco</string>
     <string name="placeholder_management_body">Qui potrai verificare le segnalazioni e gestire sentieri, ticket e rifugi.</string>
     <string name="placeholder_profile_title">Profilo</string>
@@ -337,10 +335,58 @@
     <string name="booking_status_confirmed">Confermata</string>
     <string name="booking_status_cancelled">Annullata</string>
     <string name="booking_status_pending">In invio</string>
+    <string name="booking_status_rejected">Non riuscita</string>
+    <string name="booking_status_expired">Scaduta</string>
+    <string name="booking_rejected_expired">Non è partita entro 24 ore: rifalla se ti serve ancora.</string>
+    <string name="booking_rejected_ok">Ho capito</string>
     <string name="booking_status_unknown">Stato non disponibile</string>
     <string name="booking_cancel">Annulla prenotazione</string>
     <string name="booking_cancel_title">Annullare la prenotazione?</string>
     <string name="booking_cancel_body">Il posto torna libero per altri escursionisti.</string>
     <string name="booking_keep">Tienila</string>
+
+    <!-- Soccorso (M7.2): scheda Allerte e dettaglio dell'operatore -->
+    <string name="rescue_alerts_title">Allerte SOS</string>
+    <string name="rescue_alerts_intro">Le richieste di soccorso aperte, chi aspetta da più tempo in cima.</string>
+    <string name="rescue_alerts_empty_title">Nessuna allerta aperta</string>
+    <string name="rescue_alerts_empty_body">Quando arriva un SOS compare qui e ricevi una notifica.</string>
+    <string name="rescue_alert_open">apri l'allerta</string>
+    <string name="rescue_status_active">In attesa di una squadra</string>
+    <string name="rescue_status_dispatched">Squadra inviata</string>
+    <string name="rescue_status_resolved">Chiusa</string>
+    <string name="rescue_status_cancelled">Annullata dall'escursionista</string>
+    <string name="rescue_status_unknown">Stato non disponibile</string>
+    <string name="rescue_raised_ago">aperta %1$s</string>
+    <string name="rescue_age_now">adesso</string>
+    <string name="rescue_age_minutes">%1$d min fa</string>
+    <string name="rescue_age_hours">%1$d h fa</string>
+    <string name="rescue_team_label">Squadra: %1$s</string>
+    <string name="rescue_detail_title">Allerta SOS</string>
+    <string name="rescue_location_title">Posizione (lat, lon)</string>
+    <string name="rescue_location_updated">aggiornata %1$s</string>
+    <string name="rescue_medical_title">Note mediche</string>
+    <string name="rescue_medical_none">Nessuna nota dall'escursionista.</string>
+    <string name="rescue_team_assigned">Squadra inviata</string>
+    <string name="rescue_team_contact">Contatto: %1$s</string>
+    <string name="rescue_teams_title">Squadre libere vicine</string>
+    <string name="rescue_teams_empty">Nessuna squadra libera entro 150 km.</string>
+    <string name="rescue_dispatch">Invia la squadra</string>
+    <string name="rescue_resolve">Chiudi l'allerta</string>
+    <string name="rescue_resolve_title">Chiudere l'allerta?</string>
+    <string name="rescue_resolve_body">Fallo quando l'escursionista è al sicuro o l'allerta era un falso allarme. La squadra torna libera.</string>
+    <string name="rescue_resolve_confirm">Chiudi</string>
+    <string name="rescue_resolve_dismiss">Non ancora</string>
+    <!-- Uscita con un SOS in corso -->
+    <string name="profile_logout_sos_title">Hai un SOS in corso</string>
+    <string name="profile_logout_sos_sending">La richiesta non è ancora arrivata al soccorso. Se esci smette di partire e viene tolta da questo telefono.</string>
+    <string name="profile_logout_sos_raised">Il soccorso ha la tua allerta, che resta attiva. Se esci la tua posizione non si aggiorna più e non vedi la squadra in arrivo.</string>
+    <string name="profile_logout_anyway">Esci lo stesso</string>
+    <string name="profile_logout_stay">Resta</string>
+    <!-- Uscita con foto ancora in caricamento -->
+    <string name="report_leave_uploading_title">Foto ancora in caricamento</string>
+    <string name="report_leave_uploading_body">Se esci il caricamento continua da solo, ma non vedrai se arriva. Le foto non riuscite si perdono.</string>
+    <string name="report_leave_anyway">Esci lo stesso</string>
+    <string name="report_leave_stay">Resta</string>
+    <string name="rescue_map_partial">Avvicina la mappa per vedere tutte le allerte (la lista in Allerte le ha tutte)</string>
 
 </resources>

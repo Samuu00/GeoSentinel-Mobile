@@ -1,5 +1,13 @@
 package it.unical.geosentinel_mobile.hazard.ui
 
+import geosentinel_mobile.shared.generated.resources.report_leave_uploading_title
+import geosentinel_mobile.shared.generated.resources.report_leave_uploading_body
+import geosentinel_mobile.shared.generated.resources.report_leave_stay
+import geosentinel_mobile.shared.generated.resources.report_leave_anyway
+import androidx.compose.ui.backhandler.BackHandler
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.material3.AlertDialog
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -135,14 +143,36 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
         val encoder = koinInject<ImageEncoder>()
         val pickPhoto = rememberPhotoPicker { picked -> viewModel.addPhoto { encoder.toJpeg(picked) } }
         val takePhoto = rememberCameraCapture { captured -> viewModel.addPhoto { encoder.toJpeg(captured) } }
-        // "Fatto" chiude la schermata e annullerebbe gli upload in corso
+        // Con foto in caricamento si chiede prima di uscire (Fatto, Indietro, gesto di sistema): l'upload continua da solo
+        // (scope dell'app), ma da fuori l'utente non vede se arriva
         val uploading = state.photos.any { it.status == PhotoStatus.UPLOADING }
+        var confirmLeave by rememberSaveable { mutableStateOf(false) }
+        val leave = { if (uploading) confirmLeave = true else onBack() }
+        // ponytail: BackHandler è deprecato a favore di NavigationEventHandler (navigationevent-compose), che in CMP 1.12
+        // ci si appoggia sotto. Passare a quello quando la sua API è stabile su Android e iOS
+        @Suppress("DEPRECATION")
+        @OptIn(ExperimentalComposeUiApi::class)
+        BackHandler(enabled = uploading) { confirmLeave = true }
+        if (confirmLeave) {
+            AlertDialog(
+                onDismissRequest = { confirmLeave = false },
+                title = { Text(stringResource(Res.string.report_leave_uploading_title)) },
+                text = { Text(stringResource(Res.string.report_leave_uploading_body)) },
+                confirmButton = {
+                    TextButton(onClick = {
+                        confirmLeave = false
+                        onBack()
+                    }) { Text(stringResource(Res.string.report_leave_anyway)) }
+                },
+                dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(stringResource(Res.string.report_leave_stay)) } },
+            )
+        }
         FormScaffold(
-            onBack = onBack,
+            onBack = leave,
             title = Res.string.report_sent_title,
             body = Res.string.report_sent_body,
             actions = {
-                PrimaryPillButton(text = stringResource(Res.string.report_sent_done), onClick = onBack, loading = uploading)
+                PrimaryPillButton(text = stringResource(Res.string.report_sent_done), onClick = leave, loading = uploading)
             },
         ) {
             Field(Res.string.report_photos, error = null) {

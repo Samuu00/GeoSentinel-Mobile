@@ -34,17 +34,39 @@ class PushManagerTest {
 
     @Test
     fun `i tre type del backend diventano eventi con il loro alertId`() {
-        assertEquals(PushEvent.SosRaised("a1"), PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "a1")))
-        assertEquals(PushEvent.SosDispatched("a2"), PushEvent.fromPayload(mapOf("type" to "SOS_DISPATCHED", "alertId" to "a2")))
-        assertEquals(PushEvent.SosResolved("a3"), PushEvent.fromPayload(mapOf("type" to "SOS_RESOLVED", "alertId" to "a3")))
+        assertEquals(PushEvent.SosRaised("00000000-0000-0000-0000-0000000000a1"), PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "00000000-0000-0000-0000-0000000000a1")))
+        assertEquals(PushEvent.SosDispatched("00000000-0000-0000-0000-0000000000a2"), PushEvent.fromPayload(mapOf("type" to "SOS_DISPATCHED", "alertId" to "00000000-0000-0000-0000-0000000000a2")))
+        assertEquals(PushEvent.SosResolved("00000000-0000-0000-0000-0000000000a3"), PushEvent.fromPayload(mapOf("type" to "SOS_RESOLVED", "alertId" to "00000000-0000-0000-0000-0000000000a3")))
+    }
+
+    @Test
+    fun `un alertId che non e un UUID si scarta e non finisce nel path di una richiesta`() {
+        assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "../users/me")))
+        assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "a1?x=1")))
+        assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "a1")))
+    }
+
+    @Test
+    fun `a fine sessione la notifica toccata si scarta e il token si invalida`() {
+        val push = PushManager({ error("nessuna richiesta") }, "http://api.test", RegisterDeviceRequest.Platform.ANDROID)
+        var revoked = 0
+        push.tokenRevoker = { revoked++ }
+        push.onNewToken("t1")
+        push.onNotificationOpened(mapOf("type" to "SOS_RAISED", "alertId" to "00000000-0000-0000-0000-0000000000a1"))
+
+        push.sessionEnded()
+
+        assertNull(push.opened.value)
+        assertNull(push.token.value)
+        assertEquals(1, revoked)
     }
 
     @Test
     fun `un type sconosciuto o senza alertId si ignora`() {
-        assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_ESCALATED", "alertId" to "a1")))
+        assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_ESCALATED", "alertId" to "00000000-0000-0000-0000-0000000000a1")))
         assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED")))
         assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "")))
-        assertNull(PushEvent.fromPayload(mapOf("type" to null, "alertId" to "a1")))
+        assertNull(PushEvent.fromPayload(mapOf("type" to null, "alertId" to "00000000-0000-0000-0000-0000000000a1")))
     }
 
     // ---- notifica toccata ------------------------------------------------------------------------------------
@@ -53,13 +75,13 @@ class PushManagerTest {
     fun `la notifica toccata resta finche non si apre e una doppia apre la stessa allerta`() = runTest {
         val (_, client) = sessionWith(backend)
         val push = PushManager({ client }, TEST_BASE_URL, RegisterDeviceRequest.Platform.ANDROID)
-        val payload = mapOf("type" to "SOS_DISPATCHED", "alertId" to "a1")
+        val payload = mapOf("type" to "SOS_DISPATCHED", "alertId" to "00000000-0000-0000-0000-0000000000a1")
 
         push.onNotificationOpened(payload)
         push.onNotificationOpened(payload)
-        assertEquals(PushEvent.SosDispatched("a1"), push.opened.value)
+        assertEquals(PushEvent.SosDispatched("00000000-0000-0000-0000-0000000000a1"), push.opened.value)
 
-        push.consumeOpened(PushEvent.SosDispatched("a1"))
+        push.consumeOpened(PushEvent.SosDispatched("00000000-0000-0000-0000-0000000000a1"))
         assertNull(push.opened.value)
     }
 
@@ -68,10 +90,10 @@ class PushManagerTest {
         val (_, client) = sessionWith(backend)
         val push = PushManager({ client }, TEST_BASE_URL, RegisterDeviceRequest.Platform.ANDROID)
 
-        push.onNotificationOpened(mapOf("type" to "SOS_RAISED", "alertId" to "nuova"))
-        push.consumeOpened(PushEvent.SosRaised("vecchia"))
+        push.onNotificationOpened(mapOf("type" to "SOS_RAISED", "alertId" to "00000000-0000-0000-0000-00000000000b"))
+        push.consumeOpened(PushEvent.SosRaised("00000000-0000-0000-0000-00000000000a"))
 
-        assertEquals(PushEvent.SosRaised("nuova"), push.opened.value)
+        assertEquals(PushEvent.SosRaised("00000000-0000-0000-0000-00000000000b"), push.opened.value)
     }
 
     // ---- registrazione e logout ------------------------------------------------------------------------------

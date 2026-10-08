@@ -39,6 +39,9 @@ class MediaUploader(
     private val client by lazy(httpClient)
     private val storage by lazy(storageClient)
     private val mediaApi by lazy { MediaApi(apiBaseUrl, client) }
+    // In chiaro solo con il backend locale in chiaro (debug): altrimenti un uploadUrl http:// (server compromesso o
+    // configurato male) manderebbe la firma del modulo e la foto senza TLS
+    private val cleartextAllowed = apiBaseUrl.startsWith("http://")
 
     suspend fun upload(jpeg: ByteArray, target: MediaTarget): Result<MediaResponse> {
         // lo storage lo rifiuterebbe comunque (400 EntityTooLarge), dopo aver occupato una richiesta di upload
@@ -68,7 +71,9 @@ class MediaUploader(
 
     // Prima tutti i formFields così come sono, poi `file` per ultimo con lo stesso Content-Type. Con un ByteArray Ktor
     // conosce la lunghezza di ogni parte e manda Content-Length (lo storage non accetta il chunked).
-    private suspend fun send(session: UploadSessionResponse, jpeg: ByteArray): Result<Unit> = try {
+    private suspend fun send(session: UploadSessionResponse, jpeg: ByteArray): Result<Unit> = if (!cleartextAllowed && !session.uploadUrl.startsWith("https://")) {
+        Result.failure(ApiException(ApiError.Server(status = 0, traceId = null)))
+    } else try {
         val response = storage.submitFormWithBinaryData(
             url = session.uploadUrl,
             formData = formData {

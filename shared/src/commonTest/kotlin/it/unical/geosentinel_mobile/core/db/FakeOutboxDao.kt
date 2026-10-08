@@ -26,4 +26,12 @@ class FakeOutboxDao : OutboxDao {
     override suspend fun delete(key: String) {
         rows.value -= key
     }
+
+    override suspend fun deleteOwner(ownerId: String, kinds: List<ActionKind>) {
+        rows.value = rows.value.filterValues { it.ownerId != ownerId || it.kind !in kinds }
+    }
+
+    override suspend fun replace(key: String, kind: ActionKind, payloadJson: String) {
+        rows.value[key]?.let { rows.value += key to it.copy(kind = kind, payloadJson = payloadJson) }
+    }
 }

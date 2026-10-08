@@ -32,7 +32,14 @@ sull'emulatore (offline → una sola allerta dopo il riavvio). M6.2 fatta (06/10
 sull'emulatore (operatore vede la posizione, squadra entro 30 s senza push). M7.1 fatta (07/10, review di M6 ancora da
 lanciare): push FCM (`core/push/PushManager`, Firebase solo se c'è `google-services.json`), registrazione da loggati,
 rimozione al logout, deep link, 255 test host, push vere verificate sull'emulatore; iOS (SPM, APNs) da fare con il Mac.
-Prossimo: review di M6 (§6), poi M7.2.
+M7.2 fatta (08/10): scheda Allerte, dettaglio con invio della squadra (409 `alert-already-taken` gestito) e chiusura, allerte
+sulla mappa per gli operatori, push che apre il dettaglio, verificata sull'emulatore; review Kotlin di M7.2 applicata (09/10), 269 test host.
+Review di M4–M7 (09/10, §6): 4 HIGH nell'SOS, 11 MEDIUM e i LOW corretti (lock mai attorno alla rete, annullamento
+verificato sul server, token FCM invalidato a ogni fine sessione, rifiuti delle prenotazioni in coda visibili), 283 test
+host, verificata sull'emulatore. Poi (09/10): outbox svuotato al logout (non alla scadenza della sessione) con avviso
+se c'è un SOS in corso, rifiuti delle prenotazioni e verifica dell'annullamento dell'SOS salvati nell'outbox
+(`BOOKING_REJECTED`, `SOS_CANCEL`), conferma all'uscita con foto in caricamento (`BackHandler`), 287 test host.
+Prossimo: M8.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

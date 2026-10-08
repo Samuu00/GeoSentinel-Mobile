@@ -9,16 +9,27 @@ import android.net.Uri
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import kotlin.math.max
 
-// Il ContentResolver è quello dell'applicazione (non tiene in vita l'Activity)
-actual class PickedImage(val uri: Uri, val resolver: ContentResolver)
+// Il ContentResolver è quello dell'applicazione (non tiene in vita l'Activity).
+// tempFile: la foto scattata con la fotocamera (originale con gli EXIF, anche il GPS), da cancellare dopo la ricodifica
+actual class PickedImage(val uri: Uri, val resolver: ContentResolver, val tempFile: File? = null)
 
 actual class ImageEncoder actual constructor() {
 
     actual suspend fun toJpeg(source: PickedImage, maxSidePx: Int, quality: Int): ByteArray = withContext(Dispatchers.IO) {
+        try {
+            encode(source, maxSidePx, quality)
+        } finally {
+            // l'originale della fotocamera non resta in cache: il JPEG ricodificato (senza EXIF) è l'unica copia
+            source.tempFile?.delete()
+        }
+    }
+
+    private fun encode(source: PickedImage, maxSidePx: Int, quality: Int): ByteArray {
         fun <T> read(block: (InputStream) -> T): T =
             (source.resolver.openInputStream(source.uri) ?: throw IOException("foto non leggibile")).use(block)
 
@@ -51,7 +62,7 @@ actual class ImageEncoder actual constructor() {
         }
         // Con la matrice identità createBitmap restituisce lo stesso bitmap
         val output = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
-        try {
+        return try {
             ByteArrayOutputStream().use { stream ->
                 output.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(0, 100), stream)
                 stream.toByteArray()
