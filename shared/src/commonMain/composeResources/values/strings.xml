@@ -159,14 +159,10 @@
     <string name="trails_load_failed">Sentieri non aggiornati. Tocca per riprovare.</string>
     <string name="trails_zoom_in_hint">Avvicinati per vedere i sentieri</string>
     <string name="trails_too_many">Troppi sentieri in quest'area: avvicinati per vederli tutti</string>
-    <string name="trails_nearby_button">Sentieri vicini</string>
-    <string name="trails_nearby_title">Sentieri vicino a te</string>
     <string name="trails_nearby_empty">Nessun sentiero entro 10 km.</string>
     <string name="trails_nearby_waiting">Cerco la tua posizione…</string>
     <string name="trails_nearby_no_fix">Posizione non disponibile. Controlla che la localizzazione sia attiva e riprova.</string>
     <!-- M4.4: pericoli vicino a me -->
-    <string name="hazards_nearby_button">Pericoli vicini</string>
-    <string name="hazards_nearby_title">Pericoli vicino a te</string>
     <string name="hazards_nearby_empty">Nessun pericolo attivo entro 5 km.</string>
     <string name="hazards_loading">Carico i pericoli…</string>
     <string name="hazards_load_failed">Pericoli non aggiornati. Tocca per riprovare.</string>
@@ -265,6 +261,9 @@
     <string name="report_photo_rejected">Foto %1$d, non accettata</string>
     <string name="report_photo_failed">Foto %1$d, non caricata</string>
     <string name="report_photo_retry">Riprova</string>
+    <string name="hazard_photo_description">Foto %1$d di %2$d: tocca per ingrandirla</string>
+    <string name="hazard_photo_failed">Foto non disponibile, tocca per riprovare</string>
+    <string name="photo_viewer_close">Chiudi la foto</string>
     <string name="report_photo_removing">Foto %1$d, in rimozione</string>
     <string name="report_photo_remove">Togli la foto %1$d</string>
     <string name="report_photo_remove_title">Togliere la foto?</string>
@@ -275,6 +274,10 @@
     <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un'altra.</string>
 
     <!-- M5.1: rifugi -->
+    <string name="near_me_button">Vicino a te: sentieri e pericoli</string>
+    <string name="near_me_title">Vicino a te</string>
+    <string name="near_me_trails">Sentieri</string>
+    <string name="near_me_hazards">Pericoli</string>
     <string name="refuges_title">Rifugi</string>
     <string name="refuges_intro_near_me">I rifugi entro 50 km dalla tua posizione, dal più vicino.</string>
     <string name="refuges_intro_area">I rifugi entro 50 km dalla Sila. Con la posizione attiva vedi quelli vicino a te.</string>
@@ -289,7 +292,31 @@
         <item quantity="other">%1$d posti liberi</item>
     </plurals>
     <string name="refuge_full">Pieno</string>
-    <string name="refuge_nights_title">Posti liberi nelle prossime notti</string>
+    <string name="refuge_altitude">%1$d m</string>
+    <string name="refuge_photo_count">%1$d/%2$d</string>
+    <string name="refuge_amenities_title">Servizi</string>
+    <string name="refuge_amenity_drinking_water">Acqua potabile</string>
+    <string name="refuge_amenity_restaurant">Ristoro</string>
+    <string name="refuge_amenity_kitchen">Cucina per gli ospiti</string>
+    <string name="refuge_amenity_heating">Riscaldamento</string>
+    <string name="refuge_amenity_shower">Docce</string>
+    <string name="refuge_amenity_electricity">Corrente elettrica</string>
+    <string name="refuge_amenity_dogs_allowed">Cani ammessi</string>
+    <string name="refuge_amenity_sheets_provided">Lenzuola fornite</string>
+    <string name="refuge_trails_title">Sentieri da qui</string>
+    <string name="refuge_call">Chiama</string>
+    <string name="refuge_directions">Indicazioni</string>
+    <string name="refuge_nights_title">Disponibilità</string>
+    <string name="refuge_nights_hint">Posti liberi per notte, nelle prossime due settimane. Scorri per vederle tutte.</string>
+    <string name="refuge_tonight_full">stanotte è pieno</string>
+    <plurals name="refuge_tonight_free">
+        <item quantity="one">stanotte %1$d libero</item>
+        <item quantity="other">stanotte %1$d liberi</item>
+    </plurals>
+    <plurals name="refuge_free_short">
+        <item quantity="one">libero</item>
+        <item quantity="other">liberi</item>
+    </plurals>
     <string name="refuge_tonight">Stanotte</string>
     <string name="weekday_1">lun</string>
     <string name="weekday_2">mar</string>

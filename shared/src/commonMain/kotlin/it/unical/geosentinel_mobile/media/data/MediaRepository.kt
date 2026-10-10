@@ -19,6 +19,16 @@ class MediaRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
         apiCall { mediaApi.findAttachedMedia(MediaApi.EntityTypeFindAttachedMedia.TRAIL, trailId) }
             .map { media -> media.filter { it.status == MediaResponse.Status.READY } }
 
+    /** Le foto pronte di una segnalazione: le vede chi può vedere la segnalazione (le regole sono del server). */
+    suspend fun photosOfHazard(hazardId: String): Result<List<MediaResponse>> =
+        apiCall { mediaApi.findAttachedMedia(MediaApi.EntityTypeFindAttachedMedia.HAZARD_REPORT, hazardId) }
+            .map { media -> media.filter { it.status == MediaResponse.Status.READY } }
+
+    /** Le foto pronte di un rifugio (le carica il suo gestore), da mostrare in testata al dettaglio. */
+    suspend fun photosOfRefuge(refugeId: String): Result<List<MediaResponse>> =
+        apiCall { mediaApi.findAttachedMedia(MediaApi.EntityTypeFindAttachedMedia.REFUGE, refugeId) }
+            .map { media -> media.filter { it.status == MediaResponse.Status.READY } }
+
     /** Un URL nuovo a ogni chiamata: si chiede quando la foto si mostra, e di nuovo quando quello vecchio è scaduto. */
     suspend fun downloadUrl(mediaId: String): Result<String> = apiCall { mediaApi.getMediaDownloadUrl(mediaId) }.map { it.downloadUrl }
 

@@ -69,6 +69,7 @@ import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.hazard.ui.label
+import it.unical.geosentinel_mobile.media.ui.HazardPhotoStrip
 import it.unical.geosentinel_mobile.trail.ui.color
 import it.unical.geosentinel_mobile.trail.ui.label
 import kotlinx.datetime.TimeZone
@@ -198,6 +199,8 @@ private fun QueueRow(
         hazard.description?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
         }
+        // le foto sono la prova per verificare senza andare sul posto
+        HazardPhotoStrip(hazard.id, Modifier.padding(top = 10.dp))
         if (showPlace) {
             val trailId = hazard.trailId
             if (trailId != null && onOpenTrail != null) {

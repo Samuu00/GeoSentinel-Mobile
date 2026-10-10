@@ -382,6 +382,7 @@ fun App() {
                         entry.toRoute<Route.RefugeDetail>().refugeId,
                         onBack = { navController.popBackStack() },
                         onBook = { id, name, capacity -> navController.navigate(Route.BookRefuge(id, name, capacity)) { launchSingleTop = true } },
+                        onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
                     )
                 }
                 composable<Route.BookRefuge>(

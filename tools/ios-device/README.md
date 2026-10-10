@@ -33,7 +33,11 @@ WSL lo raggiunge sull'IP del suo gateway (es. `172.17.16.1`) grazie a un `netsh 
 1. GitHub → Actions → **iOS device build** → *Run workflow*, con l'URL del backend visto dall'iPhone:
    `http://<IP del PC>:8080` (l'IP con `ipconfig`, es. `http://192.168.1.188:8080`). Circa 15 minuti.
    Da terminale: `gh workflow run ios-device.yml -f api_base_url=http://192.168.1.188:8080`.
-2. Backend acceso sul PC (`docker compose up -d` e `./mvnw spring-boot:run -Dspring-boot.run.profiles=local`).
+2. Backend acceso sul PC (`docker compose up -d`), con le foto firmate sull'IP del PC:
+   `MINIO_PUBLIC_ENDPOINT=http://<IP del PC>:9000 ./mvnw spring-boot:run -Dspring-boot.run.profiles=local`.
+   Senza, gli URL delle foto puntano a `localhost`, che sull'iPhone è il telefono. Per l'emulatore Android invece
+   serve `http://10.0.2.2:9000`: in debug Android permette HTTP in chiaro solo verso `10.0.2.2`
+   (`network_security_config`), quindi con l'IP del PC le foto sull'emulatore non si aprono. Uno dei due alla volta.
 3. iPhone collegato e sbloccato, poi: `.\tools\ios-device\install.ps1` (circa 2 minuti).
 
 Se xtool dice `noDevice` o non trova il telefono: sblocca l'iPhone, controlla che compaia in Dispositivi Apple

@@ -1397,6 +1397,32 @@ M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e cir
   - Codice segnaposto di M0.4 tolto (`PlaceholderScreen`, stringhe `placeholder_*`); `PlaceholderScreens.kt` →
     `BackButton.kt`. `decimals5` spostato in `core/location`.
   - 299 test host.
+- **Seconda giornata di prova su iPhone (10/10)**, scritto da Claude su richiesta:
+  - **"Vicino a te"** al posto delle due capsule "Sentieri vicini"/"Pericoli vicini" in cima alla mappa (ingombranti):
+    un tondo con un radar tra i controlli a destra apre un foglio unico con il selettore Sentieri | Pericoli
+    (`SingleChoiceSegmentedButtonRow`, Pericoli solo da loggati). Le due ricerche partono insieme, cambiare scheda è
+    immediato. In alto resta solo l'avviso di stato. `NearbyHazardsSheet.kt` → `NearbyHazardsList.kt`.
+  - **Pagina del rifugio**: in testata la mappa ferma sul rifugio con il suo segnaposto e una sfumatura (lì andranno le
+    foto quando il backend le avrà: oggi i media sono solo di sentieri e segnalazioni); titolo con "24 posti letto ·
+    stanotte 12 liberi"; "Disponibilità" come striscia orizzontale di giorni (giorno, data, posti liberi in grande;
+    stanotte in muschio, "Pieno" senza rosso) al posto della lista di 14 righe.
+  - **Foto delle segnalazioni** (M4.2 bis): `media/ui/HazardPhotoStrip` (miniature, tocco → schermo intero, URL firmato
+    rinnovato fino a 3 volte, "Foto non disponibile, tocca per riprovare") nella coda del gestore, nella card del
+    pericolo sulla mappa e in "Le mie segnalazioni". `MediaRepository.photosOfHazard` (`findAttachedMedia`
+    `HAZARD_REPORT`, solo `READY`). Una richiesta per segnalazione visibile, senza cache.
+  - Verificati sull'emulatore: foglio "Vicino a te" con le due schede, pagina del rifugio, foto di una segnalazione nella
+    coda e a schermo intero (con `MINIO_PUBLIC_ENDPOINT=http://10.0.2.2:9000`: vedi `tools/ios-device/README.md`).
+- **Rifugi descritti (10/10)**, backend e app, scritto da Claude su richiesta (la pagina "non descriveva il rifugio": il
+  backend aveva solo nome, posti e posizione). Contratto cambiato, deciso con l'utente:
+  - Backend V11: `description`, `altitudeM`, `season`, `phone`, `amenities` (elenco fisso: acqua potabile, ristoro,
+    cucina, riscaldamento, docce, corrente, cani ammessi, lenzuola); foto `REFUGE` caricate dal gestore del rifugio.
+    Modifica di questi campi dopo la creazione: con M8.3 (gestione dei rifugi), insieme all'upload delle foto dall'app.
+  - App: in testata le foto (a scorrimento, "1/2", tocco → schermo intero) o la mappa; capsule con quota, posti e
+    "stanotte N liberi"; stagione; descrizione; disponibilità a giorni; servizi con la spunta; "Sentieri da qui" (entro
+    5 km, `findTrailsNearby`); "Chiama" (`rememberDialer`) e "Indicazioni" (`directionsUri`, expect/actual: `geo:` su
+    Android, Apple Mappe su iOS). Un valore nuovo dei servizi non si mostra.
+  - 300 test host. Verificato sull'emulatore: Rifugio Cupone con due foto, servizi, contatti; Monte Botte Donato con
+    "Sentieri da qui"; "Indicazioni" apre Google Maps.
 
 **M8.2 Ticket di manutenzione**
 - Lista con filtri (`searchTickets`: stato, priorità, assegnatario), dettaglio, creazione (`createTicket` con un solo

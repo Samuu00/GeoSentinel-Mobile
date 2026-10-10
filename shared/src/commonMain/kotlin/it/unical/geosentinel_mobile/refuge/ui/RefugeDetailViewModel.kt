@@ -4,13 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_generic
+import it.unical.geosentinel_mobile.api.model.MediaResponse
 import it.unical.geosentinel_mobile.api.model.RefugeResponse
+import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
+import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.core.ui.uiMessage
+import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.refuge.data.NightAvailability
 import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
+import it.unical.geosentinel_mobile.trail.data.TrailRepository
 import it.unical.geosentinel_mobile.trail.ui.Section
+import kotlin.time.Clock
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,24 +26,30 @@ import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
-import kotlin.time.Clock
 
 data class RefugeDetailUiState(
     val refuge: Section<RefugeResponse> = Section.Loading,
     // il calendario si carica insieme al rifugio, ma un suo errore non nasconde il rifugio
     val nights: Section<List<NightAvailability>> = Section.Loading,
+    // un di più: senza (errore o niente da mostrare) la pagina resta com'è, senza la sezione
+    val photos: List<MediaResponse> = emptyList(),
+    val nearbyTrails: List<TrailSummaryResponse> = emptyList(),
 ) {
     // niente nomi né posizioni nei log
-    override fun toString() = "RefugeDetailUiState(refuge=${refuge::class.simpleName}, nights=${nights::class.simpleName})"
+    override fun toString() =
+        "RefugeDetailUiState(refuge=${refuge::class.simpleName}, nights=${nights::class.simpleName}, photos=${photos.size}, trails=${nearbyTrails.size})"
 }
 
 /**
- * Dettaglio di un rifugio (M5.1): nome e posti con `getRefuge`, e il calendario delle prossime notti con
- * `getRefugeAvailability`, in parallelo. [today] è il giorno del telefono (iniettabile nei test).
+ * Dettaglio di un rifugio (M5.1): il rifugio con `getRefuge` e il calendario delle prossime notti con
+ * `getRefugeAvailability`, in parallelo; poi le sue foto e i sentieri vicini (entro [TRAILS_NEAR_REFUGE_METERS]).
+ * [today] è il giorno del telefono (iniettabile nei test).
  */
 class RefugeDetailViewModel(
     private val refugeId: String,
     private val refuges: RefugeRepository,
+    private val media: MediaRepository,
+    private val trails: TrailRepository,
     private val today: () -> LocalDate = { Clock.System.todayIn(TimeZone.currentSystemDefault()) },
 ) : ViewModel() {
 
@@ -62,7 +74,15 @@ class RefugeDetailViewModel(
         viewModelScope.launch {
             val refuge = async { refuges.get(refugeId) }
             val nights = async { refuges.availability(refugeId, from = today()) }
-            _state.update { it.copy(refuge = refuge.await().toSection()) }
+            val loaded = refuge.await()
+            _state.update { it.copy(refuge = loaded.toSection()) }
+            loaded.onSuccess { found ->
+                launch { media.photosOfRefuge(found.id).onSuccess { list -> _state.update { it.copy(photos = list) } } }
+                launch {
+                    trails.nearby(found.location.toGeoPoint(), TRAILS_NEAR_REFUGE_METERS)
+                        .onSuccess { list -> _state.update { it.copy(nearbyTrails = list.take(MAX_TRAILS_NEAR_REFUGE)) } }
+                }
+            }
             _state.update { it.copy(nights = nights.await().toSection()) }
         }
     }
@@ -75,6 +95,10 @@ class RefugeDetailViewModel(
         }
     }
 }
+
+// "Sentieri da qui": quelli che passano entro 5 km dal rifugio, i più vicini
+const val TRAILS_NEAR_REFUGE_METERS = 5_000.0
+private const val MAX_TRAILS_NEAR_REFUGE = 5
 
 private fun <T> Result<T>.toSection(): Section<T> = fold({ Section.Loaded(it) }, { Section.Failed(it.toUiMessage()) })
 

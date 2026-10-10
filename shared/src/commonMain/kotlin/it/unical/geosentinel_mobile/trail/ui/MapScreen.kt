@@ -9,7 +9,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -43,6 +42,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -87,7 +89,6 @@ import androidx.lifecycle.repeatOnLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.hazards_load_failed
-import geosentinel_mobile.shared.generated.resources.hazards_nearby_button
 import geosentinel_mobile.shared.generated.resources.rescue_map_partial
 import geosentinel_mobile.shared.generated.resources.location_denied_body
 import geosentinel_mobile.shared.generated.resources.location_denied_title
@@ -96,6 +97,10 @@ import geosentinel_mobile.shared.generated.resources.location_rationale_allow
 import geosentinel_mobile.shared.generated.resources.location_rationale_body
 import geosentinel_mobile.shared.generated.resources.location_rationale_title
 import geosentinel_mobile.shared.generated.resources.map_my_location
+import geosentinel_mobile.shared.generated.resources.near_me_button
+import geosentinel_mobile.shared.generated.resources.near_me_hazards
+import geosentinel_mobile.shared.generated.resources.near_me_title
+import geosentinel_mobile.shared.generated.resources.near_me_trails
 import geosentinel_mobile.shared.generated.resources.poi_create_title
 import geosentinel_mobile.shared.generated.resources.report_open
 import geosentinel_mobile.shared.generated.resources.map_type_button
@@ -110,9 +115,7 @@ import geosentinel_mobile.shared.generated.resources.trail_length_km
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import geosentinel_mobile.shared.generated.resources.trails_load_failed
 import geosentinel_mobile.shared.generated.resources.trails_loading
-import geosentinel_mobile.shared.generated.resources.trails_nearby_button
 import geosentinel_mobile.shared.generated.resources.trails_nearby_empty
-import geosentinel_mobile.shared.generated.resources.trails_nearby_title
 import geosentinel_mobile.shared.generated.resources.trails_nearby_waiting
 import geosentinel_mobile.shared.generated.resources.trails_too_many
 import geosentinel_mobile.shared.generated.resources.trails_zoom_in_hint
@@ -130,7 +133,7 @@ import it.unical.geosentinel_mobile.hazard.ui.HazardCard
 import it.unical.geosentinel_mobile.hazard.ui.HazardMapViewModel
 import it.unical.geosentinel_mobile.hazard.ui.HazardMarkers
 import it.unical.geosentinel_mobile.hazard.ui.NearbyHazards
-import it.unical.geosentinel_mobile.hazard.ui.NearbyHazardsSheet
+import it.unical.geosentinel_mobile.hazard.ui.NearbyHazardsList
 import it.unical.geosentinel_mobile.refuge.ui.RefugeMapViewModel
 import it.unical.geosentinel_mobile.refuge.ui.RefugeMarkers
 import it.unical.geosentinel_mobile.rescue.ui.RescueMapViewModel
@@ -234,7 +237,10 @@ private val MaxFixAge = 2.minutes
 private enum class LocationPrompt { None, Rationale, Denied }
 
 // Cosa fare quando arriva il permesso
-private enum class LocationGoal { Center, Nearby, NearbyHazards }
+private enum class LocationGoal { Center, NearMe, Nearby, NearbyHazards }
+
+// Le due schede del foglio "Vicino a te"
+private enum class NearTab(val label: StringResource) { Trails(Res.string.near_me_trails), Hazards(Res.string.near_me_hazards) }
 
 // Il tocco su "Pericoli vicini" porta almeno a questo zoom: il triangolo si vede in mezzo ai sentieri
 private const val HazardZoom = 15.0
@@ -402,6 +408,17 @@ fun MapScreen(
         hazardViewModel.onNearbyNoFix()
     }
 
+    // "Vicino a te": le due ricerche partono insieme, così cambiare scheda è immediato; resta l'ultima scheda scelta
+    var nearTab by rememberSaveable { mutableStateOf(NearTab.Trails) }
+    fun openNearMe() {
+        viewModel.onNearbyRequested()
+        if (showHazards) hazardViewModel.onNearbyRequested()
+    }
+    fun closeNearMe() {
+        viewModel.closeNearby()
+        hazardViewModel.closeNearby()
+    }
+
     // Prima del dialogo di sistema si spiega perché: il permesso si chiede solo quando serve (§M3.1)
     fun withLocation(target: LocationGoal, action: () -> Unit) {
         goal = target
@@ -448,7 +465,7 @@ fun MapScreen(
                 }
             },
         )
-        // In alto al centro: "Sentieri vicini" e, sotto, lo stato dei sentieri (carico, errore, zoom).
+        // In alto al centro solo lo stato dei sentieri (carico, errore, zoom): "Vicino a te" è un tondo tra i controlli.
         // Margini laterali per non coprire scala e bussola.
         Column(
             modifier = Modifier
@@ -458,21 +475,6 @@ fun MapScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // FlowRow: se i due pulsanti non stanno affiancati (iPhone stretti, testo grande) il secondo va sotto intero,
-            // invece di spezzare "vicini" su un'altra riga
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                MapPill(stringResource(Res.string.trails_nearby_button), emphasized = true) {
-                    withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested)
-                }
-                if (showHazards) {
-                    MapPill(stringResource(Res.string.hazards_nearby_button), emphasized = true) {
-                        withLocation(LocationGoal.NearbyHazards, hazardViewModel::onNearbyRequested)
-                    }
-                }
-            }
             // un avviso alla volta: prima quello dei sentieri, che dice già se manca la rete
             val hazardsFailed = showHazards && hazardUi.failed && !ui.zoomTooLow
             val status = when {
@@ -518,6 +520,8 @@ fun MapScreen(
             MapButton(Res.string.map_my_location, Glyph.Locate) {
                 withLocation(LocationGoal.Center) { centerOnFix = true }
             }
+            // sentieri e pericoli intorno a te, in un foglio con due schede (prima due capsule in alto, ingombranti)
+            MapButton(Res.string.near_me_button, Glyph.NearMe) { withLocation(LocationGoal.NearMe, ::openNearMe) }
             // solo da loggati (null per l'ospite): il form parte dal punto che si sta guardando
             if (onReportHazard != null) {
                 Spacer(Modifier.size(4.dp))
@@ -568,34 +572,39 @@ fun MapScreen(
         )
     }
 
-    if (ui.nearby != NearbyTrails.Hidden) {
-        NearbySheet(
-            nearby = ui.nearby,
-            onOpenTrail = { id ->
-                viewModel.closeNearby()
-                onOpenTrail(id)
+    if (ui.nearby != NearbyTrails.Hidden || hazardUi.nearby != NearbyHazards.Hidden) {
+        NearMeSheet(
+            tab = nearTab,
+            onTabChange = { nearTab = it },
+            showHazards = showHazards,
+            onDismiss = ::closeNearMe,
+            trails = {
+                NearbyTrailsList(
+                    nearby = ui.nearby,
+                    onOpenTrail = { id ->
+                        closeNearMe()
+                        onOpenTrail(id)
+                    },
+                    onRetry = { withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested) },
+                )
             },
-            onRetry = { withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested) },
-            onDismiss = viewModel::closeNearby,
-        )
-    }
-
-    if (hazardUi.nearby != NearbyHazards.Hidden) {
-        NearbyHazardsSheet(
-            nearby = hazardUi.nearby,
-            // si chiude il foglio e la mappa va sul pericolo, con la sua card
-            onSelect = { hazard ->
-                hazardViewModel.closeNearby()
-                selectedPoiId = null
-                hazardViewModel.select(hazard)
-                scope.launch {
-                    mapState.animateCamera(
-                        CameraUpdate(target = hazard.location.toGeoPoint().toPosition(), zoom = max(mapState.cameraPosition.zoom, HazardZoom)),
-                    )
-                }
+            hazards = {
+                NearbyHazardsList(
+                    nearby = hazardUi.nearby,
+                    // si chiude il foglio e la mappa va sul pericolo, con la sua card
+                    onSelect = { hazard ->
+                        closeNearMe()
+                        selectedPoiId = null
+                        hazardViewModel.select(hazard)
+                        scope.launch {
+                            mapState.animateCamera(
+                                CameraUpdate(target = hazard.location.toGeoPoint().toPosition(), zoom = max(mapState.cameraPosition.zoom, HazardZoom)),
+                            )
+                        }
+                    },
+                    onRetry = { withLocation(LocationGoal.NearbyHazards, hazardViewModel::onNearbyRequested) },
+                )
             },
-            onRetry = { withLocation(LocationGoal.NearbyHazards, hazardViewModel::onNearbyRequested) },
-            onDismiss = hazardViewModel::closeNearby,
         )
     }
 
@@ -608,6 +617,7 @@ fun MapScreen(
                 // se il permesso viene negato nel dialogo di sistema, l'attesa del fix finisce dopo FixWait
                 when (goal) {
                     LocationGoal.Center -> centerOnFix = true
+                    LocationGoal.NearMe -> openNearMe()
                     LocationGoal.Nearby -> viewModel.onNearbyRequested()
                     LocationGoal.NearbyHazards -> hazardViewModel.onNearbyRequested()
                 }
@@ -684,60 +694,95 @@ private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onClose: () ->
     }
 }
 
-// Foglio "Sentieri vicini": mentre cerca la posizione e carica, poi la lista ordinata per distanza (dal server)
+// Foglio "Vicino a te": il titolo, il selettore Sentieri | Pericoli (solo da loggati: i pericoli richiedono il login) e
+// sotto la scheda scelta. Un foglio solo al posto di due capsule fisse sopra la mappa
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun NearbySheet(nearby: NearbyTrails, onOpenTrail: (String) -> Unit, onRetry: () -> Unit, onDismiss: () -> Unit) {
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLowest) {
+private fun NearMeSheet(
+    tab: NearTab,
+    onTabChange: (NearTab) -> Unit,
+    showHazards: Boolean,
+    onDismiss: () -> Unit,
+    trails: @Composable () -> Unit,
+    hazards: @Composable () -> Unit,
+) {
+    val colors = MaterialTheme.colorScheme
+    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.surfaceContainerLowest) {
         Column(Modifier.padding(bottom = 24.dp)) {
             Text(
-                stringResource(Res.string.trails_nearby_title),
+                stringResource(Res.string.near_me_title),
                 style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.padding(horizontal = 20.dp).semantics { heading() },
             )
-            Spacer(Modifier.size(12.dp))
-            when (nearby) {
-                NearbyTrails.WaitingForFix, NearbyTrails.Loading -> Row(
-                    Modifier.padding(horizontal = 20.dp, vertical = 16.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
-                    Spacer(Modifier.width(16.dp))
-                    Text(
-                        stringResource(if (nearby == NearbyTrails.WaitingForFix) Res.string.trails_nearby_waiting else Res.string.trails_loading),
-                        style = MaterialTheme.typography.bodyLarge,
-                    )
-                }
-                is NearbyTrails.Failed -> Column(Modifier.padding(horizontal = 20.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
-                    Text(nearby.message.resolve(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
-                    TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(stringResource(Res.string.trail_retry), fontWeight = FontWeight.SemiBold)
-                    }
-                }
-                is NearbyTrails.Loaded -> if (nearby.trails.isEmpty()) {
-                    Text(
-                        stringResource(Res.string.trails_nearby_empty),
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
-                    )
-                } else {
-                    LazyColumn(Modifier.heightIn(max = 480.dp)) {
-                        items(nearby.trails, key = { it.id }) { trail ->
-                            TrailRow(trail, onClick = { onOpenTrail(trail.id) })
-                            HorizontalDivider(Modifier.padding(start = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            if (showHazards) {
+                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
+                    NearTab.entries.forEachIndexed { index, entry ->
+                        SegmentedButton(
+                            selected = tab == entry,
+                            onClick = { onTabChange(entry) },
+                            shape = SegmentedButtonDefaults.itemShape(index, NearTab.entries.size),
+                            colors = SegmentedButtonDefaults.colors(
+                                activeContainerColor = colors.primaryContainer,
+                                activeContentColor = colors.onPrimaryContainer,
+                            ),
+                        ) {
+                            Text(stringResource(entry.label))
                         }
                     }
                 }
-                NearbyTrails.Hidden -> Unit
+            } else {
+                Spacer(Modifier.size(12.dp))
             }
+            if (showHazards && tab == NearTab.Hazards) hazards() else trails()
+        }
+    }
+}
+
+// Scheda "Sentieri" di "Vicino a te": mentre cerca la posizione e carica, poi la lista ordinata per distanza (dal server)
+@Composable
+private fun NearbyTrailsList(nearby: NearbyTrails, onOpenTrail: (String) -> Unit, onRetry: () -> Unit) {
+    Column {
+        when (nearby) {
+            NearbyTrails.WaitingForFix, NearbyTrails.Loading -> Row(
+                Modifier.padding(horizontal = 20.dp, vertical = 16.dp).semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                CircularProgressIndicator(Modifier.size(24.dp), strokeWidth = 3.dp)
+                Spacer(Modifier.width(16.dp))
+                Text(
+                    stringResource(if (nearby == NearbyTrails.WaitingForFix) Res.string.trails_nearby_waiting else Res.string.trails_loading),
+                    style = MaterialTheme.typography.bodyLarge,
+                )
+            }
+            is NearbyTrails.Failed -> Column(Modifier.padding(horizontal = 20.dp).semantics { liveRegion = LiveRegionMode.Polite }) {
+                Text(nearby.message.resolve(), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.error)
+                TextButton(onClick = onRetry, modifier = Modifier.heightIn(min = 48.dp)) {
+                    Text(stringResource(Res.string.trail_retry), fontWeight = FontWeight.SemiBold)
+                }
+            }
+            is NearbyTrails.Loaded -> if (nearby.trails.isEmpty()) {
+                Text(
+                    stringResource(Res.string.trails_nearby_empty),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp),
+                )
+            } else {
+                LazyColumn(Modifier.heightIn(max = 480.dp)) {
+                    items(nearby.trails, key = { it.id }) { trail ->
+                        TrailRow(trail, onClick = { onOpenTrail(trail.id) })
+                        HorizontalDivider(Modifier.padding(start = 20.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                    }
+                }
+            }
+            NearbyTrails.Hidden -> Unit
         }
     }
 }
 
 // Riga di un sentiero: nome, difficoltà e lunghezza, stato con il suo simbolo (non solo il colore)
 @Composable
-private fun TrailRow(trail: TrailSummaryResponse, onClick: () -> Unit) {
+internal fun TrailRow(trail: TrailSummaryResponse, onClick: () -> Unit) {
     val difficulty = TrailDifficulty.of(trail.difficulty.value)
     Row(
         Modifier

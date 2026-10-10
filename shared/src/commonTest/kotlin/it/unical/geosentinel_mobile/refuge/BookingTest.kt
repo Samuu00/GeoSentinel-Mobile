@@ -98,7 +98,7 @@ class BookingTest {
                     respond("", HttpStatusCode.NoContent)
                 }
                 request.method == HttpMethod.Get && path == "/api/v1/refuges/r1" ->
-                    respond("""{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":4,"managerId":"m1"}""", HttpStatusCode.OK, json)
+                    respond("""{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":4,"managerId":"m1","amenities":[]}""", HttpStatusCode.OK, json)
                 else -> null
             }
         }

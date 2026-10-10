@@ -159,7 +159,7 @@ fun coreModule(
     // rifugi e prenotazioni; id e posti del rifugio dalla rotta, l'utente dalla sessione al momento dell'invio
     viewModel { RefugeListViewModel(get()) }
     viewModel { RefugeMapViewModel(get()) }
-    viewModel { (refugeId: String) -> RefugeDetailViewModel(refugeId, get()) }
+    viewModel { (refugeId: String) -> RefugeDetailViewModel(refugeId, get(), get(), get()) }
     viewModel { (refugeId: String, capacity: Int) ->
         val session = get<SessionManager>()
         BookRefugeViewModel(refugeId, capacity, get(), ownerId = { session.currentUserId() })

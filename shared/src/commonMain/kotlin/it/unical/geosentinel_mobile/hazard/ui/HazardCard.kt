@@ -32,6 +32,7 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.poi_close
 import geosentinel_mobile.shared.generated.resources.poi_open_trail
 import it.unical.geosentinel_mobile.api.model.HazardResponse
+import it.unical.geosentinel_mobile.media.ui.HazardPhotoStrip
 import it.unical.geosentinel_mobile.trail.ui.color
 import it.unical.geosentinel_mobile.trail.ui.label
 import org.jetbrains.compose.resources.stringResource
@@ -74,6 +75,7 @@ fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -
                         modifier = Modifier.padding(top = 4.dp),
                     )
                 }
+                HazardPhotoStrip(hazard.id, Modifier.padding(top = 8.dp))
                 if (onOpenTrail != null) {
                     TextButton(onClick = onOpenTrail, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
                         Text(stringResource(Res.string.poi_open_trail), fontWeight = FontWeight.SemiBold)

@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.refuge.ui
 
+import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.respond
 import io.ktor.http.HttpHeaders
 import io.ktor.http.HttpMethod
@@ -13,7 +14,12 @@ import it.unical.geosentinel_mobile.core.session.FakeBackend
 import it.unical.geosentinel_mobile.core.session.TEST_BASE_URL
 import it.unical.geosentinel_mobile.core.session.sessionWith
 import it.unical.geosentinel_mobile.refuge.data.NightAvailability
+import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
+import it.unical.geosentinel_mobile.trail.FakeCatalogDao
+import it.unical.geosentinel_mobile.trail.data.TrailRepository
+import it.unical.geosentinel_mobile.trail.mediaJson
+import it.unical.geosentinel_mobile.trail.trailJson
 import it.unical.geosentinel_mobile.trail.ui.Section
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -36,7 +42,7 @@ import kotlin.test.assertTrue
 class RefugeViewModelsTest {
 
     private val backend = FakeBackend()
-    private val refugeJson = """{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":4,"managerId":"m1"}"""
+    private val refugeJson = """{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":4,"managerId":"m1","amenities":[]}"""
     private val today = LocalDate(2026, 10, 5)
     // il percorso e la query di ogni richiesta ai rifugi, nell'ordine
     private val calls = mutableListOf<Pair<String, Parameters>>()
@@ -49,7 +55,13 @@ class RefugeViewModelsTest {
         backend.extraRoutes = { request, _ ->
             val path = request.url.encodedPath
             val json = headersOf(HttpHeaders.ContentType, "application/json")
-            if (request.method != HttpMethod.Get || !path.startsWith("/api/v1/refuges")) {
+            if (request.method == HttpMethod.Get && path == "/api/v1/media/attached") {
+                calls += path to request.url.parameters
+                respond("[${mediaJson("m1", "READY")},${mediaJson("m2", "QUARANTINED")}]", HttpStatusCode.OK, json)
+            } else if (request.method == HttpMethod.Get && path == "/api/v1/trails/nearby") {
+                calls += path to request.url.parameters
+                respond("[${trailJson()}]", HttpStatusCode.OK, json)
+            } else if (request.method != HttpMethod.Get || !path.startsWith("/api/v1/refuges")) {
                 null
             } else {
                 calls += path to request.url.parameters
@@ -81,7 +93,21 @@ class RefugeViewModelsTest {
         val (session, client) = sessionWith(backend)
         session.restore()
         assertTrue(session.login("hiker@test.dev", "password-giusta-1").isSuccess)
+        httpClient = client
         return RefugeRepository({ client }, TEST_BASE_URL)
+    }
+
+    private lateinit var httpClient: HttpClient
+
+    private suspend fun TestScope.detailViewModel(): RefugeDetailViewModel {
+        val refuges = repository()
+        return RefugeDetailViewModel(
+            "r1",
+            refuges,
+            MediaRepository({ httpClient }, TEST_BASE_URL),
+            TrailRepository({ httpClient }, TEST_BASE_URL, FakeCatalogDao(), converting = StandardTestDispatcher(testScheduler)),
+            today = { today },
+        )
     }
 
     @AfterTest
@@ -91,7 +117,7 @@ class RefugeViewModelsTest {
 
     @Test
     fun `il dettaglio carica il rifugio e 14 notti da oggi in ordine`() = runTest {
-        val viewModel = RefugeDetailViewModel("r1", repository(), today = { today })
+        val viewModel = detailViewModel()
         advanceUntilIdle()
 
         val refuge = assertIs<Section.Loaded<RefugeResponse>>(viewModel.state.value.refuge).value
@@ -108,9 +134,25 @@ class RefugeViewModelsTest {
     }
 
     @Test
+    fun `il dettaglio carica le foto pronte e i sentieri attorno al rifugio`() = runTest {
+        val viewModel = detailViewModel()
+        advanceUntilIdle()
+
+        // solo la foto READY, non quella in quarantena
+        assertEquals(listOf("m1"), viewModel.state.value.photos.map { it.id })
+        assertEquals(1, viewModel.state.value.nearbyTrails.size)
+        assertEquals("REFUGE", calls.single { it.first == "/api/v1/media/attached" }.second["entityType"])
+        // i sentieri si cercano dal rifugio (lat 39.278), non invertito, entro 5 km
+        val query = calls.single { it.first == "/api/v1/trails/nearby" }.second
+        assertEquals(39.278, query["lat"]!!.toDouble(), 0.0001)
+        assertEquals(16.452, query["lon"]!!.toDouble(), 0.0001)
+        assertEquals(TRAILS_NEAR_REFUGE_METERS, query["radius"]!!.toDouble(), 0.1)
+    }
+
+    @Test
     fun `rifugio inesistente mostra l'errore e riprova ricarica tutto`() = runTest {
         refugeStatus = HttpStatusCode.NotFound
-        val viewModel = RefugeDetailViewModel("r1", repository(), today = { today })
+        val viewModel = detailViewModel()
         advanceUntilIdle()
         assertIs<Section.Failed>(viewModel.state.value.refuge)
 
@@ -125,7 +167,7 @@ class RefugeViewModelsTest {
     @Test
     fun `senza calendario il rifugio resta e riprova chiede solo le notti`() = runTest {
         availabilityOffline = true
-        val viewModel = RefugeDetailViewModel("r1", repository(), today = { today })
+        val viewModel = detailViewModel()
         advanceUntilIdle()
         assertIs<Section.Loaded<RefugeResponse>>(viewModel.state.value.refuge)
         assertIs<Section.Failed>(viewModel.state.value.nights)
@@ -140,7 +182,7 @@ class RefugeViewModelsTest {
 
     @Test
     fun `lo stato nei log non ha il nome del rifugio`() = runTest {
-        val viewModel = RefugeDetailViewModel("r1", repository(), today = { today })
+        val viewModel = detailViewModel()
         advanceUntilIdle()
 
         assertFalse("Botte" in viewModel.state.value.toString())

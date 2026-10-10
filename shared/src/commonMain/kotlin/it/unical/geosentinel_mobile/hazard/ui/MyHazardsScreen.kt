@@ -65,6 +65,7 @@ import geosentinel_mobile.shared.generated.resources.my_hazards_open_trail
 import geosentinel_mobile.shared.generated.resources.my_hazards_title
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.api.model.HazardResponse
+import it.unical.geosentinel_mobile.media.ui.HazardPhotoStrip
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
@@ -211,6 +212,7 @@ private fun HazardCard(hazard: HazardResponse, onOpenTrail: (String) -> Unit) {
                     modifier = Modifier.padding(top = 6.dp),
                 )
             }
+            HazardPhotoStrip(hazard.id, Modifier.padding(top = 10.dp))
         }
         if (trailId != null) {
             Icon(

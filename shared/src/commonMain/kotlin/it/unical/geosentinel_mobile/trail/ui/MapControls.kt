@@ -102,9 +102,7 @@ import geosentinel_mobile.shared.generated.resources.trail_length_km
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import geosentinel_mobile.shared.generated.resources.trails_load_failed
 import geosentinel_mobile.shared.generated.resources.trails_loading
-import geosentinel_mobile.shared.generated.resources.trails_nearby_button
 import geosentinel_mobile.shared.generated.resources.trails_nearby_empty
-import geosentinel_mobile.shared.generated.resources.trails_nearby_title
 import geosentinel_mobile.shared.generated.resources.trails_nearby_waiting
 import geosentinel_mobile.shared.generated.resources.trails_too_many
 import geosentinel_mobile.shared.generated.resources.trails_zoom_in_hint
@@ -226,7 +224,7 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
 // Quanto resta aperta l'attribuzione se nessuno tocca la mappa
 private val AttributionOpenFor = 5.seconds
 
-internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard, AddPoint }
+internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard, AddPoint, NearMe }
 
 // Tondo da 56 dp come le card (tono e filo di bordo): si legge sopra qualsiasi zona della mappa
 @Composable
@@ -308,6 +306,12 @@ private fun GlyphIcon(glyph: Glyph, tint: Color) {
                 val plus = r * 0.5f
                 drawLine(tint, head.copy(x = head.x - plus), head.copy(x = head.x + plus), stroke, StrokeCap.Round)
                 drawLine(tint, head.copy(y = head.y - plus), head.copy(y = head.y + plus), stroke, StrokeCap.Round)
+            }
+            Glyph.NearMe -> {
+                // radar: il punto (tu) e due onde intorno, la più lontana più tenue
+                drawCircle(tint, size.minDimension * 0.09f, c)
+                drawCircle(tint, size.minDimension * 0.24f, c, style = Stroke(stroke))
+                drawCircle(tint.copy(alpha = 0.5f), size.minDimension * 0.42f, c, style = Stroke(stroke))
             }
             Glyph.Locate -> {
                 // mirino: cerchio, quattro tacche e il punto al centro

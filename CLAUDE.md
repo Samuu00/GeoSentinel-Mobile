@@ -44,7 +44,12 @@ M8.1 fatta (10/10): coda delle segnalazioni per sentiero (`HazardQueueScreen`), 
 salvate nella cache del catalogo, 294 test host, verificata sull'emulatore con `manager@`. Poi (10/10), dopo la prova
 su un iPhone vero (xtool, `tools/ios-device`): coda "Da verificare" di tutto il parco nella scheda Gestione
 (`GET /hazards/pending` nel backend), foto tolte dopo l'invio, proprie segnalazioni in verifica sulla mappa, POI da
-zoom 10, 299 test host. Aperti su iPhone: satellite nero. Prossimo: M8.2.
+zoom 10, 299 test host. Poi: "Vicino a te" (un tondo e un foglio con Sentieri | Pericoli) al posto delle due capsule
+sulla mappa, pagina del rifugio con la mappa in testata e la disponibilità a giorni, foto delle segnalazioni
+(`HazardPhotoStrip`) in coda del gestore, card della mappa e "Le mie segnalazioni". Rifugi descritti (backend V11:
+descrizione, quota, stagione, telefono, servizi, foto `REFUGE`) e pagina del rifugio con foto, servizi, "Sentieri da
+qui", "Chiama" e "Indicazioni", 300 test host. Aperti su iPhone: satellite nero.
+Prossimo: M8.2.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
