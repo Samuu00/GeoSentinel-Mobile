@@ -72,6 +72,7 @@ import geosentinel_mobile.shared.generated.resources.rescue_teams_title
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.api.model.RescueTeamResponse
 import it.unical.geosentinel_mobile.api.model.SosAlertResponse
+import it.unical.geosentinel_mobile.core.location.decimals5
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
@@ -80,8 +81,6 @@ import kotlinx.coroutines.delay
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
-import kotlin.math.abs
-import kotlin.math.roundToLong
 import kotlin.time.Instant
 
 private val ContentMaxWidth = 600.dp
@@ -316,12 +315,4 @@ private fun BottomActions(alert: SosAlertResponse, state: RescueAlertDetailUiSta
             }
         }
     }
-}
-
-// 5 decimali, circa un metro (String.format non c'è nel codice comune)
-private fun Double.decimals5(): String {
-    val scaled = (this * 100_000).roundToLong()
-    val sign = if (scaled < 0) "-" else ""
-    val whole = abs(scaled)
-    return "$sign${whole / 100_000}.${(whole % 100_000).toString().padStart(5, '0')}"
 }

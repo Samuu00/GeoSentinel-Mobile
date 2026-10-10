@@ -18,6 +18,7 @@ import it.unical.geosentinel_mobile.core.session.TEST_BASE_URL
 import it.unical.geosentinel_mobile.core.session.sessionWith
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
 import it.unical.geosentinel_mobile.media.data.FakeMedia
+import it.unical.geosentinel_mobile.media.data.MediaRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -62,7 +63,7 @@ class ReportHazardViewModelTest {
         val (session, client) = sessionWith(backend)
         session.restore()
         assertTrue(session.login("hiker@test.dev", "password-giusta-1").isSuccess)
-        return ReportHazardViewModel(HazardRepository({ client }, TEST_BASE_URL), with(media) { uploader(client) }, trailId)
+        return ReportHazardViewModel(HazardRepository({ client }, TEST_BASE_URL), with(media) { uploader(client) }, MediaRepository({ client }, TEST_BASE_URL), trailId)
     }
 
     private lateinit var media: FakeMedia
@@ -309,6 +310,49 @@ class ReportHazardViewModelTest {
         assertTrue(viewModel.state.value.photos.isEmpty())
         assertEquals(UiMessage(Res.string.report_photo_unreadable), viewModel.state.value.photoError)
         assertTrue(media.uploadRequests.isEmpty())
+    }
+
+    @Test
+    fun `togliere una foto caricata la cancella sul server e la toglie dalla lista`() = runTest {
+        val viewModel = sentViewModel()
+        viewModel.addPhoto { jpeg }
+        advanceUntilIdle()
+        val photo = viewModel.state.value.photos.single()
+
+        viewModel.removePhoto(photo.id)
+        assertEquals(PhotoStatus.REMOVING, viewModel.state.value.photos.single().status)
+        viewModel.removePhoto(photo.id) // doppio tocco
+        advanceUntilIdle()
+
+        assertEquals(listOf("m1"), media.deleted)
+        assertTrue(viewModel.state.value.photos.isEmpty())
+    }
+
+    @Test
+    fun `se la cancellazione non riesce la foto resta con l'errore`() = runTest {
+        val viewModel = sentViewModel()
+        viewModel.addPhoto { jpeg }
+        advanceUntilIdle()
+        media.deleteStatus = HttpStatusCode.InternalServerError
+
+        viewModel.removePhoto(viewModel.state.value.photos.single().id)
+        advanceUntilIdle()
+
+        assertEquals(PhotoStatus.READY, viewModel.state.value.photos.single().status)
+        assertTrue(viewModel.state.value.photoError != null)
+    }
+
+    @Test
+    fun `una foto non partita si toglie senza chiamare il server`() = runTest {
+        val viewModel = sentViewModel()
+        media.storageOffline = true
+        viewModel.addPhoto { jpeg }
+        advanceUntilIdle()
+
+        viewModel.removePhoto(viewModel.state.value.photos.single().id)
+
+        assertTrue(viewModel.state.value.photos.isEmpty())
+        assertTrue(media.deleted.isEmpty())
     }
 
     @Test

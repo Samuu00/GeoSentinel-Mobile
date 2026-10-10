@@ -30,13 +30,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.VerticalDivider
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +62,12 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.report_photo_failed
 import geosentinel_mobile.shared.generated.resources.report_photo_pick
 import geosentinel_mobile.shared.generated.resources.report_photo_ready
+import geosentinel_mobile.shared.generated.resources.report_photo_remove
+import geosentinel_mobile.shared.generated.resources.report_photo_remove_body
+import geosentinel_mobile.shared.generated.resources.report_photo_remove_cancel
+import geosentinel_mobile.shared.generated.resources.report_photo_remove_confirm
+import geosentinel_mobile.shared.generated.resources.report_photo_remove_title
+import geosentinel_mobile.shared.generated.resources.report_photo_removing
 import geosentinel_mobile.shared.generated.resources.report_photo_rejected
 import geosentinel_mobile.shared.generated.resources.report_photo_retry
 import geosentinel_mobile.shared.generated.resources.report_photo_take
@@ -80,7 +91,24 @@ internal fun HazardPhotos(
     onTakePhoto: (() -> Unit)?,
     onPickPhoto: () -> Unit,
     onRetry: (Int) -> Unit,
+    onRemove: (Int) -> Unit,
 ) {
+    // la foto da togliere, in attesa della conferma (una caricata si cancella anche sul server)
+    var confirmRemove by rememberSaveable { mutableStateOf<Int?>(null) }
+    confirmRemove?.let { photoId ->
+        AlertDialog(
+            onDismissRequest = { confirmRemove = null },
+            title = { Text(stringResource(Res.string.report_photo_remove_title)) },
+            text = { Text(stringResource(Res.string.report_photo_remove_body)) },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmRemove = null
+                    onRemove(photoId)
+                }) { Text(stringResource(Res.string.report_photo_remove_confirm)) }
+            },
+            dismissButton = { TextButton(onClick = { confirmRemove = null }) { Text(stringResource(Res.string.report_photo_remove_cancel)) } },
+        )
+    }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         // Prima i comandi, poi le foto: la barra resta ferma mentre le miniature si aggiungono sotto
         if (photos.size < MAX_HAZARD_PHOTOS) AddBar(onTakePhoto, onPickPhoto)
@@ -89,7 +117,15 @@ internal fun HazardPhotos(
             horizontalArrangement = Arrangement.spacedBy(10.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            photos.forEachIndexed { index, photo -> PhotoTile(index + 1, photo, onRetry = { onRetry(photo.id) }) }
+            photos.forEachIndexed { index, photo ->
+                PhotoTile(
+                    index + 1,
+                    photo,
+                    onRetry = { onRetry(photo.id) },
+                    // una foto non partita sparisce e basta; una caricata o non accettata è sul server: si chiede prima
+                    onRemove = { if (photo.mediaId == null) onRemove(photo.id) else confirmRemove = photo.id },
+                )
+            }
         }
     }
 }
@@ -129,22 +165,24 @@ private fun RowScope.AddAction(icon: ImageVector, label: String, onClick: () -> 
 }
 
 @Composable
-private fun PhotoTile(number: Int, photo: PhotoUpload, onRetry: () -> Unit) {
+private fun PhotoTile(number: Int, photo: PhotoUpload, onRetry: () -> Unit, onRemove: () -> Unit) {
     val description = stringResource(
         when (photo.status) {
             PhotoStatus.UPLOADING -> Res.string.report_photo_uploading
             PhotoStatus.READY -> Res.string.report_photo_ready
             PhotoStatus.REJECTED -> Res.string.report_photo_rejected
             PhotoStatus.FAILED -> Res.string.report_photo_failed
+            PhotoStatus.REMOVING -> Res.string.report_photo_removing
         },
         number,
     )
+    val removeLabel = stringResource(Res.string.report_photo_remove, number)
     // La foto si "accende" quando arriva: attenuata mentre parte, spenta se non è passata
     val alpha by animateFloatAsState(
         targetValue = when (photo.status) {
             PhotoStatus.READY -> 1f
             PhotoStatus.UPLOADING -> 0.6f
-            PhotoStatus.REJECTED, PhotoStatus.FAILED -> 0.4f
+            PhotoStatus.REJECTED, PhotoStatus.FAILED, PhotoStatus.REMOVING -> 0.4f
         },
         animationSpec = tween(300),
     )
@@ -172,6 +210,28 @@ private fun PhotoTile(number: Int, photo: PhotoUpload, onRetry: () -> Unit) {
             )
         }
         StatusBadge(photo.status, Modifier.align(Alignment.BottomEnd).padding(6.dp))
+        // "Togli" nell'angolo opposto al badge: bersaglio da 48 dp, cerchio visibile da 26 (una in invio non si toglie)
+        if (photo.status != PhotoStatus.UPLOADING && photo.status != PhotoStatus.REMOVING) {
+            Box(
+                contentAlignment = Alignment.Center,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(48.dp)
+                    .clickable(onClickLabel = removeLabel, role = Role.Button, onClick = onRemove)
+                    .semantics { contentDescription = removeLabel },
+            ) {
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(26.dp)
+                        .border(2.dp, MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape)
+                        .padding(2.dp)
+                        .background(MaterialTheme.colorScheme.inverseSurface, CircleShape),
+                ) {
+                    Icon(Icons.Filled.Close, contentDescription = null, tint = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.size(14.dp))
+                }
+            }
+        }
     }
 }
 
@@ -191,6 +251,7 @@ private fun StatusBadge(status: PhotoStatus, modifier: Modifier) {
             PhotoStatus.UPLOADING -> colors.surfaceContainerLowest to colors.primary
             PhotoStatus.READY -> colors.primary to colors.onPrimary
             PhotoStatus.REJECTED, PhotoStatus.FAILED -> colors.error to colors.onError
+            PhotoStatus.REMOVING -> colors.surfaceContainerLowest to colors.onSurfaceVariant
         }
         Box(
             contentAlignment = Alignment.Center,
@@ -202,7 +263,7 @@ private fun StatusBadge(status: PhotoStatus, modifier: Modifier) {
                 .background(background, CircleShape),
         ) {
             when (current) {
-                PhotoStatus.UPLOADING -> CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp, color = content)
+                PhotoStatus.UPLOADING, PhotoStatus.REMOVING -> CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp, color = content)
                 PhotoStatus.READY -> Icon(Icons.Filled.Check, contentDescription = null, tint = content, modifier = Modifier.size(15.dp))
                 PhotoStatus.REJECTED -> Icon(Icons.Filled.Close, contentDescription = null, tint = content, modifier = Modifier.size(14.dp))
                 PhotoStatus.FAILED -> Icon(Icons.Filled.Refresh, contentDescription = null, tint = content, modifier = Modifier.size(15.dp))

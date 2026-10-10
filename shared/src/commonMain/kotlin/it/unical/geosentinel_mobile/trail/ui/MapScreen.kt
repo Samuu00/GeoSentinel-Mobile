@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -266,6 +267,8 @@ fun MapScreen(
     val hazardViewModel = koinViewModel<HazardMapViewModel>()
     val hazardUi by hazardViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(showHazards) { hazardViewModel.setEnabled(showHazards) }
+    // a ogni ritorno sulla mappa (es. dopo una segnalazione) le proprie in verifica si rileggono subito
+    LaunchedEffect(Unit) { hazardViewModel.refreshMine() }
     val refugeViewModel = koinViewModel<RefugeMapViewModel>()
     val refuges by refugeViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(onOpenRefuge != null) { refugeViewModel.setEnabled(onOpenRefuge != null) }
@@ -326,7 +329,7 @@ fun MapScreen(
             RefugeMarkers(refuges, fill = colors.primary, outline = colors.surfaceContainerLowest, symbol = colors.onPrimary, onRefugeClick = onOpenRefuge)
         }
         // sopra sentieri, POI e rifugi: un pericolo non deve restare nascosto
-        HazardMarkers(hazardUi.hazards, halo = casing, otherColor = colors.onSurfaceVariant) { id ->
+        HazardMarkers(hazardUi.shown, halo = casing, otherColor = colors.onSurfaceVariant) { id ->
             selectedPoiId = null
             hazardViewModel.select(id)
         }
@@ -455,7 +458,12 @@ fun MapScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // FlowRow: se i due pulsanti non stanno affiancati (iPhone stretti, testo grande) il secondo va sotto intero,
+            // invece di spezzare "vicini" su un'altra riga
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
                 MapPill(stringResource(Res.string.trails_nearby_button), emphasized = true) {
                     withLocation(LocationGoal.Nearby, viewModel::onNearbyRequested)
                 }

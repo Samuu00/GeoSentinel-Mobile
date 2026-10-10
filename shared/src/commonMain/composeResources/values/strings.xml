@@ -42,11 +42,6 @@
     <string name="sos_cancel_dismiss">No, mantieni</string>
 
     <!-- Schermate segnaposto, sostituite milestone per milestone -->
-    <string name="placeholder_map_title">Mappa dei sentieri</string>
-    <string name="placeholder_map_body">Qui compariranno sentieri, punti di interesse e la tua posizione.</string>
-    <string name="placeholder_management_title">Gestione del parco</string>
-    <string name="placeholder_management_body">Qui potrai verificare le segnalazioni e gestire sentieri, ticket e rifugi.</string>
-    <string name="placeholder_profile_title">Profilo</string>
 
     <!-- Ruoli -->
     <string name="role_guest">Ospite</string>
@@ -248,7 +243,7 @@
     <string name="report_error_location">Indica dove si trova il pericolo.</string>
     <string name="report_error_description">Al massimo %1$d caratteri.</string>
     <string name="report_sent_title">Segnalazione inviata</string>
-    <string name="report_sent_body">Grazie. Un gestore del parco la verificherà: dopo comparirà tra i pericoli del sentiero.</string>
+    <string name="report_sent_body">Grazie. Ora è in verifica: tu la vedi già sulla mappa, attenuata, e in Profilo → Le mie segnalazioni. Per gli altri escursionisti comparirà quando un gestore del parco l'avrà verificata.</string>
     <string name="report_sent_done">Fatto</string>
     <string name="report_photos">Foto</string>
     <string name="my_hazards_title">Le mie segnalazioni</string>
@@ -270,6 +265,12 @@
     <string name="report_photo_rejected">Foto %1$d, non accettata</string>
     <string name="report_photo_failed">Foto %1$d, non caricata</string>
     <string name="report_photo_retry">Riprova</string>
+    <string name="report_photo_removing">Foto %1$d, in rimozione</string>
+    <string name="report_photo_remove">Togli la foto %1$d</string>
+    <string name="report_photo_remove_title">Togliere la foto?</string>
+    <string name="report_photo_remove_body">La foto non sarà più allegata alla segnalazione e viene cancellata.</string>
+    <string name="report_photo_remove_confirm">Togli</string>
+    <string name="report_photo_remove_cancel">Annulla</string>
     <string name="report_photo_rejected_message">Una foto non è stata accettata: il server non la riconosce come immagine.</string>
     <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un'altra.</string>
 
@@ -397,6 +398,10 @@
     <string name="staff_queue_verify">Verifica</string>
     <string name="staff_queue_reject">Respingi</string>
     <string name="staff_queue_resolve">Risolvi</string>
+    <string name="staff_pending_title">Da verificare</string>
+    <string name="staff_pending_intro">Le segnalazioni nuove di tutto il parco, dalla più recente. Verificale o respingile: solo quelle verificate compaiono sulla mappa.</string>
+    <string name="staff_pending_empty_body">Non ci sono segnalazioni in attesa di verifica.</string>
+    <string name="staff_queue_off_trail">Lontano dai sentieri · %1$s, %2$s</string>
     <string name="staff_queue_already_handled">Questa segnalazione è già stata gestita: la lista è aggiornata.</string>
     <string name="staff_manage_title">Gestione</string>
     <string name="staff_trail_status">Stato del sentiero</string>

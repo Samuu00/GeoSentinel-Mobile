@@ -41,7 +41,10 @@ se c'è un SOS in corso, rifiuti delle prenotazioni e verifica dell'annullamento
 (`BOOKING_REJECTED`, `SOS_CANCEL`), conferma all'uscita con foto in caricamento (`BackHandler`), 287 test host.
 M8.1 fatta (10/10): coda delle segnalazioni per sentiero (`HazardQueueScreen`), stato del sentiero nella sezione
 "Gestione" del dettaglio (`TrailManagementSection`), nuovo POI dal dettaglio o dalla mappa (`PoiCreateScreen`), risposte
-salvate nella cache del catalogo, 294 test host, verificata sull'emulatore con `manager@`. Prossimo: M8.2.
+salvate nella cache del catalogo, 294 test host, verificata sull'emulatore con `manager@`. Poi (10/10), dopo la prova
+su un iPhone vero (xtool, `tools/ios-device`): coda "Da verificare" di tutto il parco nella scheda Gestione
+(`GET /hazards/pending` nel backend), foto tolte dopo l'invio, proprie segnalazioni in verifica sulla mappa, POI da
+zoom 10, 299 test host. Aperti su iPhone: satellite nero. Prossimo: M8.2.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

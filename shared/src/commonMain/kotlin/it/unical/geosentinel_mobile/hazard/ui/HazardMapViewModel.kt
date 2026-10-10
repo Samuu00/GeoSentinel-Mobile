@@ -47,9 +47,15 @@ data class HazardMapUiState(
     // il pericolo toccato sulla mappa o scelto dalla lista, mostrato nella card
     val selected: HazardResponse? = null,
     val nearby: NearbyHazards = NearbyHazards.Hidden,
+    // le proprie segnalazioni ancora in verifica: sulla mappa attenuate, finché un gestore non le verifica
+    val mine: List<HazardResponse> = emptyList(),
 ) {
+    /** Il livello della mappa: i pericoli verificati e, sopra, le proprie segnalazioni in verifica (senza doppioni). */
+    val shown: List<HazardResponse> get() = hazards + mine.filter { own -> hazards.none { it.id == own.id } }
+
     // niente descrizioni né posizioni nei log
-    override fun toString() = "HazardMapUiState(hazards=${hazards.size}, failed=$failed, selected=${selected != null}, nearby=$nearby)"
+    override fun toString() =
+        "HazardMapUiState(hazards=${hazards.size}, mine=${mine.size}, failed=$failed, selected=${selected != null}, nearby=$nearby)"
 }
 
 /**
@@ -90,6 +96,7 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
         enabled = value
         if (value) {
             requests.value = lastView
+            refreshMine()
         } else {
             requests.value = null
             loaded = null
@@ -136,9 +143,22 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
         )
     }
 
+    /**
+     * Le proprie segnalazioni in verifica (la prima pagina di "Le mie segnalazioni", le più recenti): la mappa le chiede
+     * all'accesso e a ogni ritorno, così una appena inviata compare subito. Un errore lascia quelle di prima.
+     */
+    fun refreshMine() {
+        if (!enabled) return
+        viewModelScope.launch {
+            hazards.mine(page = 0).onSuccess { page ->
+                if (enabled) _state.update { it.copy(mine = page.content.filter { h -> h.status == HazardResponse.Status.SUBMITTED }) }
+            }
+        }
+    }
+
     fun select(hazard: HazardResponse) = _state.update { it.copy(selected = hazard) }
 
-    fun select(id: String) = _state.update { state -> state.copy(selected = state.hazards.firstOrNull { it.id == id }) }
+    fun select(id: String) = _state.update { state -> state.copy(selected = state.shown.firstOrNull { it.id == id }) }
 
     fun clearSelection() = _state.update { it.copy(selected = null) }
 

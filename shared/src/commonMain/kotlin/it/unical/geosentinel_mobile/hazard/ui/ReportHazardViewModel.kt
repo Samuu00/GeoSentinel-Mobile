@@ -14,6 +14,7 @@ import geosentinel_mobile.shared.generated.resources.report_photo_unreadable
 import it.unical.geosentinel_mobile.api.model.CreateHazardRequest
 import it.unical.geosentinel_mobile.api.model.InitUploadRequest
 import it.unical.geosentinel_mobile.api.model.MediaResponse
+import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.media.data.MediaTarget
 import it.unical.geosentinel_mobile.media.data.MediaUploader
 import kotlin.coroutines.cancellation.CancellationException
@@ -59,10 +60,13 @@ data class ReportHazardUiState(
 // Un limite dell'app, non del backend (che ha la quota di 1 GB per utente): bastano a mostrare il pericolo
 const val MAX_HAZARD_PHOTOS = 5
 
-enum class PhotoStatus { UPLOADING, READY, REJECTED, FAILED }
+enum class PhotoStatus { UPLOADING, READY, REJECTED, FAILED, REMOVING }
 
-/** Una foto della segnalazione. [jpeg] arriva dopo la ricodifica: serve alla miniatura e a "Riprova". */
-data class PhotoUpload(val id: Int, val status: PhotoStatus, val jpeg: ByteArray? = null) {
+/**
+ * Una foto della segnalazione. [jpeg] arriva dopo la ricodifica: serve alla miniatura e a "Riprova". [mediaId] è l'id
+ * sul server, quando ce n'è uno (caricata o in quarantena): serve a toglierla.
+ */
+data class PhotoUpload(val id: Int, val status: PhotoStatus, val jpeg: ByteArray? = null, val mediaId: String? = null) {
     // niente byte nei log
     override fun toString() = "PhotoUpload(id=$id, status=$status)"
 }
@@ -75,6 +79,7 @@ data class PhotoUpload(val id: Int, val status: PhotoStatus, val jpeg: ByteArray
 class ReportHazardViewModel(
     private val hazards: HazardRepository,
     private val uploader: MediaUploader,
+    private val media: MediaRepository,
     private val trailId: String?,
     // gli upload girano qui (uno scope dell'app): uscire da "Segnalazione inviata" non li annulla. Null nei test:
     // allora il viewModelScope
@@ -159,8 +164,9 @@ class ReportHazardViewModel(
     private suspend fun upload(hazardId: String, photoId: Int, jpeg: ByteArray) {
         val target = MediaTarget(InitUploadRequest.EntityType.HAZARD_REPORT, hazardId)
         (uploadScope ?: viewModelScope).async { uploader.upload(jpeg, target) }.await().fold(
-            onSuccess = { media ->
-                if (media.status == MediaResponse.Status.READY) {
+            onSuccess = { uploaded ->
+                _state.update { state -> state.copy(photos = state.photos.map { if (it.id == photoId) it.copy(mediaId = uploaded.id) else it }) }
+                if (uploaded.status == MediaResponse.Status.READY) {
                     setPhotoStatus(photoId, PhotoStatus.READY)
                 } else {
                     // QUARANTINED: il server non l'ha riconosciuta come immagine, ripeterla non cambia l'esito
@@ -173,6 +179,39 @@ class ReportHazardViewModel(
                 _state.update { it.copy(photoError = (failure as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic)) }
             },
         )
+    }
+
+    /**
+     * Toglie una foto. Senza un id sul server (upload non riuscito) sparisce e basta; altrimenti prima si cancella sul
+     * server, e se non riesce resta dov'era con l'errore. Una foto in invio non si toglie: l'upload non si annulla.
+     */
+    fun removePhoto(photoId: Int) {
+        val photo = _state.value.photos.firstOrNull { it.id == photoId } ?: return
+        if (photo.status == PhotoStatus.UPLOADING || photo.status == PhotoStatus.REMOVING) return
+        val mediaId = photo.mediaId
+        if (mediaId == null) {
+            _state.update { state -> state.copy(photos = state.photos.filterNot { it.id == photoId }, photoError = null) }
+            return
+        }
+        val before = photo.status
+        setPhotoStatus(photoId, PhotoStatus.REMOVING)
+        _state.update { it.copy(photoError = null) }
+        viewModelScope.launch {
+            val result = media.delete(mediaId)
+            // 404: già cancellata (doppio tocco, risposta persa), per l'utente è tolta
+            val gone = result.isSuccess || (result.exceptionOrNull() as? ApiException)?.error is ApiError.NotFound
+            _state.update { state ->
+                if (gone) {
+                    state.copy(photos = state.photos.filterNot { it.id == photoId })
+                } else {
+                    val failure = result.exceptionOrNull()
+                    state.copy(
+                        photos = state.photos.map { if (it.id == photoId) it.copy(status = before) else it },
+                        photoError = (failure as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic),
+                    )
+                }
+            }
+        }
     }
 
     private fun setPhotoStatus(photoId: Int, status: PhotoStatus) = _state.update { state ->

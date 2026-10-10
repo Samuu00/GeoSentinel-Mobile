@@ -11,7 +11,9 @@ import org.maplibre.compose.location.LocationProvider
 import org.maplibre.compose.location.LocationRequest
 import org.maplibre.spatialk.geojson.Position
 import kotlin.math.PI
+import kotlin.math.abs
 import kotlin.math.cos
+import kotlin.math.roundToLong
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 
@@ -60,3 +62,11 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint> = fixes(Locat
 
 private fun LocationProvider.fixes(request: LocationRequest): Flow<GeoPoint> =
     updates(request).filterIsInstance<LocationEvent.Update>().map { it.measurement.position.toGeoPoint() }
+
+// 5 decimali, circa un metro (String.format non c'è nel codice comune): coordinate da leggere (soccorso, coda del gestore)
+internal fun Double.decimals5(): String {
+    val scaled = (this * 100_000).roundToLong()
+    val sign = if (scaled < 0) "-" else ""
+    val whole = abs(scaled)
+    return "$sign${whole / 100_000}.${(whole % 100_000).toString().padStart(5, '0')}"
+}

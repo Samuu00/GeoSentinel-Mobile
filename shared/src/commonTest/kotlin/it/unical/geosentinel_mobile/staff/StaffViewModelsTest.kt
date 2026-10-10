@@ -80,6 +80,15 @@ class StaffViewModelsTest {
                         val queue = hazardStatus.filterValues { it == "SUBMITTED" || it == "VERIFIED" }.keys.map { hazardJson(it) }
                         respond("[${queue.joinToString(",")}]", HttpStatusCode.OK, ok)
                     }
+                    request.method == HttpMethod.Get && path == "/hazards/pending" -> {
+                        // come il server: le SUBMITTED di tutti, ovunque siano
+                        val pending = hazardStatus.filterValues { it == "SUBMITTED" }.keys.map { hazardJson(it) }
+                        respond(
+                            """{"content":[${pending.joinToString(",")}],"page":{"size":50,"number":0,"totalElements":${pending.size},"totalPages":1}}""",
+                            HttpStatusCode.OK,
+                            ok,
+                        )
+                    }
                     request.method == HttpMethod.Patch && path.startsWith("/hazards/") && path.endsWith("/status") -> {
                         val id = path.removePrefix("/hazards/").removeSuffix("/status")
                         if (colleagueRejectsFirst) hazardStatus[id] = "REJECTED"
@@ -172,6 +181,20 @@ class StaffViewModelsTest {
         assertEquals(Res.string.staff_queue_already_handled, viewModel.state.value.actionError?.text)
         assertEquals(listOf("h2"), viewModel.state.value.hazards.map { it.id })
         assertNull(viewModel.state.value.busyHazardId)
+    }
+
+    @Test
+    fun `la coda del parco mostra solo le segnalazioni da verificare e una verificata ne esce`() = runTest {
+        val (hazards, staff, _) = repositories()
+        val viewModel = HazardQueueViewModel(null, hazards, staff)
+        advanceUntilIdle()
+        assertEquals(listOf("h1"), viewModel.state.value.hazards.map { it.id })
+
+        viewModel.change(viewModel.state.value.hazards.single(), UpdateHazardStatusRequest.Status.VERIFIED)
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.hazards.isEmpty())
+        assertEquals("VERIFIED", hazardStatus["h1"])
     }
 
     // ---- stato del sentiero ----

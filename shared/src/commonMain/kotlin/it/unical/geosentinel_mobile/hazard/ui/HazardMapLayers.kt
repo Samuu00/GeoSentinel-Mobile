@@ -32,7 +32,7 @@ import org.maplibre.spatialk.geojson.Point
 /**
  * I pericoli attivi sulla mappa (M4.4): un triangolo grande nel colore della gravità, come `Severity.color()` della lista
  * (rosso solo per `CRITICAL`, §2), con un bordo chiaro o scuro che lo stacca da ogni mappa. Il colore non è l'unico
- * segno: la card e la lista dicono la gravità a parole.
+ * segno: la card e la lista dicono la gravità a parole. Le proprie segnalazioni ancora in verifica sono attenuate.
  */
 @Composable
 @MaplibreComposable
@@ -44,6 +44,7 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
                 properties = buildJsonObject {
                     put("id", hazard.id)
                     put("severity", hazard.severity.value)
+                    put("status", hazard.status.value)
                 },
             )
         }
@@ -62,6 +63,8 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
             case(HazardResponse.Severity.HIGH.value, const(TrailWarning)),
             fallback = const(otherColor),
         ),
+        // le proprie segnalazioni in verifica attenuate: la card dice "In verifica" a parole
+        iconOpacity = switch(feature["status"], case(HazardResponse.Status.SUBMITTED.value, const(0.5f)), fallback = const(1f)),
         iconHaloColor = const(halo),
         iconHaloWidth = const(2.dp),
         // tutti visibili: sono al massimo 50, e un pericolo nascosto da un'etichetta non va bene

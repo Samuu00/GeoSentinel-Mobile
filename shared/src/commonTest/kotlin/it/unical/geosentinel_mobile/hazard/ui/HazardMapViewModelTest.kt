@@ -41,13 +41,15 @@ class HazardMapViewModelTest {
     // le query di ogni GET /hazards/nearby, nell'ordine
     private val calls = mutableListOf<Parameters>()
     private var offline = false
+    // "Le mie segnalazioni" dell'utente (GET /hazards/mine), in ogni stato
+    private var mine = listOf<String>()
 
     // la vista sulla Sila, a zoom 12
     private val sila = GeoBounds.of(16.50, 39.30, 16.60, 39.36)
 
-    private fun hazard(id: String, severity: String, description: String? = null): String {
+    private fun hazard(id: String, severity: String, description: String? = null, status: String = "VERIFIED"): String {
         val desc = description?.let { ""","description":"$it"""" }.orEmpty()
-        return """{"id":"$id","type":"LANDSLIDE","severity":"$severity","status":"VERIFIED","location":{"lat":39.33,"lon":16.55},"createdAt":"2026-10-05T10:00:00Z"$desc}"""
+        return """{"id":"$id","type":"LANDSLIDE","severity":"$severity","status":"$status","location":{"lat":39.33,"lon":16.55},"createdAt":"2026-10-05T10:00:00Z"$desc}"""
     }
 
     private suspend fun TestScope.viewModel(): HazardMapViewModel {
@@ -57,6 +59,12 @@ class HazardMapViewModelTest {
                 calls += request.url.parameters
                 if (offline) throw IOException("rete assente")
                 respond("[${serverHazards.joinToString(",")}]", HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
+            } else if (request.method == HttpMethod.Get && request.url.encodedPath == "/api/v1/hazards/mine") {
+                respond(
+                    """{"content":[${mine.joinToString(",")}],"page":{"size":20,"number":0,"totalElements":${mine.size},"totalPages":1}}""",
+                    HttpStatusCode.OK,
+                    headersOf(HttpHeaders.ContentType, "application/json"),
+                )
             } else {
                 null
             }
@@ -85,6 +93,26 @@ class HazardMapViewModelTest {
         assertEquals(39.33, query["lat"]!!.toDouble(), 0.001)
         assertEquals(16.55, query["lon"]!!.toDouble(), 0.001)
         assertTrue(query["radius"]!!.toDouble() > sila.radiusMeters)
+    }
+
+    @Test
+    fun `le proprie segnalazioni in verifica si aggiungono al livello senza doppioni`() = runTest {
+        mine = listOf(hazard("m1", "CRITICAL", status = "SUBMITTED"), hazard("h1", "CRITICAL"), hazard("m2", "LOW", status = "REJECTED"))
+        val viewModel = viewModel()
+        viewModel.setEnabled(true)
+        viewModel.onCameraIdle(sila, zoom = 12.0)
+        advanceUntilIdle()
+
+        // h1 è già tra i verificati; la respinta non si mostra
+        assertEquals(listOf("h1", "h2", "m1"), viewModel.state.value.shown.map { it.id })
+        viewModel.select("m1")
+        assertEquals("m1", viewModel.state.value.selected?.id)
+
+        // una segnalazione nuova compare al ritorno sulla mappa, senza aspettare un movimento
+        mine = listOf(hazard("m3", "HIGH", status = "SUBMITTED")) + mine
+        viewModel.refreshMine()
+        advanceUntilIdle()
+        assertEquals(listOf("m3", "m1"), viewModel.state.value.mine.map { it.id })
     }
 
     @Test

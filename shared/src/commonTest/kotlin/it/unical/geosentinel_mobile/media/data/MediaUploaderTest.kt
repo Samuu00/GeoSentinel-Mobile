@@ -48,6 +48,8 @@ class FakeMedia(backend: FakeBackend) {
     var storageOffline = false
     var confirmOfflineTimes = 0 // le prime N conferme cadono per la rete
     var mediaStatus = "READY"
+    val deleted = mutableListOf<String>() // id delle DELETE /media/{id}
+    var deleteStatus = HttpStatusCode.NoContent
 
     init {
         val previous = backend.extraRoutes
@@ -74,6 +76,14 @@ class FakeMedia(backend: FakeBackend) {
                         HttpStatusCode.OK,
                         headersOf(HttpHeaders.ContentType, "application/json"),
                     )
+                }
+                request.method == HttpMethod.Delete && path.startsWith("/api/v1/media/") -> {
+                    deleted += path.removePrefix("/api/v1/media/")
+                    if (deleteStatus.value < 300) {
+                        respond("", deleteStatus)
+                    } else {
+                        with(backend) { problem(deleteStatus, "not-found") }
+                    }
                 }
                 else -> previous?.invoke(this, request, owner)
             }

@@ -5,6 +5,7 @@ param([string]$Ipa)
 
 $ErrorActionPreference = 'Stop'
 $Distro = 'Ubuntu'
+$MuxPort = 27015
 
 # 1. L'app: l'artifact dell'ultima run riuscita del workflow
 if (-not $Ipa) {
@@ -16,15 +17,24 @@ if (-not $Ipa) {
 }
 Write-Host "App: $Ipa"
 
-# 2. L'iPhone dentro WSL: usbipd lo stacca da Windows e lo passa alla distro (il bind, una volta sola, è nel README)
-$apple = usbipd list | Select-String -Pattern '^\s*(\S+)\s+05ac:' | Select-Object -First 1
-if (-not $apple) { throw "iPhone non trovato: collegalo via USB, sbloccalo e accetta 'Autorizza questo computer'." }
-$busId = $apple.Matches[0].Groups[1].Value
-if ($null -eq (usbipd list | Select-String -Pattern "^\s*$busId\s.*Attached")) {
-    usbipd attach --wsl $Distro --busid $busId
-    Start-Sleep -Seconds 2
+# 2. Il telefono passa dal servizio Apple di Windows ("Dispositivi Apple", porta 27015 su localhost), non da usbipd:
+#    con usbipd il caricamento si blocca (usbmuxd: "message was too large"). Il servizio parte con l'app.
+if (-not (Get-NetTCPConnection -LocalPort $MuxPort -State Listen -ErrorAction SilentlyContinue)) {
+    Start-Process 'shell:AppsFolder\AppleInc.AppleDevices_nzyj5cx40ttqa!App'
+    for ($i = 0; $i -lt 30 -and -not (Get-NetTCPConnection -LocalPort $MuxPort -State Listen -ErrorAction SilentlyContinue); $i++) {
+        Start-Sleep -Seconds 2
+    }
 }
 
-# 3. Firma con l'Apple ID salvato da `xtool auth` e installazione. usbmuxd parte qui perché WSL non ha udev
+# 3. WSL raggiunge Windows sull'IP del suo gateway, che può cambiare a ogni avvio: l'inoltro verso localhost si
+#    rifà (da amministratore) solo se manca per l'IP attuale
+$hostIp = ((wsl -d $Distro -- ip route list default) -split '\s+')[2]
+if (-not ((netsh interface portproxy show v4tov4) -match "$([regex]::Escape($hostIp))\s+$MuxPort")) {
+    Write-Host "Inoltro $hostIp`:$MuxPort -> 127.0.0.1 (serve l'autorizzazione da amministratore)"
+    Start-Process netsh -Verb RunAs -Wait -ArgumentList 'interface', 'portproxy', 'set', 'v4tov4', "listenport=$MuxPort",
+        "listenaddress=$hostIp", "connectport=$MuxPort", 'connectaddress=127.0.0.1'
+}
+
+# 4. Firma con l'Apple ID salvato da `xtool auth` e installazione
 $wslIpa = (wsl -d $Distro -- wslpath -a ($Ipa -replace '\\', '/')).Trim()
-wsl -d $Distro -u root -- bash -lc "pgrep -x usbmuxd >/dev/null || usbmuxd -U root; sleep 1; xtool install '$wslIpa'"
+wsl -d $Distro -u root -- bash -c "pkill -x usbmuxd; export USBMUXD_SOCKET_ADDRESS=$hostIp`:$MuxPort; xtool install '$wslIpa'"

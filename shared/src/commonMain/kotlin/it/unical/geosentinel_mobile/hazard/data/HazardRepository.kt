@@ -34,6 +34,13 @@ class HazardRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
         apiCall { hazardsApi.findMyHazards(page = page, size = size) }
 
     /**
+     * Le segnalazioni da verificare di tutti, ovunque siano (solo gestore, M8.1), dalla più recente. Niente cache:
+     * cambiano a ogni verifica.
+     */
+    suspend fun pending(page: Int, size: Int): Result<PagedModelHazardResponse> =
+        apiCall { hazardsApi.findPendingHazards(page = page, size = size) }
+
+    /**
      * I pericoli attivi (verificati e non risolti) di tutti gli utenti entro [radiusMeters] da [center], dal più vicino
      * (M4.4). Niente cache: un pericolo vecchio mostrato come attivo inganna.
      */

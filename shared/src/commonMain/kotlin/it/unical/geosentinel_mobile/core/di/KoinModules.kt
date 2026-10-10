@@ -155,7 +155,7 @@ fun coreModule(
     // pericoli; trailId facoltativo: null se la segnalazione parte dalla mappa
     viewModel { HazardMapViewModel(get()) }
     viewModel { MyHazardsViewModel(get()) }
-    viewModel { params -> ReportHazardViewModel(get(), get(), params.getOrNull<String>(), uploadScope = uploads) }
+    viewModel { params -> ReportHazardViewModel(get(), get(), get(), params.getOrNull<String>(), uploadScope = uploads) }
     // rifugi e prenotazioni; id e posti del rifugio dalla rotta, l'utente dalla sessione al momento dell'invio
     viewModel { RefugeListViewModel(get()) }
     viewModel { RefugeMapViewModel(get()) }
@@ -175,7 +175,8 @@ fun coreModule(
     viewModel { RescueMapViewModel(get()) }
     viewModel { (alertId: String) -> RescueAlertDetailViewModel(alertId, get()) }
 
-    viewModel { (trailId: String) -> HazardQueueViewModel(trailId, get(), get()) }
+    // trailId null: la coda "Da verificare" di tutto il parco (scheda Gestione)
+    viewModel { params -> HazardQueueViewModel(params.getOrNull<String>(), get(), get()) }
     viewModel { (trailId: String) -> TrailStatusViewModel(trailId, get(), get()) }
     viewModel { params -> PoiCreateViewModel(params.getOrNull<String>(), get(), get()) }
 }

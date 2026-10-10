@@ -178,8 +178,9 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         val Debounce = 400.milliseconds
         // Sotto, la vista copre mezza regione: troppi sentieri da scaricare e da disegnare
         const val MinTrailZoom = 8.0
-        // I POI sono puntini: servono solo da vicino
-        const val MinPoiZoom = 12.0
+        // I POI da una valle in giù (prima 12: comparivano solo da vicinissimo). A 10 la vista supera i 50 km del server:
+        // la risposta è parziale (al massimo 50, i più vicini al centro) e quelli ai bordi arrivano avvicinandosi
+        const val MinPoiZoom = 10.0
         // Margine caricato attorno alla vista, su ogni lato
         private const val Margin = 0.5
     }

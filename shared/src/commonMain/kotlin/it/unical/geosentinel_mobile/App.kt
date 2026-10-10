@@ -32,7 +32,6 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -73,10 +72,6 @@ import androidx.navigation.toRoute
 import coil3.SingletonImageLoader
 import coil3.compose.LocalPlatformContext
 import geosentinel_mobile.shared.generated.resources.Res
-import geosentinel_mobile.shared.generated.resources.placeholder_management_body
-import geosentinel_mobile.shared.generated.resources.placeholder_management_title
-import geosentinel_mobile.shared.generated.resources.placeholder_map_body
-import geosentinel_mobile.shared.generated.resources.placeholder_map_title
 import geosentinel_mobile.shared.generated.resources.sos_button
 import geosentinel_mobile.shared.generated.resources.sos_button_description
 import it.unical.geosentinel_mobile.auth.ui.LoginScreen
@@ -88,7 +83,6 @@ import it.unical.geosentinel_mobile.core.push.RequestNotificationPermission
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
-import it.unical.geosentinel_mobile.core.ui.PlaceholderScreen
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItems
 import it.unical.geosentinel_mobile.core.ui.navigation.NoBottomBarRoutes
@@ -413,8 +407,19 @@ fun App() {
                     val route = entry.toRoute<Route.AlertDetail>()
                     RescueAlertDetailScreen(route.alertId, onBack = { navController.popBackStack() })
                 }
-                composable<Route.Management> {
-                    PlaceholderScreen(Icons.Filled.Build, Res.string.placeholder_management_title, Res.string.placeholder_management_body)
+                composable<Route.Management>(
+                    // il sentiero di una segnalazione entra da destra e la coda scivola via in parallasse
+                    exitTransition = {
+                        if (targetState.destination.hasRoute<Route.TrailDetail>()) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
+                    },
+                    popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
+                ) {
+                    // M8.1: le segnalazioni da verificare di tutto il parco (anche lontane dai sentieri)
+                    HazardQueueScreen(
+                        trailId = null,
+                        onBack = null,
+                        onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
+                    )
                 }
                 composable<Route.Profile> {
                     ProfileScreen(

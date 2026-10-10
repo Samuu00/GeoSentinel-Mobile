@@ -21,4 +21,7 @@ class MediaRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
 
     /** Un URL nuovo a ogni chiamata: si chiede quando la foto si mostra, e di nuovo quando quello vecchio è scaduto. */
     suspend fun downloadUrl(mediaId: String): Result<String> = apiCall { mediaApi.getMediaDownloadUrl(mediaId) }.map { it.downloadUrl }
+
+    /** Toglie una foto caricata (solo chi l'ha caricata, o un admin): il server la cancella anche dallo storage. */
+    suspend fun delete(mediaId: String): Result<Unit> = apiCall { mediaApi.deleteMedia(mediaId) }
 }

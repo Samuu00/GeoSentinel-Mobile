@@ -26,9 +26,16 @@ data class HazardQueueUiState(
     val actionError: UiMessage? = null,
 )
 
-// Coda dei pericoli di un sentiero. Il server decide le transizioni: 409/422 si mostrano e la lista si rilegge.
+// ponytail: solo la prima pagina, le 50 più recenti; paginare come "Le mie segnalazioni" se la coda cresce
+const val PENDING_QUEUE_SIZE = 50
+
+/**
+ * Coda delle segnalazioni del gestore: quelle di un sentiero ([trailId], verificate e da verificare) o, con [trailId]
+ * null, le da verificare di tutto il parco (scheda Gestione). Il server decide le transizioni: 409/422 si mostrano e la
+ * lista si rilegge.
+ */
 class HazardQueueViewModel(
-    private val trailId: String,
+    private val trailId: String?,
     private val hazards: HazardRepository,
     private val staff: StaffRepository,
 ) : ViewModel() {
@@ -66,7 +73,9 @@ class HazardQueueViewModel(
     private fun load() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
-            val result = safely { hazards.activeOn(trailId) }
+            val result = safely {
+                if (trailId != null) hazards.activeOn(trailId) else hazards.pending(page = 0, size = PENDING_QUEUE_SIZE).map { it.content }
+            }
             _state.update { state ->
                 result.fold(
                     onSuccess = { list -> state.copy(hazards = list, loading = false, loadError = null) },

@@ -32,6 +32,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -47,7 +48,12 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
+import geosentinel_mobile.shared.generated.resources.poi_open_trail
+import geosentinel_mobile.shared.generated.resources.staff_pending_empty_body
+import geosentinel_mobile.shared.generated.resources.staff_pending_intro
+import geosentinel_mobile.shared.generated.resources.staff_pending_title
 import geosentinel_mobile.shared.generated.resources.staff_queue_empty_body
+import geosentinel_mobile.shared.generated.resources.staff_queue_off_trail
 import geosentinel_mobile.shared.generated.resources.staff_queue_empty_title
 import geosentinel_mobile.shared.generated.resources.staff_queue_intro
 import geosentinel_mobile.shared.generated.resources.staff_queue_reject
@@ -57,6 +63,7 @@ import geosentinel_mobile.shared.generated.resources.staff_queue_verify
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.api.model.HazardResponse
 import it.unical.geosentinel_mobile.api.model.UpdateHazardStatusRequest
+import it.unical.geosentinel_mobile.core.location.decimals5
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
@@ -76,12 +83,14 @@ private val ContentMaxWidth = 600.dp
 private val CardShape = RoundedCornerShape(20.dp)
 
 /**
- * Coda dei pericoli di un sentiero, per il gestore. Le segnalazioni in verifica si verificano o si respingono,
- * quelle confermate si risolvono. Le transizioni non valide le decide il server: un 409 o 422 si mostra e la lista si rilegge.
+ * Coda delle segnalazioni per il gestore. Con [trailId] quelle di un sentiero ("spinta", con [onBack]): le segnalazioni in
+ * verifica si verificano o si respingono, quelle confermate si risolvono. Con [trailId] null è la scheda Gestione: le
+ * segnalazioni da verificare di tutto il parco, ognuna con il suo sentiero ([onOpenTrail]) o le coordinate. Le
+ * transizioni non valide le decide il server: un 409 o 422 si mostra e la lista si rilegge.
  */
 @Composable
-fun HazardQueueScreen(trailId: String, onBack: () -> Unit) {
-    val viewModel = koinViewModel<HazardQueueViewModel>(key = trailId) { parametersOf(trailId) }
+fun HazardQueueScreen(trailId: String?, onBack: (() -> Unit)?, onOpenTrail: ((String) -> Unit)? = null) {
+    val viewModel = koinViewModel<HazardQueueViewModel>(key = "queue-${trailId ?: "pending"}") { parametersOf(trailId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val loadError = state.loadError
     val actionError = state.actionError
@@ -94,7 +103,7 @@ fun HazardQueueScreen(trailId: String, onBack: () -> Unit) {
             modifier = Modifier.fillMaxSize(),
         ) {
             item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-            item(key = "title") { Title() }
+            item(key = "title") { Title(pending = trailId == null) }
             if (actionError != null) {
                 item(key = "action-error") { Notice(actionError.resolve()) }
             }
@@ -108,7 +117,7 @@ fun HazardQueueScreen(trailId: String, onBack: () -> Unit) {
                 state.hazards.isEmpty() -> item(key = "empty") {
                     Message(
                         title = stringResource(Res.string.staff_queue_empty_title),
-                        text = stringResource(Res.string.staff_queue_empty_body),
+                        text = stringResource(if (trailId == null) Res.string.staff_pending_empty_body else Res.string.staff_queue_empty_body),
                     )
                 }
                 else -> items(state.hazards, key = { it.id }) { hazard ->
@@ -118,24 +127,27 @@ fun HazardQueueScreen(trailId: String, onBack: () -> Unit) {
                         // una sola azione alla volta: con una in corso le altre righe si disattivano
                         enabled = state.busyHazardId == null,
                         onChange = { status -> viewModel.change(hazard, status) },
+                        // nella coda del parco: dove si trova (nella coda di un sentiero lo si sa già)
+                        onOpenTrail = if (trailId == null) onOpenTrail else null,
+                        showPlace = trailId == null,
                     )
                 }
             }
         }
-        BackButton(onBack)
+        if (onBack != null) BackButton(onBack)
     }
 }
 
 @Composable
-private fun Title() {
+private fun Title(pending: Boolean) {
     Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 6.dp)) {
         Text(
-            stringResource(Res.string.staff_queue_title),
+            stringResource(if (pending) Res.string.staff_pending_title else Res.string.staff_queue_title),
             style = MaterialTheme.typography.headlineLarge,
             modifier = Modifier.semantics { heading() },
         )
         Text(
-            stringResource(Res.string.staff_queue_intro),
+            stringResource(if (pending) Res.string.staff_pending_intro else Res.string.staff_queue_intro),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.padding(top = 8.dp),
@@ -146,7 +158,14 @@ private fun Title() {
 // Una segnalazione: tipo e stato, gravità e data, la descrizione. Le azioni dipendono dallo stato; il rosso non compare
 // mai qui (solo per CRITICAL nell'icona, come nelle altre liste)
 @Composable
-private fun QueueRow(hazard: HazardResponse, busy: Boolean, enabled: Boolean, onChange: (UpdateHazardStatusRequest.Status) -> Unit) {
+private fun QueueRow(
+    hazard: HazardResponse,
+    busy: Boolean,
+    enabled: Boolean,
+    onChange: (UpdateHazardStatusRequest.Status) -> Unit,
+    onOpenTrail: ((String) -> Unit)?,
+    showPlace: Boolean,
+) {
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
@@ -178,6 +197,26 @@ private fun QueueRow(hazard: HazardResponse, busy: Boolean, enabled: Boolean, on
         )
         hazard.description?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
+        }
+        if (showPlace) {
+            val trailId = hazard.trailId
+            if (trailId != null && onOpenTrail != null) {
+                TextButton(
+                    onClick = { onOpenTrail(trailId) },
+                    contentPadding = PaddingValues(horizontal = 0.dp),
+                    modifier = Modifier.heightIn(min = 48.dp),
+                ) {
+                    Text(stringResource(Res.string.poi_open_trail), fontWeight = FontWeight.SemiBold)
+                }
+            } else {
+                // una segnalazione dalla mappa: le coordinate (5 decimali, circa un metro) per ritrovarla
+                Text(
+                    stringResource(Res.string.staff_queue_off_trail, hazard.location.lat.decimals5(), hazard.location.lon.decimals5()),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 6.dp),
+                )
+            }
         }
         // Solo SUBMITTED (verifica o respingi) e VERIFIED (risolvi). Le altre non hanno azioni.
         if (hazard.status == HazardResponse.Status.SUBMITTED) {

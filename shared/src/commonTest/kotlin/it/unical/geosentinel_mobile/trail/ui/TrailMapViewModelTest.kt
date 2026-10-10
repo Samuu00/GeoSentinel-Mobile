@@ -150,7 +150,8 @@ class TrailMapViewModelTest {
     @Test
     fun `i POI si chiedono solo da vicino`() = runTest {
         val viewModel = viewModel()
-        viewModel.onCameraIdle(sila, zoom = 10.0)
+        // sotto la soglia dei POI (10) ma sopra quella dei sentieri (8)
+        viewModel.onCameraIdle(sila, zoom = 9.0)
         advanceUntilIdle()
         assertEquals(0, catalog.count("pois-nearby"))
 

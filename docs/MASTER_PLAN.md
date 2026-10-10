@@ -1380,6 +1380,23 @@ M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e cir
   - [ ] (con il Mac) le stesse schermate sul simulatore iPhone.
   - Restano nel database locale i POI di prova "Fonte del Faggio" e "Belvedere di prova" (non c'è una rotta per
     cancellarli).
+- **Dopo la prova sull'iPhone (10/10)**, corretto da Claude su richiesta:
+  - **Coda "Da verificare" di tutto il parco** (scheda Gestione, al posto del segnaposto): `/hazards/trail/{id}` vede
+    solo le segnalazioni entro 100 m da un sentiero, quindi una segnalazione dalla mappa lontana dai sentieri non
+    arrivava mai a un gestore (lacuna del contratto, §1). Nel backend `GET /hazards/pending` (`findPendingHazards`, solo
+    `PARK_MANAGER`, paginata, `PendingHazardsIT`); nell'app `HazardQueueScreen` con `trailId` null: "Apri il sentiero"
+    o le coordinate. Solo la prima pagina (50). Verificata sull'emulatore: la frana a 556 m dal sentiero compare e si
+    verifica.
+  - **Foto tolte** dalla schermata "Segnalazione inviata": una "×" sulla miniatura, con conferma per quelle già sul
+    server (`deleteMedia`); una non partita sparisce e basta; 404 = già tolta.
+  - **Proprie segnalazioni in verifica sulla mappa**, attenuate e con "In verifica" nella card (prima mappa e "Pericoli
+    vicini" mostravano solo le `VERIFIED`, e chi segnalava pensava che non fosse arrivata); rilette a ogni ritorno sulla
+    mappa. Testo di "Segnalazione inviata" che lo spiega.
+  - **POI da zoom 10** (prima 12: comparivano solo da vicinissimo).
+  - "Sentieri vicini" / "Pericoli vicini" in un `FlowRow`: sull'iPhone "vicini" andava a capo.
+  - Codice segnaposto di M0.4 tolto (`PlaceholderScreen`, stringhe `placeholder_*`); `PlaceholderScreens.kt` →
+    `BackButton.kt`. `decimals5` spostato in `core/location`.
+  - 299 test host.
 
 **M8.2 Ticket di manutenzione**
 - Lista con filtri (`searchTickets`: stato, priorità, assegnatario), dettaglio, creazione (`createTicket` con un solo

@@ -58,7 +58,13 @@ fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f).padding(top = 8.dp)) {
                 Text(stringResource(hazard.type.label()), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(hazard.severity.label()), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                // una propria segnalazione in verifica lo dice a parole (sulla mappa è solo attenuata)
+                val severity = stringResource(hazard.severity.label())
+                Text(
+                    if (hazard.status == HazardResponse.Status.SUBMITTED) severity + " · " + stringResource(hazard.status.label()) else severity,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
+                )
                 hazard.description?.takeIf { it.isNotBlank() }?.let {
                     Text(
                         it,

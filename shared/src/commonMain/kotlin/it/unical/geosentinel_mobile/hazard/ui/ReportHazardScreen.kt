@@ -182,7 +182,7 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    HazardPhotos(state.photos, onTakePhoto = takePhoto, onPickPhoto = pickPhoto, onRetry = viewModel::retryPhoto)
+                    HazardPhotos(state.photos, onTakePhoto = takePhoto, onPickPhoto = pickPhoto, onRetry = viewModel::retryPhoto, onRemove = viewModel::removePhoto)
                 }
             }
             FormErrorBanner(state.photoError?.resolve())
