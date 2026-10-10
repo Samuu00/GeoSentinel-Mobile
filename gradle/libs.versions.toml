@@ -27,7 +27,7 @@ maplibre-compose = "0.19.0"
 # motore nativo di MapLibre: la stessa versione che maplibre-compose usa per maplibre-native-ffi (aggiornarli insieme)
 maplibre-native-ffi = "0.202609.5"
 navigation = "2.9.2"
-openapiGenerator = "7.14.0"
+openapiGenerator = "7.25.0"
 # push (M7.1): BOM di Firebase e plugin che legge google-services.json
 firebase-bom = "35.0.0"
 googleServices = "4.5.0"
