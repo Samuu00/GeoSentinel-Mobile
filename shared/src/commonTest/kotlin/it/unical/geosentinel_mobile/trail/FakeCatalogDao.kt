@@ -32,6 +32,9 @@ class FakeCatalogDao : CatalogDao() {
     override suspend fun updateTrailDetailTimestamp(id: String, updatedAt: Instant) {
         details.value[id]?.let { details.value += id to it.copy(updatedAt = updatedAt) }
     }
+    override suspend fun updateSummaryStatus(id: String, status: String) {
+        summaries.value[id]?.let { summaries.value += id to it.copy(status = status) }
+    }
 
     // come la WHERE della query: il riquadro del sentiero tocca quello chiesto
     private fun TrailSummaryEntity.touches(west: Double, south: Double, east: Double, north: Double) =

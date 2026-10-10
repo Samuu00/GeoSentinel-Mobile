@@ -33,6 +33,10 @@ abstract class CatalogDao {
     @Query("UPDATE trail_detail SET updatedAt = :updatedAt WHERE id = :id")
     abstract suspend fun updateTrailDetailTimestamp(id: String, updatedAt: Instant)
 
+    // stato cambiato da un gestore (M8.1): la mappa lo mostra subito, senza aspettare il prossimo giro sulla bbox
+    @Query("UPDATE trail_summary SET status = :status WHERE id = :id")
+    abstract suspend fun updateSummaryStatus(id: String, status: String)
+
     // ---- riepiloghi (mappa) ----
 
     // I sentieri il cui riquadro tocca la vista: come ST_Intersects sul server, ma sul riquadro (basta per la mappa)

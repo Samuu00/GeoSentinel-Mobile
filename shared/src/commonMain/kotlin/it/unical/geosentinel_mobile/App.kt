@@ -111,6 +111,9 @@ import it.unical.geosentinel_mobile.rescue.ui.RescueAlertsListScreen
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
+import it.unical.geosentinel_mobile.staff.ui.HazardQueueScreen
+import it.unical.geosentinel_mobile.staff.ui.PoiCreateScreen
+import it.unical.geosentinel_mobile.staff.ui.TrailManagementSection
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.sos.data.SosState
 import it.unical.geosentinel_mobile.sos.ui.SosController
@@ -299,6 +302,12 @@ fun App() {
                         },
                         // /hazards/** richiede il login: l'ospite non ha il livello né "Pericoli vicini"
                         showHazards = role != UserRole.GUEST,
+                        // nuovo POI solo per il gestore del parco (M8.1): il server risponde comunque 403 agli altri
+                        onCreatePoi = if (role.canManagePark()) {
+                            { center, zoom -> navController.navigate(Route.PoiCreate(center.lat, center.lon, zoom)) { launchSingleTop = true } }
+                        } else {
+                            null
+                        },
                         // /refuges/** richiede il login: l'ospite non vede i rifugi
                         onOpenRefuge = if (role.canViewRefuges()) {
                             { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } }
@@ -319,6 +328,36 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         onLogin = { navController.navigate(Route.Login) },
                         onReportHazard = { start -> navController.navigate(Route.ReportHazard(start.lat, start.lon, ReportFromTrailZoom, trailId)) { launchSingleTop = true } },
+                        manage = { trail ->
+                            if (role.canManagePark()) {
+                                TrailManagementSection(
+                                    trail,
+                                    onOpenQueue = { navController.navigate(Route.HazardQueue(trailId)) { launchSingleTop = true } },
+                                    onCreatePoi = { start ->
+                                        navController.navigate(Route.PoiCreate(start.lat, start.lon, ReportFromTrailZoom, trailId)) { launchSingleTop = true }
+                                    },
+                                )
+                            }
+                        },
+                    )
+                }
+                composable<Route.HazardQueue>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    HazardQueueScreen(entry.toRoute<Route.HazardQueue>().trailId, onBack = { navController.popBackStack() })
+                }
+                composable<Route.PoiCreate>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.PoiCreate>()
+                    PoiCreateScreen(
+                        route.trailId,
+                        GeoPoint(route.lat, route.lon),
+                        route.zoom,
+                        onBack = { navController.popBackStack() },
+                        onCreated = { navController.popBackStack() },
                     )
                 }
                 composable<Route.ReportHazard>(

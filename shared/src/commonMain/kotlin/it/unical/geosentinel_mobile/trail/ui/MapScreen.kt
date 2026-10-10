@@ -95,6 +95,7 @@ import geosentinel_mobile.shared.generated.resources.location_rationale_allow
 import geosentinel_mobile.shared.generated.resources.location_rationale_body
 import geosentinel_mobile.shared.generated.resources.location_rationale_title
 import geosentinel_mobile.shared.generated.resources.map_my_location
+import geosentinel_mobile.shared.generated.resources.poi_create_title
 import geosentinel_mobile.shared.generated.resources.report_open
 import geosentinel_mobile.shared.generated.resources.map_type_button
 import geosentinel_mobile.shared.generated.resources.map_type_satellite
@@ -247,6 +248,8 @@ fun MapScreen(
     onOpenTrail: (String) -> Unit,
     onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?,
     showHazards: Boolean,
+    // solo per il gestore del parco (M8.1): nuovo POI dal punto che si sta guardando
+    onCreatePoi: ((center: GeoPoint, zoom: Double) -> Unit)?,
     onOpenRefuge: ((String) -> Unit)?,
     onOpenAlert: ((String) -> Unit)?,
 ) {
@@ -512,6 +515,11 @@ fun MapScreen(
                 Spacer(Modifier.size(4.dp))
                 MapButton(Res.string.report_open, Glyph.Hazard) {
                     onReportHazard(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
+                }
+            }
+            if (onCreatePoi != null) {
+                MapButton(Res.string.poi_create_title, Glyph.AddPoint) {
+                    onCreatePoi(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
                 }
             }
         }

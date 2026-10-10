@@ -1,0 +1,55 @@
+# App per iPhone vero senza firma, da installare dal PC Windows con xtool (tools/ios-device/README.md).
+# Kotlin/Native non può creare il framework di shared su Windows o Linux: lo fa questo runner macOS, e xtool
+# firma l'app con l'Apple ID dell'utente. Solo a mano (Actions → "iOS device build" → Run workflow): i minuti macOS
+# costano, e l'URL del backend cambia con la rete del PC.
+name: iOS device build
+
+on:
+  workflow_dispatch:
+    inputs:
+      api_base_url:
+        description: "URL del backend visto dall'iPhone (l'IP del PC in rete locale, es. http://192.168.1.20:8080)"
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  ipa:
+    name: App iOS non firmata (iosArm64)
+    runs-on: macos-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: zulu
+          java-version: '21'
+      - uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: true
+      # La fase "Compile Kotlin Framework" del progetto Xcode chiama embedAndSignAppleFrameworkForXcode (framework e
+      # risorse di Compose nel bundle). Senza firma: la mette xtool, con il profilo dell'Apple ID (le push restano
+      # spente con un account gratuito, che non ha aps-environment).
+      - name: Build
+        env:
+          API_BASE_URL: ${{ inputs.api_base_url }}
+        run: |
+          xcodebuild build \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Debug \
+            -destination 'generic/platform=iOS' \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            API_BASE_URL="$API_BASE_URL"
+      - name: Pacchetto .ipa
+        run: |
+          mkdir -p Payload
+          cp -R build/ios/Build/Products/Debug-iphoneos/*.app Payload/
+          zip -qry GeoSentinel.ipa Payload
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GeoSentinel-ipa
+          path: GeoSentinel.ipa
+          retention-days: 7

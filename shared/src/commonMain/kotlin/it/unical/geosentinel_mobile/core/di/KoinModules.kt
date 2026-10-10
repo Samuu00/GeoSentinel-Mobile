@@ -40,6 +40,10 @@ import it.unical.geosentinel_mobile.rescue.data.RescueRepository
 import it.unical.geosentinel_mobile.rescue.ui.RescueAlertDetailViewModel
 import it.unical.geosentinel_mobile.rescue.ui.RescueAlertsListViewModel
 import it.unical.geosentinel_mobile.rescue.ui.RescueMapViewModel
+import it.unical.geosentinel_mobile.staff.data.StaffRepository
+import it.unical.geosentinel_mobile.staff.ui.HazardQueueViewModel
+import it.unical.geosentinel_mobile.staff.ui.PoiCreateViewModel
+import it.unical.geosentinel_mobile.staff.ui.TrailStatusViewModel
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailViewModel
@@ -116,6 +120,7 @@ fun coreModule(
     single { SosRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     // soccorso (M7.2): allerte e squadre per l'operatore
     single { RescueRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    single { StaffRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
 
     // ---- Servizi con stato, uno per processo ----
     // Upload delle foto (M4.2): l'API sul client autenticato, lo storage su un client suo, senza Auth
@@ -169,6 +174,10 @@ fun coreModule(
     viewModel { RescueAlertsListViewModel(get()) }
     viewModel { RescueMapViewModel(get()) }
     viewModel { (alertId: String) -> RescueAlertDetailViewModel(alertId, get()) }
+
+    viewModel { (trailId: String) -> HazardQueueViewModel(trailId, get(), get()) }
+    viewModel { (trailId: String) -> TrailStatusViewModel(trailId, get(), get()) }
+    viewModel { params -> PoiCreateViewModel(params.getOrNull<String>(), get(), get()) }
 }
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su

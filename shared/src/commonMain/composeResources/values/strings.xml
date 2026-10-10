@@ -389,4 +389,29 @@
     <string name="report_leave_stay">Resta</string>
     <string name="rescue_map_partial">Avvicina la mappa per vedere tutte le allerte (la lista in Allerte le ha tutte)</string>
 
+    <!-- Staff -->
+    <string name="staff_queue_title">Segnalazioni del sentiero</string>
+    <string name="staff_queue_intro">Verifica o respingi le segnalazioni nuove. Risolvi quelle confermate quando il pericolo è sparito.</string>
+    <string name="staff_queue_empty_title">Nessuna segnalazione</string>
+    <string name="staff_queue_empty_body">Su questo sentiero non ci sono segnalazioni da gestire.</string>
+    <string name="staff_queue_verify">Verifica</string>
+    <string name="staff_queue_reject">Respingi</string>
+    <string name="staff_queue_resolve">Risolvi</string>
+    <string name="staff_queue_already_handled">Questa segnalazione è già stata gestita: la lista è aggiornata.</string>
+    <string name="staff_manage_title">Gestione</string>
+    <string name="staff_trail_status">Stato del sentiero</string>
+    <string name="staff_trail_status_rejected">Cambio di stato non permesso: un sentiero chiuso va prima riaperto.</string>
+    <string name="staff_open_queue">Segnalazioni da verificare</string>
+    <string name="staff_add_poi">Aggiungi un punto</string>
+
+    <!-- POI -->
+    <string name="poi_create_title">Nuovo punto</string>
+    <string name="poi_create_body">Il punto compare subito sulla mappa per tutti gli escursionisti.</string>
+    <string name="poi_create_type">Tipo</string>
+    <string name="poi_create_location">Posizione</string>
+    <string name="poi_create_name">Nome</string>
+    <string name="poi_create_name_count">%1$d/%2$d caratteri, almeno %3$d</string>
+    <string name="poi_create_save">Salva il punto</string>
+    <string name="poi_location_hint">Sposta la mappa finché il segnaposto non è sul punto.</string>
+
 </resources>

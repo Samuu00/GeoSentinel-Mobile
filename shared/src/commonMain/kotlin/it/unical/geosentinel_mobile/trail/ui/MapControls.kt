@@ -62,6 +62,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
@@ -225,7 +226,7 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
 // Quanto resta aperta l'attribuzione se nessuno tocca la mappa
 private val AttributionOpenFor = 5.seconds
 
-internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard }
+internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard, AddPoint }
 
 // Tondo da 56 dp come le card (tono e filo di bordo): si legge sopra qualsiasi zona della mappa
 @Composable
@@ -291,6 +292,22 @@ private fun GlyphIcon(glyph: Glyph, tint: Color) {
                 drawPath(triangle, tint, style = Stroke(stroke, join = StrokeJoin.Round))
                 drawLine(tint, c.copy(y = c.y - size.height * 0.12f), c.copy(y = c.y + size.height * 0.10f), stroke, StrokeCap.Round)
                 drawCircle(tint, stroke * 0.65f, c.copy(y = c.y + size.height * 0.22f))
+            }
+            Glyph.AddPoint -> {
+                // segnaposto con il "+" dentro: un punto nuovo sulla mappa (M8.1)
+                val r = size.minDimension * 0.30f
+                val head = c.copy(y = c.y - size.height * 0.10f)
+                val tip = c.copy(y = c.y + size.height * 0.46f)
+                val pin = Path().apply {
+                    moveTo(tip.x, tip.y)
+                    lineTo(head.x - r * 0.87f, head.y + r * 0.5f)
+                    arcTo(Rect(head, r), 150f, 240f, false)
+                    close()
+                }
+                drawPath(pin, tint, style = Stroke(stroke, join = StrokeJoin.Round))
+                val plus = r * 0.5f
+                drawLine(tint, head.copy(x = head.x - plus), head.copy(x = head.x + plus), stroke, StrokeCap.Round)
+                drawLine(tint, head.copy(y = head.y - plus), head.copy(y = head.y + plus), stroke, StrokeCap.Round)
             }
             Glyph.Locate -> {
                 // mirino: cerchio, quattro tacche e il punto al centro

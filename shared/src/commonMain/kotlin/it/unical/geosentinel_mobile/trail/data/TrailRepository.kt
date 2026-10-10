@@ -120,6 +120,22 @@ class TrailRepository(
     fun observeDetail(id: String): Flow<Cached<TrailDetailResponse>?> =
         dao.observeTrailDetail(id).map { row -> row?.toResponse()?.let { Cached(it, row.updatedAt) } }.flowOn(converting)
 
+    /**
+     * Il dettaglio restituito dal server dopo un cambio di stato (M8.1): si salva come una risposta nuova, e la mappa
+     * prende subito lo stato nuovo. L'ETag salvato è quello vecchio: al prossimo giro il server risponde 200, non 304.
+     */
+    suspend fun saveDetail(detail: TrailDetailResponse): Result<Unit> = guarded {
+        dao.upsertTrailDetail(withContext(converting) { detail.toEntity(now()) })
+        dao.updateSummaryStatus(detail.id, detail.status.value)
+        Result.success(Unit)
+    }
+
+    /** Un POI appena creato (M8.1): compare subito sulla mappa e nel dettaglio del suo sentiero. */
+    suspend fun savePoi(poi: PoiResponse): Result<Unit> = guarded {
+        dao.upsertPois(listOf(poi.toEntity(now())))
+        Result.success(Unit)
+    }
+
     suspend fun refreshDetail(id: String): Result<Unit> = guarded {
         val key = "trail/$id"
         // Senza la copia in cache l'ETag non si manda: un 304 lascerebbe il dettaglio vuoto. Riga ed ETag si scrivono

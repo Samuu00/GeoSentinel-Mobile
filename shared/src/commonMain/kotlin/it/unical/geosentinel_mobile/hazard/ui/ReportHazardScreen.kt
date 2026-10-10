@@ -230,7 +230,7 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
 
 // Titolo della sezione, contenuto e, sotto, l'errore del campo (prugna, annunciato)
 @Composable
-private fun Field(title: StringResource, error: UiMessage?, content: @Composable () -> Unit) {
+internal fun Field(title: StringResource, error: UiMessage?, content: @Composable () -> Unit) {
     Column {
         Text(
             stringResource(title),
@@ -251,7 +251,7 @@ private fun Field(title: StringResource, error: UiMessage?, content: @Composable
 
 // Una scelta sola tra poche voci: capsule che vanno a capo (bersaglio di 48 dp garantito da Material)
 @Composable
-private fun <T> Choices(
+internal fun <T> Choices(
     options: List<T>,
     selected: T?,
     label: (T) -> StringResource,
@@ -280,12 +280,17 @@ private fun <T> Choices(
 }
 
 /**
- * Mappa con il segnaposto fisso al centro: la posizione del pericolo è il centro della mappa quando si ferma.
+ * Mappa con il segnaposto fisso al centro: la posizione scelta è il centro della mappa quando si ferma (pericolo, POI).
  * "Usa la mia posizione" chiede il permesso solo adesso (l'utente ha appena chiesto la sua posizione: il tocco fa da
  * spiegazione) e sposta la mappa sul fix, se è recente.
  */
 @Composable
-private fun LocationPicker(start: GeoPoint, zoom: Double, onLocationChange: (GeoPoint) -> Unit) {
+internal fun LocationPicker(
+    start: GeoPoint,
+    zoom: Double,
+    onLocationChange: (GeoPoint) -> Unit,
+    hint: StringResource = Res.string.report_location_hint,
+) {
     val location = rememberLocationState()
     val style = rememberMapStyle(rememberSavedMapType())
     val mapState = rememberMapState(
@@ -357,7 +362,7 @@ private fun LocationPicker(start: GeoPoint, zoom: Double, onLocationChange: (Geo
         )
     }
     Text(
-        stringResource(Res.string.report_location_hint),
+        stringResource(hint),
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(top = 8.dp),

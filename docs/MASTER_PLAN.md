@@ -1349,6 +1349,37 @@ M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e cir
   messaggio: l'app non la duplica.
 - Creazione di un POI (`createPoi`) toccando la mappa. Creare e modificare i sentieri (`createTrail`, `updateTrail`)
   disegnando il percorso è rimandato: da un PC è molto più comodo (vedi §7).
+- **Fatto (10/10)**: bozza dell'utente corretta e completata da Claude su richiesta. Non compilava: in `StaffRepository`
+  le funzioni con il corpo a blocco senza `return` (restituivano `Unit`), `lazy { httpClient }` (la funzione, non il
+  client), `traildId`/`trailId`; nei ViewModel `staff`/`trails` inesistenti (i campi si chiamavano diversamente),
+  `change()` e `state` mancanti nella coda, `busy = false` all'invio del POI (doppio invio possibile); nel form del POI
+  `Field`, `Choices` e `LocationPicker` privati di `ReportHazardScreen` e senza il parametro `hint`; schermate mai
+  collegate a rotte, Koin e `App`, nessuna schermata per lo stato del sentiero.
+  - `StaffRepository` (`staff/data`): `changeHazardStatus`, `changeTrailStatus`, `createPoi` (nome già senza spazi).
+  - Coda (`HazardQueueScreen`, rotta `HazardQueue`): `/hazards/trail/{id}` dà al gestore anche le `SUBMITTED` di tutti;
+    Verifica/Respingi sulle `SUBMITTED`, Risolvi sulle `VERIFIED`, un'azione alla volta, rilettura dopo ogni azione
+    (annulla quella in corso). Il 422 `business-rule` (un collega l'ha già gestita) diventa "già gestita: la lista è
+    aggiornata".
+  - Stato del sentiero: sezione "Gestione" nel dettaglio (`TrailManagementSection`, slot `manage` di
+    `TrailDetailScreen`, solo per `canManagePark`), capsule Aperto/Con avvisi/Chiuso (rosso solo Chiuso). La risposta va
+    in cache (`TrailRepository.saveDetail` + `CatalogDao.updateSummaryStatus`): badge e mappa cambiano subito. Il 422 di
+    `CLOSED → WARNING` lo decide il server; l'app mostra solo "un sentiero chiuso va prima riaperto".
+  - Nuovo POI (`PoiCreateScreen`, rotta `PoiCreate`): dal dettaglio (legato al sentiero, mappa dall'inizio del percorso)
+    o dalla mappa con il pulsante "Nuovo punto" (libero, dal centro della vista). Nome 2–100 caratteri come il backend,
+    con il contatore; il POI creato va in cache (`TrailRepository.savePoi`) e compare subito nel dettaglio.
+  - Messaggio contestuale del 422 in `StaffSupport.toUiMessage(onRuleViolation)`: solo per lo slug `business-rule`.
+  - `StaffViewModelsTest` (7). 294 test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, `manager@`, 10/10):
+  - [x] "Nuovo punto" sulla mappa e sezione "Gestione" nel dettaglio solo da gestore (non da `rescuer@`).
+  - [x] Aperto → Chiuso: `CLOSED` sul server, badge "Chiuso" subito; Chiuso → Con avvisi: 422 mostrato, stato invariato;
+    riaperto, sentiero di nuovo verde sulla mappa.
+  - [x] Coda: Verifica → "Confermata" con Risolvi, Respingi → la riga sparisce, Risolvi → sparisce; segnalazione respinta
+    da `admin@` via API un attimo prima: "già gestita" e lista riletta.
+  - [x] POI dal sentiero (`trailId` sul server, visibile nei "Punti di interesse") e dalla mappa (`trailId` null).
+    Nel logcat né posizione né token.
+  - [ ] (con il Mac) le stesse schermate sul simulatore iPhone.
+  - Restano nel database locale i POI di prova "Fonte del Faggio" e "Belvedere di prova" (non c'è una rotta per
+    cancellarli).
 
 **M8.2 Ticket di manutenzione**
 - Lista con filtri (`searchTickets`: stato, priorità, assegnatario), dettaglio, creazione (`createTicket` con un solo

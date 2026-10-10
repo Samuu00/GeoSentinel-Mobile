@@ -39,7 +39,9 @@ verificato sul server, token FCM invalidato a ogni fine sessione, rifiuti delle 
 host, verificata sull'emulatore. Poi (09/10): outbox svuotato al logout (non alla scadenza della sessione) con avviso
 se c'è un SOS in corso, rifiuti delle prenotazioni e verifica dell'annullamento dell'SOS salvati nell'outbox
 (`BOOKING_REJECTED`, `SOS_CANCEL`), conferma all'uscita con foto in caricamento (`BackHandler`), 287 test host.
-Prossimo: M8.
+M8.1 fatta (10/10): coda delle segnalazioni per sentiero (`HazardQueueScreen`), stato del sentiero nella sezione
+"Gestione" del dettaglio (`TrailManagementSection`), nuovo POI dal dettaglio o dalla mappa (`PoiCreateScreen`), risposte
+salvate nella cache del catalogo, 294 test host, verificata sull'emulatore con `manager@`. Prossimo: M8.2.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

@@ -109,7 +109,14 @@ private val ContentMaxWidth = 600.dp
  * solo da loggati, pericoli attivi e foto. Schermata "spinta" sopra la mappa, con il suo Indietro.
  */
 @Composable
-fun TrailDetailScreen(trailId: String, onBack: () -> Unit, onLogin: () -> Unit, onReportHazard: (start: GeoPoint) -> Unit) {
+fun TrailDetailScreen(
+    trailId: String,
+    onBack: () -> Unit,
+    onLogin: () -> Unit,
+    onReportHazard: (start: GeoPoint) -> Unit,
+    // azioni del gestore del parco (M8.1), sotto lo stato; vuoto per gli altri ruoli
+    manage: @Composable (TrailDetailResponse) -> Unit = {},
+) {
     val viewModel = koinViewModel<TrailDetailViewModel>(key = "trail-$trailId") { parametersOf(trailId) }
     val ui by viewModel.state.collectAsStateWithLifecycle()
 
@@ -122,6 +129,7 @@ fun TrailDetailScreen(trailId: String, onBack: () -> Unit, onLogin: () -> Unit, 
                 ui = ui,
                 onLogin = onLogin,
                 onReportHazard = onReportHazard,
+                manage = manage,
                 onRetry = viewModel::retry,
                 onRetryHazards = viewModel::retryHazards,
                 onRetryPhotos = viewModel::retryPhotos,
@@ -142,6 +150,7 @@ private fun TrailContent(
     ui: TrailDetailUiState,
     onLogin: () -> Unit,
     onReportHazard: (start: GeoPoint) -> Unit,
+    manage: @Composable (TrailDetailResponse) -> Unit,
     onRetry: () -> Unit,
     onRetryHazards: () -> Unit,
     onRetryPhotos: () -> Unit,
@@ -171,6 +180,7 @@ private fun TrailContent(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             UpdatedLine(ui.updatedAt, ui.stale, onRetry)
+            manage(trail)
 
             trail.description?.takeIf { it.isNotBlank() }?.let { description ->
                 SectionTitle(Res.string.trail_description)
