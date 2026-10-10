@@ -106,6 +106,9 @@ import it.unical.geosentinel_mobile.trail.ui.TrailDetailScreen
 import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
 import it.unical.geosentinel_mobile.staff.ui.HazardQueueScreen
+import it.unical.geosentinel_mobile.staff.ui.ManagementScreen
+import it.unical.geosentinel_mobile.staff.ui.TicketCreateScreen
+import it.unical.geosentinel_mobile.staff.ui.TicketDetailScreen
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateScreen
 import it.unical.geosentinel_mobile.staff.ui.TrailManagementSection
 import it.unical.geosentinel_mobile.core.location.GeoPoint
@@ -330,6 +333,7 @@ fun App() {
                                     onCreatePoi = { start ->
                                         navController.navigate(Route.PoiCreate(start.lat, start.lon, ReportFromTrailZoom, trailId)) { launchSingleTop = true }
                                     },
+                                    onCreateTicket = { navController.navigate(Route.TicketCreate(trailId)) { launchSingleTop = true } },
                                 )
                             }
                         },
@@ -352,6 +356,26 @@ fun App() {
                         route.zoom,
                         onBack = { navController.popBackStack() },
                         onCreated = { navController.popBackStack() },
+                    )
+                }
+                composable<Route.TicketCreate>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    TicketCreateScreen(
+                        entry.toRoute<Route.TicketCreate>().trailId,
+                        onBack = { navController.popBackStack() },
+                        onCreated = { navController.popBackStack() },
+                    )
+                }
+                composable<Route.TicketDetail>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    TicketDetailScreen(
+                        entry.toRoute<Route.TicketDetail>().ticketId,
+                        onBack = { navController.popBackStack() },
+                        onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
                     )
                 }
                 composable<Route.ReportHazard>(
@@ -409,17 +433,17 @@ fun App() {
                     RescueAlertDetailScreen(route.alertId, onBack = { navController.popBackStack() })
                 }
                 composable<Route.Management>(
-                    // il sentiero di una segnalazione entra da destra e la coda scivola via in parallasse
+                    // il sentiero di una segnalazione o un ticket entrano da destra e la lista scivola via in parallasse
                     exitTransition = {
-                        if (targetState.destination.hasRoute<Route.TrailDetail>()) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
+                        val pushed = targetState.destination.hasRoute<Route.TrailDetail>() || targetState.destination.hasRoute<Route.TicketDetail>()
+                        if (pushed) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
-                    // M8.1: le segnalazioni da verificare di tutto il parco (anche lontane dai sentieri)
-                    HazardQueueScreen(
-                        trailId = null,
-                        onBack = null,
+                    // le segnalazioni da verificare di tutto il parco (M8.1) e i ticket di manutenzione (M8.2)
+                    ManagementScreen(
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
+                        onOpenTicket = { id -> navController.navigate(Route.TicketDetail(id)) { launchSingleTop = true } },
                     )
                 }
                 composable<Route.Profile> {

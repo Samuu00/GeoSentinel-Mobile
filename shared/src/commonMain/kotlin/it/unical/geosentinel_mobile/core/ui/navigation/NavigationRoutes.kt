@@ -46,6 +46,9 @@ sealed interface Route {
     @Serializable data class HazardQueue(val trailId: String) : Route
     // come ReportHazard: la mappa del form parte da lat/lon/zoom; trailId se si parte da un sentiero
     @Serializable data class PoiCreate(val lat: Double, val lon: Double, val zoom: Double, val trailId: String? = null) : Route
+    // ticket di manutenzione (M8.2): il dettaglio dalla scheda Gestione, il form dal dettaglio del sentiero
+    @Serializable data class TicketDetail(val ticketId: String) : Route
+    @Serializable data class TicketCreate(val trailId: String) : Route
 
     // ---- account: "spinte" sopra il Profilo ----
     @Serializable data object Login : Route
@@ -58,12 +61,12 @@ sealed interface Route {
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
 val FormRoutes = setOf(
     Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
-    Route.BookRefuge::class, Route.PoiCreate::class,
+    Route.BookRefuge::class, Route.PoiCreate::class, Route.TicketCreate::class,
 )
 
 // Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta e le liste "mie" (con il loro Indietro)
 val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.RefugeDetail::class + Route.AlertDetail::class +
-    Route.MyHazards::class + Route.MyBookings::class + Route.HazardQueue::class
+    Route.MyHazards::class + Route.MyBookings::class + Route.HazardQueue::class + Route.TicketDetail::class
 
 data class BottomNavItem(
     val route: Route,

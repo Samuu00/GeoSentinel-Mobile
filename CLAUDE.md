@@ -49,7 +49,9 @@ sulla mappa, pagina del rifugio con la mappa in testata e la disponibilità a gi
 (`HazardPhotoStrip`) in coda del gestore, card della mappa e "Le mie segnalazioni". Rifugi descritti (backend V11:
 descrizione, quota, stagione, telefono, servizi, foto `REFUGE`) e pagina del rifugio con foto, servizi, "Sentieri da
 qui", "Chiama" e "Indicazioni", 300 test host. Aperti su iPhone: satellite nero.
-Prossimo: M8.2.
+M8.2 fatta (10/10): ticket di manutenzione con `If-Match` dall'ETag (`Versioned.kt`), voce Ticket nella scheda
+Gestione, dettaglio con assegna/inizia/risolvi/modifica/annulla, 409 `concurrent-modification` che rilegge, "Apri un
+ticket" dal sentiero, 305 test host, verificata sull'emulatore. Prossimo: M8.3.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

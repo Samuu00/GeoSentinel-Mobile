@@ -446,4 +446,52 @@
     <string name="poi_create_save">Salva il punto</string>
     <string name="poi_location_hint">Sposta la mappa finché il segnaposto non è sul punto.</string>
 
+    <!-- Ticket di manutenzione (M8.2) -->
+    <string name="staff_tab_hazards">Segnalazioni</string>
+    <string name="staff_tab_tickets">Ticket</string>
+    <string name="staff_open_ticket">Apri un ticket</string>
+    <string name="ticket_list_title">Ticket di manutenzione</string>
+    <string name="ticket_list_intro">I lavori su sentieri e rifugi, dal più recente. Tocca un ticket per assegnarlo, aggiornarlo o chiuderlo.</string>
+    <string name="ticket_list_empty_title">Nessun ticket</string>
+    <string name="ticket_list_empty_body">Nessun ticket con questi filtri. Un ticket si apre dalla sezione Gestione di un sentiero.</string>
+    <string name="ticket_filter_all">Tutti</string>
+    <string name="ticket_filter_any_priority">Ogni priorità</string>
+    <string name="ticket_filter_mine">Solo i miei</string>
+    <string name="ticket_status_open">Aperto</string>
+    <string name="ticket_status_assigned">Assegnato</string>
+    <string name="ticket_status_in_progress">In corso</string>
+    <string name="ticket_status_resolved">Risolto</string>
+    <string name="ticket_status_cancelled">Annullato</string>
+    <string name="ticket_priority_low">Bassa</string>
+    <string name="ticket_priority_medium">Media</string>
+    <string name="ticket_priority_high">Alta</string>
+    <string name="ticket_priority_critical">Critica</string>
+    <string name="ticket_priority_label">Priorità %1$s</string>
+    <string name="ticket_target_hazard">Da una segnalazione</string>
+    <string name="ticket_assigned_me">Assegnato a te</string>
+    <string name="ticket_assigned_other">Assegnato a un collega</string>
+    <string name="ticket_unassigned">Non assegnato</string>
+    <string name="ticket_opened_at">Aperto il %1$s</string>
+    <string name="ticket_resolved_at">Risolto il %1$s</string>
+    <string name="ticket_assign_me">Assegna a me</string>
+    <string name="ticket_start">Inizia i lavori</string>
+    <string name="ticket_resolve">Segna come risolto</string>
+    <string name="ticket_edit">Modifica</string>
+    <string name="ticket_cancel">Annulla il ticket</string>
+    <string name="ticket_cancel_confirm_title">Annullare il ticket?</string>
+    <string name="ticket_cancel_confirm_body">Un ticket annullato non si può più modificare né riaprire.</string>
+    <string name="ticket_cancel_confirm">Annulla il ticket</string>
+    <string name="ticket_cancel_keep">Tienilo</string>
+    <string name="ticket_save">Salva</string>
+    <string name="ticket_discard">Lascia stare</string>
+    <string name="ticket_closed_note">Il ticket è chiuso: non si può più modificare.</string>
+    <string name="ticket_rule_violation">Il ticket è cambiato e questa azione non è più possibile: controlla lo stato.</string>
+    <string name="ticket_field_title">Titolo</string>
+    <string name="ticket_field_title_count">%1$d/%2$d caratteri, almeno %3$d</string>
+    <string name="ticket_field_description">Descrizione (facoltativa)</string>
+    <string name="ticket_field_priority">Priorità</string>
+    <string name="ticket_create_title">Nuovo ticket</string>
+    <string name="ticket_create_body">Il ticket resta legato al sentiero. Lo vedono tutti i gestori del parco nella scheda Gestione.</string>
+    <string name="ticket_create_save">Apri il ticket</string>
+
 </resources>

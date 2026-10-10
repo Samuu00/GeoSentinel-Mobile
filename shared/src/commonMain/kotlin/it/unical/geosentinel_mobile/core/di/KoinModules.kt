@@ -41,8 +41,12 @@ import it.unical.geosentinel_mobile.rescue.ui.RescueAlertDetailViewModel
 import it.unical.geosentinel_mobile.rescue.ui.RescueAlertsListViewModel
 import it.unical.geosentinel_mobile.rescue.ui.RescueMapViewModel
 import it.unical.geosentinel_mobile.staff.data.StaffRepository
+import it.unical.geosentinel_mobile.staff.data.TicketRepository
 import it.unical.geosentinel_mobile.staff.ui.HazardQueueViewModel
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateViewModel
+import it.unical.geosentinel_mobile.staff.ui.TicketCreateViewModel
+import it.unical.geosentinel_mobile.staff.ui.TicketDetailViewModel
+import it.unical.geosentinel_mobile.staff.ui.TicketListViewModel
 import it.unical.geosentinel_mobile.staff.ui.TrailStatusViewModel
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
@@ -121,6 +125,7 @@ fun coreModule(
     // soccorso (M7.2): allerte e squadre per l'operatore
     single { RescueRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { StaffRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    single { TicketRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
 
     // ---- Servizi con stato, uno per processo ----
     // Upload delle foto (M4.2): l'API sul client autenticato, lo storage su un client suo, senza Auth
@@ -179,6 +184,9 @@ fun coreModule(
     viewModel { params -> HazardQueueViewModel(params.getOrNull<String>(), get(), get()) }
     viewModel { (trailId: String) -> TrailStatusViewModel(trailId, get(), get()) }
     viewModel { params -> PoiCreateViewModel(params.getOrNull<String>(), get(), get()) }
+    viewModel { TicketListViewModel(get(), get()) }
+    viewModel { (ticketId: String) -> TicketDetailViewModel(ticketId, get(), get()) }
+    viewModel { (trailId: String) -> TicketCreateViewModel(trailId, get()) }
 }
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su

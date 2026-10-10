@@ -80,8 +80,8 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Instant
 
-private val ContentMaxWidth = 600.dp
-private val CardShape = RoundedCornerShape(20.dp)
+internal val ContentMaxWidth = 600.dp
+internal val CardShape = RoundedCornerShape(20.dp)
 
 /**
  * Coda delle segnalazioni per il gestore. Con [trailId] quelle di un sentiero ("spinta", con [onBack]): le segnalazioni in
@@ -90,7 +90,12 @@ private val CardShape = RoundedCornerShape(20.dp)
  * transizioni non valide le decide il server: un 409 o 422 si mostra e la lista si rilegge.
  */
 @Composable
-fun HazardQueueScreen(trailId: String?, onBack: (() -> Unit)?, onOpenTrail: ((String) -> Unit)? = null) {
+fun HazardQueueScreen(
+    trailId: String?,
+    onBack: (() -> Unit)?,
+    onOpenTrail: ((String) -> Unit)? = null,
+    tabs: (@Composable () -> Unit)? = null,
+) {
     val viewModel = koinViewModel<HazardQueueViewModel>(key = "queue-${trailId ?: "pending"}") { parametersOf(trailId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     val loadError = state.loadError
@@ -104,6 +109,7 @@ fun HazardQueueScreen(trailId: String?, onBack: (() -> Unit)?, onOpenTrail: ((St
             modifier = Modifier.fillMaxSize(),
         ) {
             item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
+            if (tabs != null) item(key = "tabs") { tabs() }
             item(key = "title") { Title(pending = trailId == null) }
             if (actionError != null) {
                 item(key = "action-error") { Notice(actionError.resolve()) }
@@ -266,7 +272,7 @@ private fun StatusChip(status: HazardResponse.Status) {
 }
 
 @Composable
-private fun CenteredProgress() {
+internal fun CenteredProgress() {
     Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
         CircularProgressIndicator(modifier = Modifier.size(36.dp), strokeWidth = 3.dp)
     }
@@ -274,7 +280,7 @@ private fun CenteredProgress() {
 
 // Errore dell'azione (409 di un collega, 422 di una transizione non permessa): sopra la lista, letto dagli screen reader
 @Composable
-private fun Notice(message: String) {
+internal fun Notice(message: String) {
     Text(
         message,
         style = MaterialTheme.typography.bodyMedium,
@@ -289,7 +295,7 @@ private fun Notice(message: String) {
 
 // Stato vuoto o d'errore: testo centrato e una sola azione
 @Composable
-private fun Message(text: String, title: String? = null, isError: Boolean = false, action: @Composable () -> Unit = {}) {
+internal fun Message(text: String, title: String? = null, isError: Boolean = false, action: @Composable () -> Unit = {}) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
@@ -311,7 +317,7 @@ private fun Message(text: String, title: String? = null, isError: Boolean = fals
 }
 
 // "05/10/2026, 13:36" nell'ora del telefono (come in MyHazardsScreen)
-private fun formatDate(instant: Instant): String {
+internal fun formatDate(instant: Instant): String {
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
     fun Int.two() = toString().padStart(2, '0')
     return "${local.day.two()}/${local.month.number.two()}/${local.year}, ${local.hour.two()}:${local.minute.two()}"

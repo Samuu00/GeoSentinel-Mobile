@@ -1430,7 +1430,14 @@ M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e cir
 - Le modifiche mandano `If-Match` con l'`ETag` ricevuto nel dettaglio. Su 409 `concurrent-modification`: "qualcuno
   l'ha modificato, ricarico", e si mostra la versione nuova.
 - Checkpoint:
-  - [ ] due dispositivi modificano lo stesso ticket: il secondo riceve il 409 e vede i dati aggiornati.
+  - [x] due dispositivi modificano lo stesso ticket: il secondo riceve il 409 e vede i dati aggiornati (10/10,
+    emulatore + una PUT da curl con lo stesso `If-Match`).
+- **Fatta (10/10).** `TicketRepository` (`apiCallVersioned` in `core/network/Versioned.kt` tiene l'ETag), scheda Gestione
+  con due voci (Segnalazioni | Ticket, `ManagementScreen`), lista con filtri (stato, priorità, "Solo i miei"; si
+  rilegge al ritorno), dettaglio con "Assegna a me", "Inizia i lavori", "Segna come risolto", "Modifica" e "Annulla il
+  ticket" (con conferma), nuovo ticket dalla sezione Gestione del sentiero ("Apri un ticket", solo target sentiero).
+  Su 409 `concurrent-modification` il messaggio resta, il ticket si rilegge e la modifica in corso si chiude; un 422
+  diventa "il ticket è cambiato". `TicketViewModelsTest` (5), 305 test host.
 
 **M8.3 Rifugi e squadre**
 - Capacità dei propri rifugi (`updateRefugeCapacity`), con il 409 se si scende sotto gli ospiti confermati.

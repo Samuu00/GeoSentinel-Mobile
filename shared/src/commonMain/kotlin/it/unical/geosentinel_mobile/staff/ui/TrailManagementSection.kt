@@ -27,6 +27,7 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.staff_add_poi
 import geosentinel_mobile.shared.generated.resources.staff_manage_title
 import geosentinel_mobile.shared.generated.resources.staff_open_queue
+import geosentinel_mobile.shared.generated.resources.staff_open_ticket
 import geosentinel_mobile.shared.generated.resources.staff_trail_status
 import it.unical.geosentinel_mobile.api.model.TrailDetailResponse
 import it.unical.geosentinel_mobile.api.model.UpdateTrailStatusRequest
@@ -41,11 +42,16 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 /**
- * Azioni del gestore nel dettaglio del sentiero (M8.1): stato del sentiero, coda delle segnalazioni e nuovo POI legato
- * al sentiero. Il ruolo decide solo se mostrarla: un 403 del server arriva come messaggio.
+ * Azioni del gestore nel dettaglio del sentiero (M8.1): stato del sentiero, coda delle segnalazioni, nuovo POI legato
+ * al sentiero e (M8.2) nuovo ticket. Il ruolo decide solo se mostrarla: un 403 del server arriva come messaggio.
  */
 @Composable
-fun TrailManagementSection(trail: TrailDetailResponse, onOpenQueue: () -> Unit, onCreatePoi: (start: GeoPoint) -> Unit) {
+fun TrailManagementSection(
+    trail: TrailDetailResponse,
+    onOpenQueue: () -> Unit,
+    onCreatePoi: (start: GeoPoint) -> Unit,
+    onCreateTicket: () -> Unit,
+) {
     val viewModel = koinViewModel<TrailStatusViewModel>(key = "trail-status-${trail.id}") { parametersOf(trail.id) }
     val state by viewModel.state.collectAsStateWithLifecycle()
     // lo stato chiesto si vede subito; con la risposta lo sostituisce quello della cache
@@ -92,6 +98,7 @@ fun TrailManagementSection(trail: TrailDetailResponse, onOpenQueue: () -> Unit, 
         trail.path.toPositions().firstOrNull()?.let { start ->
             ManageLink(stringResource(Res.string.staff_add_poi)) { onCreatePoi(start.toGeoPoint()) }
         }
+        ManageLink(stringResource(Res.string.staff_open_ticket), onCreateTicket)
     }
 }
 
