@@ -102,6 +102,7 @@ apiClient/              client generato (configurazione in build.gradle.kts, cod
 androidApp/             GeoSentinelApplication (Koin), MainActivity, FirebaseMessagingService
   src/debug/            network_security_config (HTTP in chiaro solo in debug)
 iosApp/                 iOSApp.swift, AppDelegate (Firebase/APNs), Info.plist, Config.xcconfig
+tools/app-icon/          build_app_icon.py: icona Android (adattiva, vettoriale) e iOS da una sola geometria
 shared/src/
   commonMain/kotlin/it/unical/geosentinel_mobile/
     App.kt              tema + Scaffold (barra in basso, SOS) + NavHost
