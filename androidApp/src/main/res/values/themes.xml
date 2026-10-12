@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sfondo della finestra prima che Compose disegni: il colore dello sfondo dell'app, niente lampo bianco -->
+    <style name="Theme.GeoSentinel" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@color/start_background</item>
+    </style>
+</resources>

@@ -3,12 +3,13 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (12/10/2026):** M0–M8 fatte e revisionate (M4–M7 il 09/10, M8 il 12/10: nessun CRITICAL/HIGH, correzioni
-> applicate, 316 test host). Ultimi passi: M8.3 (posti dei rifugi e squadre di soccorso), interfaccia rivista con le
-> linee guida Apple (§2), icona dell'app, build installata sull'iPhone vero (xtool, `tools/ios-device`). Prossimo: M9.
-> Da decidere: i controlli della mappa in orizzontale (fine di M8.3).
+> **Stato (12/10/2026):** M0–M9 fatte. M4–M7 revisionate il 09/10, M8 il 12/10 (nessun CRITICAL/HIGH, 316 test host).
+> M9 (12/10, scritta da Claude su richiesta) fatta per un progetto **che per ora resta in locale**: test di UI di
+> Compose con Robolectric (login, SOS, prenotazione, testo al 200%), R8 sulla release provato sull'emulatore con la
+> build `staging`, 325 test host. Rimandato alla pubblicazione quello che serve solo agli store (fine di M9.3).
+> Da decidere: i controlli della mappa in orizzontale (fine di M8.3); da lanciare: la review di M9 (§6).
 > Il dettaglio giorno per giorno è nei singoli task e in `CLAUDE.md`. Aperti: job `ios` della CI e checkpoint sul
-> simulatore (Mac), push su iOS (APNs), satellite nero su iPhone, i rimandi di M9.3.
+> simulatore (Mac), push su iOS (APNs), satellite nero su iPhone.
 
 ---
 
@@ -1483,40 +1484,67 @@ backend): nessun CRITICAL/HIGH. Corretto da Claude su richiesta:
 
 ### Milestone 9: qualità e rilascio
 
+Fatta il 12/10, scritta da Claude su richiesta ("fai tutto M9"). Il progetto per ora resta **in locale**: quello che
+serve solo per pubblicare sugli store è in fondo a M9.3, rimandato.
+
 **M9.1 Test**
-- `commonTest`: client (M1), errori, outbox, `SosController` (con `MockEngine` e tempo virtuale), conversione delle
-  coordinate, ViewModel principali con Turbine.
-- Test di UI Compose su login, SOS e prenotazione.
+- `commonTest` copriva già client, errori, outbox, `SosController` (con `MockEngine` e tempo virtuale), coordinate e i
+  ViewModel principali (316 test host, girano anche su iOS con `iosSimulatorArm64Test`).
+- Test di UI di Compose in `androidHostTest/.../ui` con Robolectric 4.17 (`compose-uiTestJunit4`, SDK 35 in
+  `robolectric.properties`, `ComponentActivity` nel manifest dei test): girano sulla JVM, quindi nel job `android`
+  della CI. Schermate vere con ViewModel e repository veri, server finto (`FakeBackend`, `uiSession`):
+  - accesso riuscito e password sbagliata (`LoginScreenTest`);
+  - SOS: da ospite "Chiama 112" e "Accedi" senza pulsante, "Chiama 112" apre `tel:112`, pulsante con ruolo Button e
+    azione "tieni premuto" per TalkBack, testo al 200% con tutto raggiungibile e "Chiama 112" alto almeno 72 dp
+    (`SosScreenTest`);
+  - prenotazione confermata con le persone scelte, 409 `capacity-exceeded` spiegato senza niente in coda, persone non
+    oltre i posti (`BookRefugeScreenTest`).
+- Due trappole di Robolectric, annotate in `ComposeTestSupport.kt` e `robolectric.properties`: con l'SDK 36 serve
+  `--add-opens` (si usa il 35); l'orologio del main looper in modalità PAUSED non avanza da solo, quindi si aspetta con
+  `waitFor`/`waitForText` (`idleFor` a ogni giro), altrimenti un `delay` sul main non scade mai.
 - Checkpoint:
-  - [ ] i test girano in CI su Android e iOS.
+  - [x] 325 test host verdi (316 + 9 di UI); in CI nel job `android`.
+  - [ ] i test comuni nel job `ios` (serve il Mac o la CI su GitHub, come prima).
 
 **M9.2 Accessibilità, prestazioni, batteria**
-- TalkBack e VoiceOver su tutto il flusso dell'SOS; testo al 200%.
-- Mappa senza ricaricamenti a ogni piccolo movimento (debounce), immagini ridimensionate da Coil.
-- Aggiornamenti della posizione solo con un SOS attivo.
-
-**M9.3 Privacy e store**
-- Testi dei permessi (posizione, foto, notifiche) chiari e in italiano, in `strings.xml` e in `Info.plist`.
-- Dalla review del 09/10 (M4–M7): il payload dell'outbox (posizione e note mediche di un SOS in coda) è in chiaro nel
-  database, escluso dal backup e cancellato al logout; resta solo finché l'azione è in coda o la sessione è scaduta.
-  Cifrarlo (SQLCipher o una chiave del Keystore/Keychain) se l'App Store o la valutazione d'impatto lo chiedono.
-- Dalla review di sicurezza del 03/10 (rimandati qui):
-  - l'informativa dice che le tile della mappa arrivano da OpenFreeMap ed EOX, che vedono IP e zona guardata;
-  - EOX è un servizio gratuito senza garanzie: prima del rilascio un'alternativa (tile proprie o un altro fornitore);
-  - `NSAllowsLocalNetworking` è anche nella build Release di iOS: spostarlo in una Info.plist solo per Debug;
-  - il filtro dei log sulle query con posizione è una lista di nomi (lat, lon, bbox): un parametro nuovo con un altro
-    nome sfuggirebbe. Rivederlo a ogni endpoint geografico nuovo (M3.2, M4, M6);
-  - un logout senza rete (o con lo store illeggibile) lascia valido sul server il refresh token (fino a 30 giorni):
-    se diventa un requisito, accodare la revoca nell'outbox. Se lo store non si svuota nemmeno al secondo tentativo,
-    la sessione si chiude in memoria ma si riapre al riavvio (disco o Keychain guasti);
-  - `DELETE /users/me` si ritenta su errore di rete (DELETE è idempotente): se la prima è passata e la risposta si è
-    persa, l'utente vede un errore ma l'account è cancellato e la sessione si chiude al 401 successivo.
-- Informativa privacy raggiungibile dal profilo; scheda "Data safety" su Play e "Privacy nutrition label" su App Store:
-  posizione, foto, email, nome, note mediche.
-- R8/ProGuard in release con le regole per kotlinx.serialization e Ktor; build firmata.
+- SOS: stato in una live region, pulsante con ruolo e azione "tieni premuto" del lettore di schermo, "Chiama 112" da
+  72 dp sempre presente, tutto scorrevole con il testo al 200%: verificato dai test di M9.1.
+- Mappa: debounce di 400 ms già in sentieri, pericoli e rifugi (`TrailMapViewModel`, `HazardMapViewModel`,
+  `RefugeMapViewModel`). Coil ridimensiona le foto alla dimensione del composable (nessuna `size` fissa nelle richieste).
+- Posizione al server solo con un SOS `Raised` (`SosLocationUpdates` entra nella composizione solo allora).
 - Checkpoint:
-  - [ ] la build release su un telefono vero funziona contro un backend HTTPS (stack prod del backend,
-    `docker-compose.prod.yml`).
+  - [x] test di accessibilità dell'SOS (M9.1).
+  - [ ] TalkBack e VoiceOver a mano su tutto il flusso (VoiceOver con il Mac o l'iPhone).
+
+**M9.3 Privacy e rilascio**
+- R8 sulla release (`isMinifyEnabled`, `isShrinkResources`): bastano le regole che arrivano con le librerie
+  (kotlinx.serialization, Ktor, Room, Firebase), `proguard-rules.pro` resta vuoto.
+- Build `staging` in `androidApp`: la release con R8, firmata con la chiave di debug e con l'HTTP in chiaro di
+  `src/debug`, verso `10.0.2.2:8080`. Serve a provare R8 contro il backend locale finché non c'è un backend HTTPS.
+- La prima build con R8 ha scoperto un bug di configurazione: `:apiClient:prepareAndroidMainArtProfile` leggeva la
+  cartella generata senza dipendere da `openApiGenerate`; corretto in `apiClient/build.gradle.kts`. La CI ora fa anche
+  `assembleRelease`.
+- Testi dei permessi: posizione e fotocamera in `Info.plist` già in italiano e chiari; su Android il dialogo è quello
+  di sistema e il permesso si chiede solo quando serve (SOS, posizione sulla mappa, notifiche).
+- Checkpoint:
+  - [x] `staging` sull'emulatore (12/10) contro il backend locale: sessione ripristinata, mappa con sentieri, pericoli
+    e rifugi, dettaglio del rifugio con la disponibilità, prenotazione con il 409 spiegato, schermata SOS; nessun crash
+    e nel logcat niente log di rete, token o posizione.
+  - [ ] la release vera su un telefono contro un backend HTTPS (`docker-compose.prod.yml`): quando il progetto esce
+    dal locale.
+- **Rimandati alla pubblicazione** (il progetto resta in locale):
+  - firma della release con un keystore vero (oggi `assembleRelease` dà un APK non firmato);
+  - informativa privacy raggiungibile dal Profilo, scheda "Data safety" su Play e "Privacy nutrition label" su App Store
+    (posizione, foto, email, nome, note mediche), con le tile da OpenFreeMap ed EOX che vedono IP e zona guardata;
+  - un'alternativa a EOX (servizio gratuito senza garanzie): tile proprie o un altro fornitore;
+  - `NSAllowsLocalNetworking` solo nella build Debug di iOS (oggi è anche in Release; senza il Mac non si può provare
+    una modifica al progetto Xcode);
+  - payload dell'outbox in chiaro nel database (escluso dal backup, cancellato al logout): cifrarlo se lo store o la
+    valutazione d'impatto lo chiedono;
+  - logout senza rete che lascia valido il refresh token sul server (fino a 30 giorni): accodare la revoca se diventa
+    un requisito; `DELETE /users/me` con la risposta persa (account cancellato, errore mostrato);
+  - il filtro dei log sulle query con posizione è una lista di nomi (`lat`, `lon`, `bbox`, `radius`): rivederlo a ogni
+    endpoint geografico nuovo.
 
 ---
 

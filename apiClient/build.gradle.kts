@@ -88,3 +88,7 @@ kotlin {
         }
     }
 }
+
+// AGP cerca i baseline profile accanto ai sorgenti (src/commonMain/baselineProfiles), quindi anche nella cartella
+// generata: il task che li legge deve aspettare la generazione. Succede solo nelle build con R8 (release, M9.3)
+tasks.matching { it.name.endsWith("ArtProfile") }.configureEach { dependsOn(generateApiClient) }

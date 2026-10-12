@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Test di UI sulla JVM (M9.1): l'Activity vuota che ospita i composable. Il manifest di ui-test-manifest non arriva
+     ai test host della libreria KMP, quindi la si dichiara qui -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity android:name="androidx.activity.ComponentActivity" android:exported="false"/>
+    </application>
+</manifest>

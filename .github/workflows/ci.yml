@@ -33,8 +33,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@v6
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
-      # Una sola invocazione: la configurazione del progetto si paga una volta
-      - run: ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug
+      # Una sola invocazione: la configurazione del progetto si paga una volta. I test host comprendono quelli di UI
+      # (Robolectric, M9.1); la release passa da R8 (M9.3)
+      - run: ./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug :androidApp:assembleRelease
 
   ios:
     name: iOS (compilazione + test sul simulatore)

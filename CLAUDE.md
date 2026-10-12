@@ -61,7 +61,12 @@ righe in gruppi (`core/ui/PageLayout.kt`: `PageHeader`, `GroupCard`/`GroupRow`, 
 e nome "GeoSentinel" anche su iOS (`CFBundleDisplayName`); build installata sull'iPhone (12/10).
 Review di M8 (12/10, codice, Kotlin e sicurezza anche sul backend): nessun CRITICAL/HIGH, MEDIUM e LOW corretti
 (`safely` in `core/network`, liste dei ticket, controlli della mappa che scorrono, capacità del rifugio al massimo 1000
-nel backend), 316 test host. Prossimo: M9.
+nel backend), 316 test host. M9 fatta (12/10, progetto per ora in locale): test di UI di Compose con Robolectric in
+`androidHostTest/.../ui` (login, SOS anche al 200%, prenotazione), R8 sulla release e build `staging` (release con R8
+verso il backend locale) provata sull'emulatore, `assembleRelease` in CI, 325 test host. Rimandato alla pubblicazione
+quello che serve agli store (fine di M9.3). Poi (12/10): card del POI e del pericolo chiuse tornando sulla mappa;
+avvio senza schermata di transizione (splash di Android 12+ senza icona e con lo sfondo dell'app, `Theme.GeoSentinel`
+in `androidApp/res`; scelta chiaro/scuro passata al sistema con `setApplicationNightMode`). Da lanciare: la review di M9.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -99,7 +104,7 @@ nel backend), 316 test host. Prossimo: M9.
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
 | Stringhe | `composeResources/values/strings.xml`, italiano come lingua base |
 | Log | Kermit |
-| Test | `commonTest` con `ktor-client-mock` (backend finto in `SessionTestSupport`), kotlinx-coroutines-test, Room in memoria; `androidHostTest` per le API Android sulla JVM; `androidDeviceTest` sull'emulatore (albero separato, nomi senza spazi per D8). Nomi dei test tra backtick senza `, . ; : / < > [ ]`: Kotlin/Native (job `ios`) non li accetta, la JVM sì. DataStore nei test: prima di riaprire lo stesso file si chiude lo scope con `cancelAndJoin()` (con il solo `cancel()` la CI Linux fallisce). Niente API sperimentali di coroutines-test dove basta `join()` (warning di opt-in) |
+| Test | `commonTest` con `ktor-client-mock` (backend finto in `SessionTestSupport`), kotlinx-coroutines-test, Room in memoria; `androidHostTest` per le API Android sulla JVM; `androidDeviceTest` sull'emulatore (albero separato, nomi senza spazi per D8). Test di UI di Compose in `androidHostTest/.../ui` con Robolectric (SDK 35): si aspetta con `waitFor`/`waitForText` di `ComposeTestSupport`, che fanno avanzare l'orologio del main looper. Nomi dei test tra backtick senza `, . ; : / < > [ ]`: Kotlin/Native (job `ios`) non li accetta, la JVM sì. DataStore nei test: prima di riaprire lo stesso file si chiude lo scope con `cancelAndJoin()` (con il solo `cancel()` la CI Linux fallisce). Niente API sperimentali di coroutines-test dove basta `join()` (warning di opt-in) |
 
 ## Struttura
 ```
@@ -158,6 +163,7 @@ shared/src/
 ```bash
 ./gradlew :androidApp:assembleDebug        # build Android
 ./gradlew :shared:testAndroidHostTest      # test di shared sulla JVM
+./gradlew :androidApp:assembleStaging      # release con R8 verso il backend locale (10.0.2.2), per l'emulatore
 ./gradlew :shared:connectedAndroidDeviceTest  # test sull'emulatore acceso (Keystore vero), nomi senza spazi
 ./gradlew :shared:clean                    # se dopo aver tolto stringhe la build dà "Unresolved reference _collect..."
 ./gradlew :apiClient:checkApiContract      # il contratto in api/ è ancora uguale a quello del backend?
@@ -166,7 +172,7 @@ shared/src/
 Le versioni delle librerie stanno solo in `gradle/libs.versions.toml`. Il PC è Windows: iOS non si compila qui. I checkpoint iOS si chiudono con un Mac o con un runner macOS in CI.
 
 ## CI (`.github/workflows/ci.yml`)
-- Gira a ogni push su `main` e su ogni PR. Tre job: `android` (`testAndroidHostTest` + `assembleDebug`, Ubuntu),
+- Gira a ogni push su `main` e su ogni PR. Tre job: `android` (`testAndroidHostTest` + `assembleDebug` + `assembleRelease` con R8, Ubuntu),
   `ios` (`compileKotlinIosSimulatorArm64` + `iosSimulatorArm64Test`, macOS), `secrets` (gitleaks su tutta la storia).
 - Allineata al backend: `permissions: contents: read`, gitleaks 8.30.1 come binario con SHA-256 verificato.
   Dependabot non aggiorna gitleaks: versione e checksum vanno cambiati a mano, insieme.

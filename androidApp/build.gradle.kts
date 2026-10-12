@@ -49,11 +49,27 @@ android {
         release {
             // segnaposto finché non c'è il dominio di produzione (M9.3)
             buildConfigField("String", "API_BASE_URL", "\"https://api.geosentinel.dev\"")
-            isMinifyEnabled = false
+            // R8 (M9.3): le regole di kotlinx.serialization, Ktor, Room e Firebase arrivano con le librerie
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+        }
+        // La release con R8 da provare sull'emulatore contro il backend locale (M9.3): come la release, ma firmata con
+        // la chiave di debug e con l'HTTP in chiaro della build di debug (manifest e risorse di src/debug).
+        // ponytail: finché il progetto resta in locale; con un backend HTTPS vero si prova direttamente la release
+        create("staging") {
+            initWith(getByName("release"))
+            buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
+            signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+    sourceSets {
+        getByName("staging") {
+            manifest.srcFile("src/debug/AndroidManifest.xml")
+            res.srcDir("src/debug/res")
         }
     }
     compileOptions {

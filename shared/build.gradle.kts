@@ -99,6 +99,11 @@ kotlin {
             implementation(libs.turbine)
             implementation(libs.ktor.client.mock)
         }
+        // test di UI di Compose (M9.1) sulla JVM con Robolectric: girano nel job android della CI
+        getByName("androidHostTest").dependencies {
+            implementation(libs.compose.uiTestJunit4)
+            implementation(libs.robolectric)
+        }
         // test sull'emulatore: ./gradlew :shared:connectedAndroidDeviceTest (Keystore vero, M2.1)
         getByName("androidDeviceTest").dependencies {
             implementation(libs.kotlin.testJunit)

@@ -17,7 +17,7 @@
             android:label="@string/app_name"
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
-            android:theme="@android:style/Theme.Material.Light.NoActionBar">
+            android:theme="@style/Theme.GeoSentinel">
         <!-- Push (M7.1). Con l'app in background la notifica la mostra FCM: canale e icona da qui -->
         <service
                 android:name=".push.GeoSentinelFirebaseService"
@@ -32,8 +32,10 @@
         <meta-data
                 android:name="com.google.firebase.messaging.default_notification_icon"
                 android:resource="@drawable/ic_notification"/>
-        <!-- singleTop: il tocco su una notifica con l'app aperta arriva in onNewIntent, senza una seconda App sopra -->
+        <!-- singleTop: il tocco su una notifica con l'app aperta arriva in onNewIntent, senza una seconda App sopra.
+             uiMode: chiaro/scuro (dal sistema o dal Profilo) lo ridisegna Compose, senza ricreare l'Activity -->
         <activity
+                android:configChanges="uiMode"
                 android:exported="true"
                 android:launchMode="singleTop"
                 android:name=".MainActivity">

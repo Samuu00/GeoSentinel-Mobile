@@ -314,7 +314,10 @@ fun MapScreen(
         }
     }
     var choosingType by rememberSaveable { mutableStateOf(false) }
-    var selectedPoiId by rememberSaveable { mutableStateOf<String?>(null) }
+    // remember, non rememberSaveable: tornando sulla mappa da un'altra pagina o scheda la card del POI è chiusa
+    var selectedPoiId by remember { mutableStateOf<String?>(null) }
+    // lo stesso per la card del pericolo, la cui selezione vive nel ViewModel
+    DisposableEffect(Unit) { onDispose { hazardViewModel.clearSelection() } }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
     // Lasciando la mappa tornano a seguire il tema.
     val statusBarOverDark = LocalStatusBarOverDark.current

@@ -31,6 +31,7 @@ openapiGenerator = "7.25.0"
 # push (M7.1): BOM di Firebase e plugin che legge google-services.json
 firebase-bom = "35.0.0"
 googleServices = "4.5.0"
+robolectric = "4.17"
 room = "2.8.5"
 sqlite = "2.7.1"
 turbine = "1.2.1"
@@ -90,6 +91,9 @@ coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.r
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
 # test
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
+# test di UI di Compose sulla JVM (M9.1): porta anche ui-test-manifest (ComponentActivity)
+compose-uiTestJunit4 = { module = "org.jetbrains.compose.ui:ui-test-junit4", version.ref = "composeMultiplatform" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }

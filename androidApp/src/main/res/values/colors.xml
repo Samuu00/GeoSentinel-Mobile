@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Lo sfondo dell'app (StoneLight / NightForestDark in core/ui/theme/Color.kt): se cambia lì, va cambiato qui.
+         Segue il tema del sistema: la scelta Chiaro/Scuro del Profilo si conosce solo dopo l'avvio -->
+    <color name="start_background">#EDF0E9</color>
+</resources>
