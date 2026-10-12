@@ -1,5 +1,10 @@
 package it.unical.geosentinel_mobile.staff.ui
 
+import geosentinel_mobile.shared.generated.resources.ticket_unknown_note
+import geosentinel_mobile.shared.generated.resources.ticket_priority_unknown
+import geosentinel_mobile.shared.generated.resources.ticket_status_unknown
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -189,9 +194,21 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
             )
         }
         item(key = "filters") { Filters(state, viewModel) }
+        // con la lista già a schermo: rilettura (filtro cambiato, ritorno dal dettaglio) e il suo esito sopra la lista,
+        // che resta; la schermata d'errore solo se non c'è niente da mostrare
+        if (state.tickets.isNotEmpty() && state.loading) {
+            item(key = "reloading") {
+                LinearProgressIndicator(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp))
+            }
+        }
+        if (state.tickets.isNotEmpty() && error != null) {
+            item(key = "reload-error") {
+                Box(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp)) { Notice(error.resolve()) }
+            }
+        }
         when {
             state.tickets.isEmpty() && state.loading -> item(key = "loading") { CenteredProgress() }
-            error != null -> item(key = "error") {
+            state.tickets.isEmpty() && error != null -> item(key = "error") {
                 Message(text = error.resolve(), isError = true) {
                     PrimaryPillButton(stringResource(Res.string.trail_retry), onClick = viewModel::reload)
                 }
@@ -209,7 +226,7 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
 // Due righe di filtri che scorrono in orizzontale: stato (con "Solo i miei") e priorità
 @Composable
 private fun Filters(state: TicketListUiState, viewModel: TicketListViewModel) {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(top = 4.dp, bottom = 12.dp)) {
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(top = 4.dp, bottom = 12.dp)) {
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -245,7 +262,7 @@ private fun Filters(state: TicketListUiState, viewModel: TicketListViewModel) {
 private fun TicketRow(ticket: TicketResponse, first: Boolean, last: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     // una riga del gruppo dei ticket (prima una card per ticket)
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
         if (!first) GroupDivider()
         TicketRowContent(ticket, onClick)
     }
@@ -307,7 +324,7 @@ fun TicketDetailScreen(ticketId: String, onBack: () -> Unit, onOpenTrail: (Strin
                 }
                 ticket == null -> CenteredProgress()
                 else -> Column(
-                    Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
+                    Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     TicketInfo(ticket, state.me, onOpenTrail)
@@ -379,8 +396,14 @@ private fun TicketInfo(ticket: TicketResponse, me: String?, onOpenTrail: (String
 @Composable
 private fun Actions(ticket: TicketResponse, state: TicketDetailUiState, viewModel: TicketDetailViewModel, onCancel: () -> Unit) {
     val status = ticket.status
-    if (status == TicketResponse.Status.RESOLVED || status == TicketResponse.Status.CANCELLED) {
-        Text(stringResource(Res.string.ticket_closed_note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    // uno stato nuovo del server: non si sa quali passaggi permetta, quindi nessuna azione (si aggiorna l'app)
+    val note = when (status) {
+        TicketResponse.Status.RESOLVED, TicketResponse.Status.CANCELLED -> Res.string.ticket_closed_note
+        TicketResponse.Status.unknown_default_open_api -> Res.string.ticket_unknown_note
+        TicketResponse.Status.OPEN, TicketResponse.Status.ASSIGNED, TicketResponse.Status.IN_PROGRESS -> null
+    }
+    if (note != null) {
+        Text(stringResource(note), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         return
     }
     val canAssign = state.me != null && ticket.assignedTo != state.me
@@ -501,19 +524,23 @@ private fun Chip(text: String) {
 private fun TicketResponse.place(): String = trailName ?: refugeName ?: stringResource(Res.string.ticket_target_hazard)
 
 // Per valore: i tre enum generati (risposta, ricerca, richieste) hanno gli stessi valori
+// Per nome: gli stessi valori arrivano da enum diversi (filtri, risposta, form). Un valore futuro del server non si
+// spaccia per uno noto: "sconosciuto"
 private fun statusLabel(value: String): StringResource = when (value) {
+    "OPEN" -> Res.string.ticket_status_open
     "ASSIGNED" -> Res.string.ticket_status_assigned
     "IN_PROGRESS" -> Res.string.ticket_status_in_progress
     "RESOLVED" -> Res.string.ticket_status_resolved
     "CANCELLED" -> Res.string.ticket_status_cancelled
-    else -> Res.string.ticket_status_open // OPEN, o un valore futuro: come un ticket aperto
+    else -> Res.string.ticket_status_unknown
 }
 
 private fun priorityLabel(value: String): StringResource = when (value) {
     "LOW" -> Res.string.ticket_priority_low
+    "MEDIUM" -> Res.string.ticket_priority_medium
     "HIGH" -> Res.string.ticket_priority_high
     "CRITICAL" -> Res.string.ticket_priority_critical
-    else -> Res.string.ticket_priority_medium
+    else -> Res.string.ticket_priority_unknown
 }
 
 // Quelle del contratto, senza il caso dei valori futuri (che l'app non manda)

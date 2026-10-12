@@ -37,6 +37,18 @@ suspend fun <T : Any> apiCall(block: suspend () -> HttpResponse<T>): Result<T> =
     throw ContractViolationException(e)
 }
 
+/**
+ * Per i chiamanti di [apiCall]: una risposta fuori contratto ([ContractViolationException]) non deve far cadere l'app,
+ * diventa un errore come gli altri (la sezione non si mostra, o compare il messaggio). La cancellazione si propaga.
+ */
+suspend fun <T> safely(block: suspend () -> Result<T>): Result<T> = try {
+    block()
+} catch (e: CancellationException) {
+    throw e
+} catch (e: Exception) {
+    Result.failure(e)
+}
+
 suspend fun KtorResponse.toApiError(): ApiError {
     // application/problem+json: ContentNegotiation registra solo application/json, quindi si decodifica il testo
     val problem = try {

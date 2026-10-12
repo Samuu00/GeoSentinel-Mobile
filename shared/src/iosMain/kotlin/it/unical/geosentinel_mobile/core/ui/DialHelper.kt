@@ -9,7 +9,7 @@ import platform.UIKit.UIApplication
 actual fun rememberDialer(): (phoneNumber: String) -> Unit = remember {
     { phoneNumber ->
         // niente canOpenURL: per "tel" vorrebbe LSApplicationQueriesSchemes. Sul simulatore openURL non fa nulla.
-        NSURL.URLWithString("tel:$phoneNumber")?.let { url ->
+        NSURL.URLWithString(telUri(phoneNumber))?.let { url ->
             UIApplication.sharedApplication.openURL(url, options = emptyMap<Any?, Any?>(), completionHandler = null)
         }
     }

@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_generic
@@ -76,8 +77,8 @@ class RefugeDetailViewModel(
     fun refresh() {
         if (_state.value.refuge !is Section.Loaded) return
         viewModelScope.launch {
-            val refuge = async { refuges.get(refugeId) }
-            val nights = async { refuges.availability(refugeId, from = today()) }
+            val refuge = async { safely { refuges.get(refugeId) } }
+            val nights = async { safely { refuges.availability(refugeId, from = today()) } }
             refuge.await().onSuccess { found -> _state.update { it.copy(refuge = Section.Loaded(found)) } }
             nights.await().onSuccess { list -> _state.update { it.copy(nights = Section.Loaded(list)) } }
         }
@@ -86,14 +87,14 @@ class RefugeDetailViewModel(
     private fun load() {
         _state.value = RefugeDetailUiState()
         viewModelScope.launch {
-            val refuge = async { refuges.get(refugeId) }
-            val nights = async { refuges.availability(refugeId, from = today()) }
+            val refuge = async { safely { refuges.get(refugeId) } }
+            val nights = async { safely { refuges.availability(refugeId, from = today()) } }
             val loaded = refuge.await()
             _state.update { it.copy(refuge = loaded.toSection()) }
             loaded.onSuccess { found ->
-                launch { media.photosOfRefuge(found.id).onSuccess { list -> _state.update { it.copy(photos = list) } } }
+                launch { safely { media.photosOfRefuge(found.id) }.onSuccess { list -> _state.update { it.copy(photos = list) } } }
                 launch {
-                    trails.nearby(found.location.toGeoPoint(), TRAILS_NEAR_REFUGE_METERS)
+                    safely { trails.nearby(found.location.toGeoPoint(), TRAILS_NEAR_REFUGE_METERS) }
                         .onSuccess { list -> _state.update { it.copy(nearbyTrails = list.take(MAX_TRAILS_NEAR_REFUGE)) } }
                 }
             }
@@ -104,7 +105,7 @@ class RefugeDetailViewModel(
     private fun loadNights() {
         _state.update { it.copy(nights = Section.Loading) }
         viewModelScope.launch {
-            val nights = refuges.availability(refugeId, from = today())
+            val nights = safely { refuges.availability(refugeId, from = today()) }
             _state.update { it.copy(nights = nights.toSection()) }
         }
     }

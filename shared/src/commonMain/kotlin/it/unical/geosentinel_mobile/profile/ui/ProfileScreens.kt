@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.profile.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
@@ -145,7 +146,6 @@ import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
 
-private val ContentMaxWidth = 600.dp
 
 // Passi della cancellazione: prima cosa succede, poi la conferma definitiva (doppia conferma, §M2.3)
 private const val DeleteNone = 0
@@ -183,7 +183,7 @@ fun ProfileScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight))
-        Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
+        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
             // Chi sei: iniziale e nome, sotto ruolo ed email (o cosa si guadagna accedendo)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Monogram(profile?.displayName)

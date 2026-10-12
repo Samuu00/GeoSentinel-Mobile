@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.staff_team_name_taken
@@ -23,10 +24,11 @@ data class RescueTeamCreateUiState(
     val error: UiMessage? = null,
     val created: Boolean = false,
 ) {
-    // le lunghezze del backend (CreateRescueTeamRequest): un 400 non arriva mai da un form valido
+    // le lunghezze del backend (CreateRescueTeamRequest): un 400 non arriva mai da un form valido. !created: dopo la
+    // risposta la schermata si chiude, ma un secondo tocco prima del pop manderebbe un doppione
     val canSave: Boolean
         get() = name.trim().length in 2..100 && callSign.trim().length in 2..32 && contactNumber.trim().length in 5..30 &&
-            location != null && !busy
+            location != null && !busy && !created
 
     // il nome e il telefono non vanno nei log
     override fun toString() = "RescueTeamCreateUiState(busy=$busy, hasLocation=${location != null}, error=$error, created=$created)"

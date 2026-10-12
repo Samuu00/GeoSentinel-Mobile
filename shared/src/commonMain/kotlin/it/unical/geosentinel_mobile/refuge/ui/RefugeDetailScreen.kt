@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.refuge.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -138,7 +139,6 @@ import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
 
-private val ContentMaxWidth = 600.dp
 private val HeroHeight = 300.dp
 // Zoom della mappa in testata: il rifugio con paesi e strade intorno
 private const val HeroZoom = 12.5
@@ -190,7 +190,7 @@ fun RefugeDetailScreen(
                     // le azioni del luogo subito sotto il titolo, a metà schermo (prima in fondo alla pagina)
                     item(key = "contacts") { Contacts(value) }
                     item(key = "manage") {
-                        Box(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) { manage(value) }
+                        Box(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) { manage(value) }
                     }
                     value.description?.let { description ->
                         item(key = "description") { Paragraph(description) }
@@ -229,7 +229,7 @@ fun RefugeDetailScreen(
                 PrimaryPillButton(
                     stringResource(Res.string.booking_open),
                     onClick = { onBook(loaded.value.id, loaded.value.name, loaded.value.capacity) },
-                    modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(),
+                    modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth(),
                 )
             }
         }
@@ -327,7 +327,7 @@ private fun RefugeHero(refuge: RefugeResponse) {
 private fun Title(refuge: RefugeResponse, nights: Section<List<NightAvailability>>) {
     val colors = MaterialTheme.colorScheme
     val tonight = (nights as? Section.Loaded)?.value?.firstOrNull()
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
         Text(refuge.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
         FlowRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -372,13 +372,13 @@ private fun Paragraph(text: String) {
     Text(
         text,
         style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp),
     )
 }
 
 @Composable
 private fun SectionTitle(title: StringResource, hint: StringResource? = null) {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 28.dp, bottom = 12.dp)) {
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 28.dp, bottom = 12.dp)) {
         Text(stringResource(title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
         if (hint != null) {
             Text(
@@ -454,7 +454,7 @@ private fun Amenities(labels: List<StringResource>) {
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
     ) {
         labels.forEach { label ->
             val colors = MaterialTheme.colorScheme
@@ -482,7 +482,7 @@ private fun NearbyTrails(trails: List<TrailSummaryResponse>, onOpenTrail: (Strin
     val shape = RoundedCornerShape(20.dp)
     Column(
         Modifier
-            .widthIn(max = ContentMaxWidth)
+            .widthIn(max = PageMaxWidth)
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clip(shape)
@@ -503,7 +503,7 @@ private fun Contacts(refuge: RefugeResponse) {
     val uriHandler = LocalUriHandler.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 18.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 18.dp),
     ) {
         refuge.phone?.let { phone ->
             ContactButton(Icons.Filled.Call, stringResource(Res.string.refuge_call), Modifier.weight(1f)) { dial(phone) }
@@ -563,7 +563,7 @@ private fun CenteredProgress(small: Boolean = false) {
 private fun RetryMessage(message: UiMessage, onRetry: () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
     ) {
         Text(
             message.resolve(),

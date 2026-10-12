@@ -2,6 +2,7 @@ package it.unical.geosentinel_mobile.staff
 
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_concurrent_modification
+import geosentinel_mobile.shared.generated.resources.ticket_missing_version
 import geosentinel_mobile.shared.generated.resources.ticket_rule_violation
 import io.ktor.client.engine.mock.respond
 import io.ktor.client.engine.mock.toByteArray
@@ -54,6 +55,9 @@ class TicketViewModelsTest {
     private val ifMatches = mutableListOf<String?>()
     private val searchQueries = mutableListOf<String>()
     private val createBodies = mutableListOf<String>()
+    // un proxy che toglie l'ETag dalle risposte
+    private var sendEtag = true
+    private var searchOffline = false
 
     private fun ticketJson() =
         """{"id":"t1","title":"$title","priority":"$priority","status":"$status","trailId":"$SEED_TRAIL_ID","trailName":"Sentiero",""" +
@@ -65,7 +69,11 @@ class TicketViewModelsTest {
         version++
     }
 
-    private fun versioned() = headersOf(HttpHeaders.ContentType to listOf("application/json"), HttpHeaders.ETag to listOf("\"$version\""))
+    private fun versioned() = if (sendEtag) {
+        headersOf(HttpHeaders.ContentType to listOf("application/json"), HttpHeaders.ETag to listOf("\"$version\""))
+    } else {
+        headersOf(HttpHeaders.ContentType, "application/json")
+    }
 
     private suspend fun TestScope.setUp(): Pair<TicketRepository, SessionManager> {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
@@ -77,6 +85,7 @@ class TicketViewModelsTest {
                 when {
                     !request.url.encodedPath.startsWith("/api/v1/maintenance-tickets") -> null
                     request.method == HttpMethod.Get && path.isEmpty() -> {
+                        if (searchOffline) throw kotlinx.io.IOException("rete assente")
                         searchQueries += request.url.encodedQuery
                         respond(
                             """{"content":[${ticketJson()}],"page":{"size":50,"number":0,"totalElements":1,"totalPages":1}}""",
@@ -234,5 +243,36 @@ class TicketViewModelsTest {
         assertTrue("assignedTo=${session.currentUserId()!!.encodeURLParameter()}" in last, last)
         assertEquals(listOf("t1"), viewModel.state.value.tickets.map { it.id })
         assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `se la rilettura fallisce la lista resta con l'errore sopra`() = runTest {
+        val (tickets, session) = setUp()
+        val viewModel = TicketListViewModel(tickets, session)
+        advanceUntilIdle()
+        searchOffline = true
+
+        viewModel.reload()
+        advanceUntilIdle()
+
+        assertEquals(listOf("t1"), viewModel.state.value.tickets.map { it.id }, "i ticket già letti restano")
+        assertTrue(viewModel.state.value.error != null)
+        assertFalse(viewModel.state.value.loading)
+    }
+
+    @Test
+    fun `senza ETag il tocco non manda nulla ma lo dice e rilegge`() = runTest {
+        sendEtag = false
+        val (tickets, session) = setUp()
+        val viewModel = TicketDetailViewModel("t1", tickets, session)
+        advanceUntilIdle()
+        assertNull(viewModel.state.value.etag)
+
+        viewModel.assignToMe()
+        advanceUntilIdle()
+
+        assertTrue(ifMatches.isEmpty(), "nessuna modifica senza versione")
+        assertEquals(Res.string.ticket_missing_version, viewModel.state.value.actionError?.text)
+        assertFalse(viewModel.state.value.busy)
     }
 }

@@ -14,7 +14,7 @@ actual fun rememberDialer(): (phoneNumber: String) -> Unit {
         { phoneNumber ->
             try {
                 // ACTION_DIAL non richiede permessi: apre il compositore, la chiamata la fa l'utente
-                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:$phoneNumber")))
+                context.startActivity(Intent(Intent.ACTION_DIAL, Uri.parse(telUri(phoneNumber))))
             } catch (_: ActivityNotFoundException) {
                 // nessuna app telefono (es. tablet senza SIM): non c'è niente da aprire
             }

@@ -8,15 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -41,7 +36,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.max
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
@@ -68,10 +62,12 @@ internal val PageHeaderHeight = 148.dp
  */
 internal val LocalBottomBarInset = compositionLocalOf { 0.dp }
 
-/** Spazio da lasciare in fondo a una pagina che scorre: la barra a isola se c'è, altrimenti la safe area. */
+/**
+ * Spazio da lasciare in fondo a una pagina che scorre: la barra a isola (che comprende già la safe area) nelle schede;
+ * 0 nelle schermate spinte, dove il NavHost ha già il margine della safe area (prima si sommava due volte).
+ */
 @Composable
-internal fun pageBottomInset(): Dp =
-    max(LocalBottomBarInset.current, WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding())
+internal fun pageBottomInset(): Dp = LocalBottomBarInset.current
 
 /**
  * Testata della pagina: il paesaggio, poi il titolo grande con, a destra, un'azione secondaria facoltativa

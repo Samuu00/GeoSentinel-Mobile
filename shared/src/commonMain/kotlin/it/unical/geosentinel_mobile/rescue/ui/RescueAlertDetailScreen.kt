@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.rescue.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -83,7 +84,6 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Instant
 
-private val ContentMaxWidth = 600.dp
 private val CardShape = RoundedCornerShape(20.dp)
 
 /**
@@ -139,7 +139,7 @@ fun RescueAlertDetailScreen(alertId: String, onBack: () -> Unit) {
             ) {
                 Column(
                     verticalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
+                    modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
                 ) {
                     val loadError = state.loadError
                     when {
@@ -291,7 +291,7 @@ private fun BottomActions(alert: SosAlertResponse, state: RescueAlertDetailUiSta
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom))
             .padding(horizontal = 20.dp, vertical = 12.dp),
     ) {
-        Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
             if (waiting) {
                 PrimaryPillButton(
                     stringResource(Res.string.rescue_dispatch),

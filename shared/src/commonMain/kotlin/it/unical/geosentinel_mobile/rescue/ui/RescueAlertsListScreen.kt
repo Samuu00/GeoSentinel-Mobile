@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.rescue.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,7 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Notifications
@@ -97,8 +97,6 @@ import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 
-private val ContentMaxWidth = 600.dp
-private val CardShape = RoundedCornerShape(20.dp)
 private const val PrefetchDistance = 3
 // con la schermata aperta lista e dettaglio si rileggono ogni 30 s, come lo stato nella schermata SOS (M6.2)
 internal val RescueRefreshEvery = 30.seconds
@@ -190,7 +188,7 @@ private fun AlertCard(alert: SosAlertResponse, now: Instant, first: Boolean, las
     val colors = MaterialTheme.colorScheme
     val openLabel = stringResource(Res.string.rescue_alert_open)
     // una riga del gruppo delle allerte (prima una card per allerta)
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
         if (!first) GroupDivider(GroupIconIndent)
         Row(
             verticalAlignment = Alignment.CenterVertically,
@@ -251,7 +249,7 @@ private fun CenteredProgress(small: Boolean = false) {
 private fun Message(text: String, title: String? = null, isError: Boolean = false, action: (@Composable () -> Unit)? = null) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
     ) {
         if (title != null) {
             Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
@@ -275,7 +273,7 @@ private fun Message(text: String, title: String? = null, isError: Boolean = fals
 private fun InlineError(message: String, onRetry: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
     ) {
         Text(
             message,

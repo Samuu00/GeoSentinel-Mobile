@@ -3,47 +3,12 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (04/10/2026):** il backend è completo (da M0 a M7) più il periodo di grazia del refresh token (ADR-0019,
-> migration V10, 02/10): `./mvnw clean verify` verde, 42 unit + 108 IT.
-> App: **M0.1–M0.5 scritte** (convenzioni e dipendenze l'01/10; configurazione per ambiente, tema, navigazione,
-> Koin e CI il 02/10). L'app ha la shell completa: tema "foresta" chiaro/scuro selezionabile, barra in basso per
-> ruolo, pulsante SOS, schermate segnaposto, safe area anche in orizzontale. Checkpoint ancora aperti di M0:
-> Accessibility Scanner (M0.4), job verdi su una PR di prova e verifica sul simulatore iPhone (M0.5). La parte iOS
-> si compila per la prima volta nel job `ios` della CI.
-> **M1 fatta e revisionata** (02/10): client generato in `:apiClient`, enum tolleranti ai valori nuovi, `HttpClient`
-> condiviso con refresh, retry e log, `ApiError` dallo slug con i messaggi in `strings.xml`. Catena di review di M1
-> (§6) eseguita e correzioni applicate (`AuthScope`, redirect, log, eccezioni senza dati personali).
-> **M2.1 e M2.2 fatte** (02/10): token cifrati (Keystore + DataStore, Keychain), `SessionManager`, schermate di
-> accesso e registrazione, Profilo legato alla sessione; verificate sull'emulatore contro il backend locale.
-> 70 test host + 1 test sull'emulatore.
-> Aperti: test iOS in CI (dopo la correzione dei nomi), Keychain sul simulatore, token push al logout (M7).
-> **M2.3 fatta** (03/10): nome, cambio password e cancellazione dell'account in `SessionManager` (niente
-> `ProfileRepository`), schermate del Profilo; checkpoint verificati contro il backend locale. 86 test host.
-> Restyling "carta topografica" dell'interfaccia (03/10, §2).
-> **M3.1 fatta** (03/10): mappa MapLibre/OpenFreeMap sulla Sila, posizione dal modulo `location` di MapLibre (niente
-> `expect class LocationProvider`), permesso solo quando serve. 92 test host.
-> **Review e security review di M2 e M3.1** (03/10), due giri, correzioni applicate e riverificate:
-> `SessionManager` scrive e svuota lo store sotto il mutex del refresh (niente sessione che rivive dopo un logout o
-> chiusa da un 401 vecchio, anche durante un cambio password), refresh entro 20 s, cambio password e cancellazione
-> non annullabili, errori dello store senza crash, Keychain con update e pulizia dopo una reinstallazione, database
-> escluso dal backup, satellite bloccato sul livello EOX CC BY; sulla mappa niente lampo dello stile sbagliato e
-> "La mia posizione" con un tempo massimo. 104 test host; mappa riverificata sull'emulatore. Corretto anche un test
-> instabile del DataStore che faceva fallire il job `android` della CI (M2.1). Dettagli in M2.3 e
-> M3.1, punti rimandati in M9.3. Aperti: job `ios` (codice del Keychain controllato solo a occhio) e simulatore.
-> **M3.2 fatta** (04/10): sentieri della bbox disegnati sulla mappa per stato (chiusi tratteggiati), POI con un simbolo
-> per tipo, "Sentieri vicini", dettaglio del sentiero con difficoltà, POI e, da loggati, pericoli e foto (URL
-> firmato rinnovato quando scade). Nel backend il riepilogo dei sentieri ha ora il percorso semplificato e la bbox usa
-> `ST_Intersects` (ADR-0020). 131 test host. Dettagli in M3.2.
-> **M3.3 scritta** (04/10): cache Room del catalogo (la UI legge da lì), ETag per rotta con `If-None-Match` su dettaglio
-> e POI del sentiero, "aggiornato alle" e dati salvati senza rete; checkpoint verificati sull'emulatore.
-> **Review di M3 fatta** (04/10, §6): correzioni applicate, 153 test host. Dettagli in fondo a M3.
-> Il job `ios` della CI falliva su `NSNumber.numberWithBool` in `AppDatabase.ios.kt` (04/10): corretto con
-> `NSNumber(bool = true)`, da riverificare in CI.
-> **M4.1 fatta** (04/10, anticipata rispetto all'ordine di §6): segnalazione di un pericolo dalla mappa e dal
-> dettaglio del sentiero, posizione scelta su una mappa con il segnaposto al centro. 164 test host, verificata
-> sull'emulatore contro il backend locale. Dettagli in M4.1.
-> Prossimo: M4.3 (le mie segnalazioni, con la rotta nuova nel backend), poi M6 (SOS). Restano i checkpoint aperti di
-> M3.2 (URL firmato con M4.2, simulatore).
+> **Stato (12/10/2026):** M0–M8 fatte e revisionate (M4–M7 il 09/10, M8 il 12/10: nessun CRITICAL/HIGH, correzioni
+> applicate, 316 test host). Ultimi passi: M8.3 (posti dei rifugi e squadre di soccorso), interfaccia rivista con le
+> linee guida Apple (§2), icona dell'app, build installata sull'iPhone vero (xtool, `tools/ios-device`). Prossimo: M9.
+> Da decidere: i controlli della mappa in orizzontale (fine di M8.3).
+> Il dettaglio giorno per giorno è nei singoli task e in `CLAUDE.md`. Aperti: job `ios` della CI e checkpoint sul
+> simulatore (Mac), push su iOS (APNs), satellite nero su iPhone, i rimandi di M9.3.
 
 ---
 
@@ -108,6 +73,9 @@ Non sono bug del backend, sono cose che l'app vorrebbe e l'API oggi non dà:
 - **"Le mie segnalazioni" e "pericoli vicino a me": si fanno** (04/10 e 05/10). Oggi i pericoli si leggono solo per
   sentiero (`/hazards/trail/{trailId}`); le rotte `GET /hazards/mine` (M4.3) e `GET /hazards/nearby` (M4.4) si
   aggiungono al backend.
+- **Creazioni del personale senza `Idempotency-Key`** (review di M8, 12/10): il backend accetta la chiave solo su
+  `createBooking` e `raiseSos`. Ticket, POI, squadre (e segnalazioni) dopo un timeout ripetuto possono duplicarsi.
+  L'app non può farci nulla: se diventa un problema, la chiave si aggiunge nel backend su quelle rotte.
 - **I rifugi richiedono il login** (`/refuges/**` non è pubblico): l'ospite non li vede sulla mappa.
 - **Anche foto e pericoli richiedono il login** (`/media/**`, `/hazards/**`): nel dettaglio del sentiero l'ospite vede
   un invito ad accedere al posto di pericoli e foto (M3.2).
@@ -1479,8 +1447,39 @@ M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e cir
     nuovo crea la squadra (`POINT(lon lat)` corretto nel database) e torna alle Allerte. Squadra di prova cancellata.
     Nel logcat né telefono né posizione.
   - [ ] (con il Mac) le stesse schermate sul simulatore iPhone.
-  - Da rivedere con la review di M8: nel form della squadra l'errore sta sotto la mappa e con la tastiera chiusa va
-    cercato scorrendo (come nel form del POI).
+  - Errore del form della squadra sotto la mappa, fuori vista con la tastiera chiusa: corretto (12/10) per tutti i
+    form, l'errore del server sta sopra il pulsante d'invio (`FormScaffold(error)`, §2).
+- **Interfaccia e icona (12/10)**, scritte da Claude su richiesta (skill `apple-design`): mappa sotto la barra a isola,
+  pagine con testata compatta e righe in gruppi, Profilo riordinato (dettagli in §2). Icona: vetta color lichene con un
+  abete ritagliato, cima muschio dietro e curve di livello su fondo verde bosco, da `tools/app-icon/build_app_icon.py`
+  (Android: icona adattiva vettoriale con la versione monocromatica e i PNG per i launcher vecchi; iOS: varianti chiara,
+  scura e a tinta). Nome "GeoSentinel" anche su iOS (`CFBundleDisplayName`, prima `geosentinel_mobile`).
+  - [x] icona e nome nel launcher dell'emulatore; 309 test host.
+  - [x] build `b97c346` installata sull'iPhone vero (xtool). xtool non raggiungeva il telefono: la regola del firewall
+    per la porta 27015 era legata per GUID alla vecchia scheda WSL; riagganciata (`tools/ios-device/README.md`).
+  - [ ] sull'iPhone: icona in chiaro, scuro e a tinta; le pagine nuove.
+
+**Review di M8** (12/10, §6: `ecc:kotlin-reviewer` + `ecc:code-reviewer` + `ecc:security-reviewer`, anche sul
+backend): nessun CRITICAL/HIGH. Corretto da Claude su richiesta:
+- `safely` spostato in `core/network/ApiCall.kt` (prima una copia in `staff` e una privata nel dettaglio del sentiero)
+  e usato dove mancava: dettaglio del rifugio (anche `refresh`), foto delle segnalazioni, `refreshMine` della mappa.
+  Una risposta fuori contratto non fa più cadere l'app.
+- Ticket: se la rilettura fallisce la lista resta con l'avviso sopra; barra di avanzamento al cambio di filtro;
+  senza ETag il tocco dice "riprova" e rilegge; stato e priorità sconosciuti non si spacciano per "Aperto"/"Media" e
+  uno stato nuovo non mostra azioni; titolo e descrizione limitati come il backend (150/2000).
+- Mappa: i controlli scorrono quando non stanno (orizzontale, testo grande) invece di finire sotto l'SOS; una sola
+  lettura alla volta delle proprie segnalazioni.
+- Squadra: niente secondo invio dopo la creazione. Coda "Da verificare" riletta al ritorno.
+- Lista delle foto di una segnalazione in cache per 2 minuti nel `MediaRepository` (solo id e metadati, mai gli URL
+  firmati; svuotata quando si toglie una foto).
+- `pageBottomInset()` = solo la barra a isola (nelle schermate spinte la safe area la mette già il NavHost).
+- `tel:` con sole cifre e "+" (`core/ui/TelUri.kt`). Pulizia: `ContentMaxWidth` → `PageMaxWidth`, `CardShape` e due
+  stringhe inutilizzate tolte.
+- Backend: capacità del rifugio al massimo 1000 (DTO di creazione e modifica, dominio), `RefugeCapacityIT`, contratto
+  aggiornato e ricopiato in `api/`; nel form dell'app da 1 a 1000.
+- Test: +7 (316 host). Non fatto: il salto del margine in basso durante le transizioni tra schede (solo estetico).
+- Da rivedere: in orizzontale i controlli della mappa scorrono, ma se ne vedono due; serve una disposizione apposta
+  (es. in riga in alto) da decidere.
 
 ### Milestone 9: qualità e rilascio
 
@@ -1544,7 +1543,7 @@ perché scriverebbero il codice al posto tuo.
 | 5 | Rifugi | `ecc:kotlin-reviewer,ecc:code-reviewer` (eseguita il 09/10, `kotlin-reviewer` + `security-reviewer`) |
 | 6 | SOS | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita il 09/10: 4 HIGH corretti) |
 | 7 | Push e soccorso | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita l'08–09/10) |
-| 8 | Personale | `ecc:kotlin-reviewer,ecc:code-reviewer` |
+| 8 | Personale | `ecc:kotlin-reviewer,ecc:code-reviewer` + `security-reviewer` (eseguita il 12/10: nessun CRITICAL/HIGH; correzioni in fondo a M8.3) |
 | 9 | Qualità e rilascio | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 
 ```bash

@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.refuge.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -25,7 +26,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -90,8 +90,6 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
-private val ContentMaxWidth = 600.dp
-private val CardShape = RoundedCornerShape(20.dp)
 private const val PrefetchDistance = 3
 
 /**
@@ -126,14 +124,14 @@ fun MyBookingsScreen(onBack: () -> Unit) {
                 item(key = "group-gap") { Spacer(Modifier.height(8.dp)) }
                 if (state.cancelError != null) {
                     item(key = "cancel-error") {
-                        Box(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
+                        Box(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
                             FormErrorBanner(state.cancelError?.resolve())
                         }
                     }
                 }
                 // in coda e poi rifiutate (o scadute): l'utente le aveva viste "in invio", qui sa che non ci sono
                 items(state.rejected, key = { "rejected-" + it.key }) { rejected ->
-                    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
                         BookingCard(
                             refugeName = state.refugeNames[rejected.payload.refugeId],
                             stay = stayLabel(rejected.payload.checkIn, rejected.payload.checkOut, null, rejected.payload.guests),
@@ -253,7 +251,7 @@ private fun BookingCard(
     val colors = MaterialTheme.colorScheme
     Column(
         Modifier
-            .widthIn(max = ContentMaxWidth)
+            .widthIn(max = PageMaxWidth)
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .padding(bottom = if (last) 10.dp else 0.dp)
@@ -302,7 +300,7 @@ private fun CenteredProgress(small: Boolean = false) {
 private fun Message(text: String, isError: Boolean = false, action: (@Composable () -> Unit)? = null) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
     ) {
         Text(
             text,

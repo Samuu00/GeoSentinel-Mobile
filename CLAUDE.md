@@ -5,7 +5,7 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9.
 
-**Stato (04/10/2026):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
+**Stato (12/10/2026, in ordine di data):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
 logout, refresh unico, nome, cambio password e cancellazione dell'account. M3.1 fatta: mappa (Stradale chiara/scura e
 Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate e
@@ -54,7 +54,14 @@ Gestione, dettaglio con assegna/inizia/risolvi/modifica/annulla, 409 `concurrent
 ticket" dal sentiero, 305 test host, verificata sull'emulatore. M8.3 fatta (12/10): posti letto dal dettaglio del
 rifugio (gestore del rifugio o `ADMIN`, 409 `capacity-exceeded` spiegato, dettaglio riletto al ritorno) e nuova squadra
 di soccorso dalla scheda Allerte (solo `ADMIN`, 422 sul nome già usato), 309 test host, verificata sull'emulatore.
-Prossimo: catena di review di M8 (§6), poi M9.
+Poi (12/10), con le linee guida Apple (skill `apple-design`): mappa sotto la barra in basso a isola, controlli della
+mappa più visibili, errori dei form sopra il pulsante d'invio (`FormScaffold(error)`), pagine con testata compatta e
+righe in gruppi (`core/ui/PageLayout.kt`: `PageHeader`, `GroupCard`/`GroupRow`, `groupedItem` per le liste paginate,
+`LocalBottomBarInset`), Profilo riordinato. Icona dell'app (`tools/app-icon`, Android adattiva e iOS chiara/scura/tinta)
+e nome "GeoSentinel" anche su iOS (`CFBundleDisplayName`); build installata sull'iPhone (12/10).
+Review di M8 (12/10, codice, Kotlin e sicurezza anche sul backend): nessun CRITICAL/HIGH, MEDIUM e LOW corretti
+(`safely` in `core/network`, liste dei ticket, controlli della mappa che scorrono, capacità del rifugio al massimo 1000
+nel backend), 316 test host. Prossimo: M9.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -102,7 +109,8 @@ apiClient/              client generato (configurazione in build.gradle.kts, cod
 androidApp/             GeoSentinelApplication (Koin), MainActivity, FirebaseMessagingService
   src/debug/            network_security_config (HTTP in chiaro solo in debug)
 iosApp/                 iOSApp.swift, AppDelegate (Firebase/APNs), Info.plist, Config.xcconfig
-tools/app-icon/          build_app_icon.py: icona Android (adattiva, vettoriale) e iOS da una sola geometria
+tools/ios-device/       install.ps1: app sull'iPhone vero dal PC (xtool in WSL), README con i passi e i problemi noti
+tools/app-icon/         build_app_icon.py: icona Android (adattiva, vettoriale) e iOS da una sola geometria
 shared/src/
   commonMain/kotlin/it/unical/geosentinel_mobile/
     App.kt              tema + Scaffold (barra in basso, SOS) + NavHost

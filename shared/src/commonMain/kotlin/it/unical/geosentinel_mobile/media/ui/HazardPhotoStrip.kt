@@ -65,7 +65,7 @@ private const val MaxUrlRequests = 3
 fun HazardPhotoStrip(hazardId: String, modifier: Modifier = Modifier) {
     val media = koinInject<MediaRepository>()
     var photos by remember(hazardId) { mutableStateOf<List<MediaResponse>>(emptyList()) }
-    // ponytail: una richiesta per segnalazione visibile, senza cache; una cache per id se le liste diventano lunghe
+    // la lista è in cache nel repository per poco (una riga che rientra scorrendo non la richiede di nuovo)
     LaunchedEffect(hazardId) { media.photosOfHazard(hazardId).onSuccess { photos = it } }
     if (photos.isEmpty()) return
 

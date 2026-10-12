@@ -14,6 +14,7 @@ import it.unical.geosentinel_mobile.core.ui.uiMessage
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
 import it.unical.geosentinel_mobile.hazard.data.MAX_NEARBY_HAZARDS
 import it.unical.geosentinel_mobile.hazard.data.MAX_NEARBY_HAZARDS_RADIUS_METERS
+import it.unical.geosentinel_mobile.core.network.safely
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -147,10 +148,14 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
      * Le proprie segnalazioni in verifica (la prima pagina di "Le mie segnalazioni", le più recenti): la mappa le chiede
      * all'accesso e a ogni ritorno, così una appena inviata compare subito. Un errore lascia quelle di prima.
      */
+    // una lettura alla volta: setEnabled e il ritorno sulla mappa la chiedono insieme, l'ultima vince
+    private var mineJob: Job? = null
+
     fun refreshMine() {
         if (!enabled) return
-        viewModelScope.launch {
-            hazards.mine(page = 0).onSuccess { page ->
+        mineJob?.cancel()
+        mineJob = viewModelScope.launch {
+            safely { hazards.mine(page = 0) }.onSuccess { page ->
                 if (enabled) _state.update { it.copy(mine = page.content.filter { h -> h.status == HazardResponse.Status.SUBMITTED }) }
             }
         }

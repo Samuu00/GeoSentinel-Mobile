@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.staff_trail_status_rejected

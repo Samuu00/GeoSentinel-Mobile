@@ -168,7 +168,6 @@
     <string name="hazards_loading">Carico i pericoli…</string>
     <string name="hazards_load_failed">Pericoli non aggiornati. Tocca per riprovare.</string>
     <string name="hazards_distance">a %1$s</string>
-    <string name="trail_open_detail">Apri il sentiero %1$s</string>
     <string name="trail_length_km">%1$s km</string>
     <string name="trail_difficulty">Difficoltà %1$s</string>
     <string name="trail_difficulty_easy">Facile</string>
@@ -188,7 +187,6 @@
     <string name="trail_photo_description">Foto del sentiero %1$d di %2$d</string>
     <string name="trail_photo_failed">Foto non disponibile</string>
     <string name="trail_login_for_more">Accedi per vedere i pericoli segnalati e le foto del sentiero.</string>
-    <string name="trail_section_failed">Non è stato possibile caricare questa parte. Tocca per riprovare.</string>
     <string name="trail_load_failed_title">Sentiero non disponibile</string>
     <string name="trail_retry">Riprova</string>
     <string name="trail_updated_today">Aggiornato alle %1$s</string>
@@ -433,7 +431,7 @@
     <string name="staff_open_queue">Segnalazioni da verificare</string>
     <string name="staff_add_poi">Aggiungi un punto</string>
     <string name="staff_capacity_title">Capacità del rifugio</string>
-    <string name="staff_capacity_body">Quante persone può ospitare. Non puoi scendere sotto gli ospiti già confermati.</string>
+    <string name="staff_capacity_body">Quante persone può ospitare, da 1 a 1000. Non puoi scendere sotto gli ospiti già confermati.</string>
     <string name="staff_capacity_label">Posti</string>
     <string name="staff_capacity_save">Salva la capacità</string>
     <string name="staff_capacity_saved">Capacità salvata.</string>
@@ -475,6 +473,10 @@
     <string name="ticket_status_in_progress">In corso</string>
     <string name="ticket_status_resolved">Risolto</string>
     <string name="ticket_status_cancelled">Annullato</string>
+    <string name="ticket_status_unknown">Stato sconosciuto</string>
+    <string name="ticket_priority_unknown">Sconosciuta</string>
+    <string name="ticket_unknown_note">Questo ticket ha uno stato che l'app non conosce: aggiornala per gestirlo.</string>
+    <string name="ticket_missing_version">Non è stato possibile leggere la versione del ticket: l'ho riletto, riprova.</string>
     <string name="ticket_priority_low">Bassa</string>
     <string name="ticket_priority_medium">Media</string>
     <string name="ticket_priority_high">Alta</string>

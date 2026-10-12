@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.trail.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -102,7 +103,6 @@ import org.maplibre.compose.util.DpPadding
 import kotlin.time.Clock
 import kotlin.time.Instant
 
-private val ContentMaxWidth = 600.dp
 
 /**
  * Dettaglio di un sentiero (§M3.2): anteprima del percorso, difficoltà, lunghezza, stato, descrizione, POI e,
@@ -164,7 +164,7 @@ private fun TrailContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         PathPreview(trail, state, Modifier.fillMaxWidth().height(280.dp))
-        Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
+        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
             Spacer(Modifier.size(20.dp))
             Text(trail.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.size(12.dp))

@@ -390,6 +390,36 @@ class StaffViewModelsTest {
         assertEquals("soccorso sila", viewModel.state.value.name)
     }
 
+    @Test
+    fun `oltre il tetto del server la capacita non si salva`() = runTest {
+        val (_, staff, _) = repositories()
+        val viewModel = RefugeCapacityViewModel("r1", 24, staff)
+
+        viewModel.onDraftChange("1001")
+        assertFalse(viewModel.state.value.canSave, "il backend accetta al massimo 1000 posti")
+        viewModel.onDraftChange("1000")
+        assertTrue(viewModel.state.value.canSave)
+    }
+
+    @Test
+    fun `dopo la squadra creata un secondo tocco non manda un doppione`() = runTest {
+        val (_, staff, _) = repositories()
+        val viewModel = RescueTeamCreateViewModel(staff)
+        viewModel.onNameChange("Soccorso Alpino Lorica")
+        viewModel.onCallSignChange("Delta 4")
+        viewModel.onContactChange("0984 222222")
+        viewModel.onLocationPicked(GeoPoint(39.3, 16.5))
+        viewModel.save()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.created)
+
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertEquals(1, teamBodies.size)
+        assertFalse(viewModel.state.value.canSave)
+    }
+
     private fun summary(status: String) = TrailSummaryEntity(
         id = SEED_TRAIL_ID, name = "Sentiero", difficulty = "EASY", lengthMeters = 1000.0, status = status,
         simplifiedGeoJson = SEED_TRAIL_PATH, minLon = 16.48, minLat = 39.29, maxLon = 16.52, maxLat = 39.31, updatedAt = clock,

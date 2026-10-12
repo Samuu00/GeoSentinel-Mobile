@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import it.unical.geosentinel_mobile.api.model.CreateTicketRequest
 import it.unical.geosentinel_mobile.core.ui.UiMessage
@@ -39,9 +40,9 @@ class TicketCreateViewModel(
     private val _state = MutableStateFlow(TicketCreateUiState())
     val state: StateFlow<TicketCreateUiState> = _state.asStateFlow()
 
-    fun onTitleChange(title: String) = _state.update { it.copy(title = title, error = null) }
+    fun onTitleChange(title: String) = _state.update { it.copy(title = title.take(TICKET_TITLE_MAX), error = null) }
 
-    fun onDescriptionChange(description: String) = _state.update { it.copy(description = description, error = null) }
+    fun onDescriptionChange(description: String) = _state.update { it.copy(description = description.take(TICKET_DESCRIPTION_MAX), error = null) }
 
     fun onPriorityChange(priority: CreateTicketRequest.Priority) = _state.update { it.copy(priority = priority) }
 

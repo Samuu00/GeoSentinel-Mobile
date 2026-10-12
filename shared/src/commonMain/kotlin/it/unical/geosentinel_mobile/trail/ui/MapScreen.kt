@@ -1,5 +1,7 @@
 package it.unical.geosentinel_mobile.trail.ui
 
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Canvas
@@ -513,7 +515,11 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Top))
-                .padding(end = 16.dp, top = 56.dp, bottom = bottomBar + SosClearance),
+                .padding(end = 16.dp, top = 56.dp, bottom = bottomBar + SosClearance)
+                // in orizzontale (o con il testo grande) i controlli non stanno tutti: scorrono invece di finire
+                // sotto l'SOS. Il margine laterale lascia spazio all'ombra
+                .verticalScroll(rememberScrollState())
+                .padding(start = 8.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             MapButton(Res.string.map_type_button, Glyph.Layers) { choosingType = true }

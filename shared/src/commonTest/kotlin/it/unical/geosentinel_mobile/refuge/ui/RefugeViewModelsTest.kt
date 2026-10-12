@@ -42,7 +42,10 @@ import kotlin.test.assertTrue
 class RefugeViewModelsTest {
 
     private val backend = FakeBackend()
-    private val refugeJson = """{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":4,"managerId":"m1","amenities":[]}"""
+    private var capacity = 4
+    private val refugeJson get() = """{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":$capacity,"managerId":"m1","amenities":[]}"""
+    // le foto arrivano fuori contratto (un campo obbligatorio mancante)
+    private var mediaBroken = false
     private val today = LocalDate(2026, 10, 5)
     // il percorso e la query di ogni richiesta ai rifugi, nell'ordine
     private val calls = mutableListOf<Pair<String, Parameters>>()
@@ -57,7 +60,11 @@ class RefugeViewModelsTest {
             val json = headersOf(HttpHeaders.ContentType, "application/json")
             if (request.method == HttpMethod.Get && path == "/api/v1/media/attached") {
                 calls += path to request.url.parameters
-                respond("[${mediaJson("m1", "READY")},${mediaJson("m2", "QUARANTINED")}]", HttpStatusCode.OK, json)
+                if (mediaBroken) {
+                    respond("""[{"id":"m1"}]""", HttpStatusCode.OK, json)
+                } else {
+                    respond("[${mediaJson("m1", "READY")},${mediaJson("m2", "QUARANTINED")}]", HttpStatusCode.OK, json)
+                }
             } else if (request.method == HttpMethod.Get && path == "/api/v1/trails/nearby") {
                 calls += path to request.url.parameters
                 respond("[${trailJson()}]", HttpStatusCode.OK, json)
@@ -178,6 +185,34 @@ class RefugeViewModelsTest {
 
         assertIs<Section.Loaded<List<NightAvailability>>>(viewModel.state.value.nights)
         assertEquals(1, calls.count { it.first == "/api/v1/refuges/r1" })
+    }
+
+    @Test
+    fun `refresh rilegge posti e notti senza tornare al caricamento e un errore lascia i dati`() = runTest {
+        val viewModel = detailViewModel()
+        advanceUntilIdle()
+        capacity = 6
+
+        viewModel.refresh()
+        assertIs<Section.Loaded<RefugeResponse>>(viewModel.state.value.refuge, "niente schermata di caricamento")
+        advanceUntilIdle()
+        assertEquals(6, assertIs<Section.Loaded<RefugeResponse>>(viewModel.state.value.refuge).value.capacity)
+
+        offline = true
+        viewModel.refresh()
+        advanceUntilIdle()
+        assertEquals(6, assertIs<Section.Loaded<RefugeResponse>>(viewModel.state.value.refuge).value.capacity)
+        assertIs<Section.Loaded<List<NightAvailability>>>(viewModel.state.value.nights)
+    }
+
+    @Test
+    fun `foto fuori contratto non fanno cadere il dettaglio`() = runTest {
+        mediaBroken = true
+        val viewModel = detailViewModel()
+        advanceUntilIdle()
+
+        assertIs<Section.Loaded<RefugeResponse>>(viewModel.state.value.refuge)
+        assertTrue(viewModel.state.value.photos.isEmpty())
     }
 
     @Test

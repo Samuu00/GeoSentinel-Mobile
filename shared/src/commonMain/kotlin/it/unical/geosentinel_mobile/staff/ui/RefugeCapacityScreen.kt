@@ -11,7 +11,6 @@ import geosentinel_mobile.shared.generated.resources.staff_capacity_label
 import geosentinel_mobile.shared.generated.resources.staff_capacity_save
 import geosentinel_mobile.shared.generated.resources.staff_capacity_saved
 import geosentinel_mobile.shared.generated.resources.staff_capacity_title
-import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton

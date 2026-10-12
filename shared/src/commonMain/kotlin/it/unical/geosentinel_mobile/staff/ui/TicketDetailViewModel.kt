@@ -1,6 +1,8 @@
 package it.unical.geosentinel_mobile.staff.ui
 
+import geosentinel_mobile.shared.generated.resources.ticket_missing_version
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.ticket_rule_violation
@@ -105,8 +107,10 @@ class TicketDetailViewModel(
         if (current.busy) return
         val etag = current.etag
         if (etag == null) {
-            // senza ETag la modifica non si può mandare: prima si rilegge il ticket
-            reload()
+            // senza ETag la modifica non si può mandare: si rilegge il ticket e si dice di riprovare (prima il tocco
+            // spariva senza segno, come un pulsante rotto)
+            _state.update { it.copy(actionError = UiMessage(Res.string.ticket_missing_version)) }
+            viewModelScope.launch { load(keepError = true) }
             return
         }
         _state.update { it.copy(busy = true, actionError = null) }

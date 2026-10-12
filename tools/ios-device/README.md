@@ -42,3 +42,8 @@ WSL lo raggiunge sull'IP del suo gateway (es. `172.17.16.1`) grazie a un `netsh 
 
 Se xtool dice `noDevice` o non trova il telefono: sblocca l'iPhone, controlla che compaia in Dispositivi Apple
 (se chiede di nuovo l'autorizzazione, accetta) e rilancia lo script.
+
+Se xtool dice `Operation now in progress`, WSL non raggiunge la porta 27015: la regola del firewall resta legata
+alla scheda `vEthernet (WSL …)` per GUID, che Windows può ricreare dopo un riavvio. Da PowerShell come
+amministratore: `Set-NetFirewallRule -DisplayName "WSL usbmuxd 27015" -InterfaceAlias "vEthernet (WSL (Hyper-V firewall))"`
+(provato il 12/10).

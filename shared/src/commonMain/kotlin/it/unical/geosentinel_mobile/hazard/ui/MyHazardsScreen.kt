@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.hazard.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -27,7 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Warning
@@ -86,8 +86,6 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Instant
 
-private val ContentMaxWidth = 600.dp
-private val CardShape = RoundedCornerShape(20.dp)
 // Quante righe prima del fondo si chiede la pagina dopo: arriva prima che l'utente se ne accorga
 private const val PrefetchDistance = 3
 
@@ -160,7 +158,7 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
 @Composable
 private fun HazardCard(hazard: HazardResponse, onOpenTrail: (String) -> Unit, first: Boolean, last: Boolean) {
     // una riga del gruppo delle segnalazioni (prima una card per segnalazione)
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
         if (!first) GroupDivider(54.dp)
         HazardRowContent(hazard, onOpenTrail)
     }
@@ -253,7 +251,7 @@ private fun CenteredProgress(small: Boolean = false) {
 private fun Message(text: String, title: String? = null, isError: Boolean = false, action: @Composable () -> Unit) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
     ) {
         if (title != null) {
             Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
@@ -275,7 +273,7 @@ private fun Message(text: String, title: String? = null, isError: Boolean = fals
 private fun InlineError(message: String, onRetry: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
     ) {
         Text(
             message,

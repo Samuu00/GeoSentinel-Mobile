@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_generic
@@ -185,15 +186,6 @@ class TrailDetailViewModel(
                 onFailure = { _state.update { it.copy(failedPhotos = it.failedPhotos + mediaId) } },
             )
         }
-    }
-
-    // Una risposta fuori contratto (ContractViolationException) non deve far cadere l'app: diventa un errore della sezione
-    private suspend fun <T> safely(block: suspend () -> Result<T>): Result<T> = try {
-        block()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        Result.failure(e)
     }
 
     private companion object {

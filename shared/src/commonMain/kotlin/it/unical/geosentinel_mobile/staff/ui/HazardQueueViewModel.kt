@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.staff_queue_already_handled
@@ -49,6 +50,13 @@ class HazardQueueViewModel(
 
     fun reload() {
         _state.update { it.copy(loading = true, loadError = null) }
+        load()
+    }
+
+    // Al ritorno sulla coda (da un sentiero, dove la segnalazione si può gestire): si rilegge, ma non sopra una lettura
+    // o un'azione in corso (la prima lettura è quella di init)
+    fun refresh() {
+        if (loadJob?.isActive == true || _state.value.busyHazardId != null) return
         load()
     }
 

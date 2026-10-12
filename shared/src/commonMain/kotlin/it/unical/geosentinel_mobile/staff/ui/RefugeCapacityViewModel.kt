@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.staff_capacity_below_booked
@@ -23,8 +24,8 @@ data class RefugeCapacityUiState(
     val error: UiMessage? = null,
     val saved: Boolean = false,
 ) {
-    // almeno 1 posto, come il backend
-    val parsed: Int? get() = draft.toIntOrNull()?.takeIf { it >= 1 }
+    // da 1 a 1000 posti, come il backend
+    val parsed: Int? get() = draft.toIntOrNull()?.takeIf { it in 1..MAX_REFUGE_CAPACITY }
     val canSave: Boolean get() = parsed != null && parsed != capacity && !busy
 }
 
@@ -64,5 +65,8 @@ private fun Throwable.toCapacityMessage(): UiMessage {
     return if (error is ApiError.Conflict && error.slug == "capacity-exceeded") UiMessage(Res.string.staff_capacity_below_booked) else toUiMessage()
 }
 
-// 4 cifre bastano per un rifugio, e il testo resta sempre un Int valido
+// il tetto del backend (UpdateCapacityRequest)
+const val MAX_REFUGE_CAPACITY = 1000
+
+// 4 cifre bastano per arrivare al tetto, e il testo resta sempre un Int valido
 private const val MaxDigits = 4

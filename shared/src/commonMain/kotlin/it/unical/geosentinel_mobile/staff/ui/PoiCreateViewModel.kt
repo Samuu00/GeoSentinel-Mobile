@@ -1,6 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
+import it.unical.geosentinel_mobile.core.network.safely
 import androidx.lifecycle.viewModelScope
 import it.unical.geosentinel_mobile.api.model.CreatePoiRequest
 import it.unical.geosentinel_mobile.core.location.GeoPoint

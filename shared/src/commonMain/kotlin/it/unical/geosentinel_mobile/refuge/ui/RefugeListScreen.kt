@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.refuge.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -24,7 +25,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.DateRange
@@ -85,8 +85,6 @@ import org.maplibre.compose.location.LocationPermission
 import org.maplibre.compose.location.rememberLocationState
 import kotlin.time.Duration.Companion.seconds
 
-private val ContentMaxWidth = 600.dp
-private val CardShape = RoundedCornerShape(20.dp)
 // Quanto si aspetta la posizione (con il permesso già dato) prima di ripiegare sull'area di partenza
 private val FixWait = 3.seconds
 
@@ -142,7 +140,7 @@ fun RefugeListScreen(onOpenRefuge: (String) -> Unit, onOpenBookings: () -> Unit)
             } else {
                 // un gruppo solo, righe separate da un filo (stile raggruppato): prima una card con il bordo per rifugio
                 item(key = "refuges") {
-                    GroupCard(Modifier.widthIn(max = ContentMaxWidth).padding(horizontal = 20.dp).padding(top = 12.dp)) {
+                    GroupCard(Modifier.widthIn(max = PageMaxWidth).padding(horizontal = 20.dp).padding(top = 12.dp)) {
                         list.refuges.forEachIndexed { index, refuge ->
                             if (index > 0) GroupDivider(GroupIconIndent)
                             RefugeRow(refuge, from = list.from) { onOpenRefuge(refuge.id) }
@@ -173,7 +171,7 @@ private fun RefugeRow(refuge: RefugeResponse, from: GeoPoint, onClick: () -> Uni
 private fun Message(text: String, isError: Boolean = false, action: (@Composable () -> Unit)? = null) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
     ) {
         Text(
             text,

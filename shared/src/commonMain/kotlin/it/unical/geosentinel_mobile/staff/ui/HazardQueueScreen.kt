@@ -1,5 +1,7 @@
 package it.unical.geosentinel_mobile.staff.ui
 
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -83,7 +85,6 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Instant
 
-internal val ContentMaxWidth = 600.dp
 internal val CardShape = RoundedCornerShape(20.dp)
 
 /**
@@ -103,6 +104,10 @@ fun HazardQueueScreen(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val loadError = state.loadError
     val actionError = state.actionError
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refresh()
+        onPauseOrDispose { }
+    }
 
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
@@ -168,7 +173,7 @@ private fun QueueRow(
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
+            .widthIn(max = PageMaxWidth)
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .clip(CardShape)
@@ -278,7 +283,7 @@ internal fun Notice(message: String) {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.error,
         modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
+            .widthIn(max = PageMaxWidth)
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
             .semantics { liveRegion = LiveRegionMode.Polite },
@@ -290,7 +295,7 @@ internal fun Notice(message: String) {
 internal fun Message(text: String, title: String? = null, isError: Boolean = false, action: @Composable () -> Unit = {}) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 32.dp),
     ) {
         if (title != null) {
             Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
