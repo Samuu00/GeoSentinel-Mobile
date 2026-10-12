@@ -102,8 +102,9 @@ fun TrailManagementSection(
     }
 }
 
+// Azione del gestore come link verde: anche nel dettaglio del rifugio (M8.3) e nella scheda Allerte
 @Composable
-private fun ManageLink(text: String, onClick: () -> Unit) {
+internal fun ManageLink(text: String, onClick: () -> Unit) {
     TextButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
         Text(text, fontWeight = FontWeight.SemiBold)
     }

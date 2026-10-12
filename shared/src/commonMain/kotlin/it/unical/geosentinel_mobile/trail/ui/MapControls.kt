@@ -157,9 +157,10 @@ import org.maplibre.compose.style.BaseStyle
 // chiedono le linee guida di OSM parte aperta e si chiude al primo gesto o dopo qualche secondo; poi resta la "i" per
 // riaprirla. Quella di MapLibre si chiude solo al primo gesto: sull'anteprima ferma del dettaglio restava aperta.
 @Composable
-internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd: Boolean = false) {
+// [startExpanded] false sulle mappe ferme (testata del rifugio): la "i" basta, il pannello aperto copriva la foto
+internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd: Boolean = false, startExpanded: Boolean = true) {
     val colors = MaterialTheme.colorScheme
-    var expanded by rememberSaveable { mutableStateOf(true) }
+    var expanded by rememberSaveable { mutableStateOf(startExpanded) }
     LaunchedEffect(mapState) {
         snapshotFlow { mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.GESTURE }.first { it }
         expanded = false
@@ -226,21 +227,63 @@ private val AttributionOpenFor = 5.seconds
 
 internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard, AddPoint, NearMe }
 
-// Tondo da 56 dp come le card (tono e filo di bordo): si legge sopra qualsiasi zona della mappa
+// Controlli sulla mappa: un livello che galleggia sopra il contenuto (§2). Tono dei menu, anello chiaro e ombra: si
+// staccano anche dal bosco scuro della mappa notturna, dove il tono delle card spariva
 @Composable
-internal fun MapButton(description: StringResource, glyph: Glyph, onClick: () -> Unit) {
+internal fun mapControlColor() = MaterialTheme.colorScheme.surfaceContainerHigh
+
+@Composable
+internal fun mapControlBorder() = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+
+internal val MapControlElevation = 6.dp
+
+/**
+ * Tondo da 56 dp. [emphasized]: l'azione principale della mappa (segnalare), piena nel verde del tema; una sola,
+ * così si riconosce al primo sguardo (le altre sono comandi della vista).
+ */
+@Composable
+internal fun MapButton(description: StringResource, glyph: Glyph, emphasized: Boolean = false, onClick: () -> Unit) {
     val label = stringResource(description)
+    val colors = MaterialTheme.colorScheme
+    val content = if (emphasized) colors.onPrimary else colors.onSurface
     Surface(
         onClick = onClick,
         shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        shadowElevation = 2.dp,
+        color = if (emphasized) colors.primary else mapControlColor(),
+        contentColor = content,
+        border = if (emphasized) null else mapControlBorder(),
+        shadowElevation = MapControlElevation,
         modifier = Modifier.size(56.dp).semantics { contentDescription = label },
     ) {
-        Box(contentAlignment = Alignment.Center) { GlyphIcon(glyph, MaterialTheme.colorScheme.onSurface) }
+        Box(contentAlignment = Alignment.Center) { GlyphIcon(glyph, content) }
     }
+}
+
+// Zoom in una capsula sola, con un filo in mezzo (come le mappe di sistema): due comandi gemelli, un oggetto solo
+@Composable
+internal fun MapZoomButtons(onZoomIn: () -> Unit, onZoomOut: () -> Unit) {
+    Surface(
+        shape = CircleShape,
+        color = mapControlColor(),
+        border = mapControlBorder(),
+        shadowElevation = MapControlElevation,
+        modifier = Modifier.width(56.dp),
+    ) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            ZoomHalf(Res.string.map_zoom_in, Glyph.Plus, onZoomIn)
+            HorizontalDivider(Modifier.width(28.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            ZoomHalf(Res.string.map_zoom_out, Glyph.Minus, onZoomOut)
+        }
+    }
+}
+
+@Composable
+private fun ZoomHalf(description: StringResource, glyph: Glyph, onClick: () -> Unit) {
+    val label = stringResource(description)
+    Box(
+        Modifier.size(56.dp).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
+        contentAlignment = Alignment.Center,
+    ) { GlyphIcon(glyph, MaterialTheme.colorScheme.onSurface) }
 }
 
 // Simboli disegnati con lo stesso tratto: material-icons-core non ha né il "meno" né il mirino della posizione

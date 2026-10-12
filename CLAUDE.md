@@ -51,7 +51,10 @@ descrizione, quota, stagione, telefono, servizi, foto `REFUGE`) e pagina del rif
 qui", "Chiama" e "Indicazioni", 300 test host. Aperti su iPhone: satellite nero.
 M8.2 fatta (10/10): ticket di manutenzione con `If-Match` dall'ETag (`Versioned.kt`), voce Ticket nella scheda
 Gestione, dettaglio con assegna/inizia/risolvi/modifica/annulla, 409 `concurrent-modification` che rilegge, "Apri un
-ticket" dal sentiero, 305 test host, verificata sull'emulatore. Prossimo: M8.3.
+ticket" dal sentiero, 305 test host, verificata sull'emulatore. M8.3 fatta (12/10): posti letto dal dettaglio del
+rifugio (gestore del rifugio o `ADMIN`, 409 `capacity-exceeded` spiegato, dettaglio riletto al ritorno) e nuova squadra
+di soccorso dalla scheda Allerte (solo `ADMIN`, 422 sul nome già usato), 309 test host, verificata sull'emulatore.
+Prossimo: catena di review di M8 (§6), poi M9.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -78,7 +81,7 @@ ticket" dal sentiero, 305 test host, verificata sull'emulatore. Prossimo: M8.3.
 | Stile | Tema "foresta" in stile carta topografica, uguale su Android e iOS (§2 del piano): testata `ForestHeader` (cielo con curve di livello, creste, abeti), titoli Barlow Semi Condensed e testo Atkinson Hyperlegible Next (`composeResources/font`, licenze OFL in `files/`), token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
 | Architettura | Package per feature in `shared`, ognuna con `data` (repository) e `ui` (Screen + ViewModel). Niente strato `domain` vuoto |
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
-| Rete | Client generato da openapi-generator 7.14 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Enum generati con un ultimo caso `unknown_default_open_api` (template `apiClient/templates/data_class.mustache`, da ripatchare quando si aggiorna il generatore). Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
+| Rete | Client generato da openapi-generator 7.25 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Enum generati con un ultimo caso `unknown_default_open_api` (template `apiClient/templates/data_class.mustache`, da ripatchare quando si aggiorna il generatore). Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
 | Errori | `sealed interface ApiError` costruito dallo slug (`type`) del `ProblemDetail`, mai da `title` o `detail` |
 | DI | Koin, avviato una volta per processo: `initKoin(context, config)` in `GeoSentinelApplication` (Android), `startKoinWith(config, filesDir, databaseBuilder)` in `MainViewController` (iOS), mai in `MainActivity` |
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |

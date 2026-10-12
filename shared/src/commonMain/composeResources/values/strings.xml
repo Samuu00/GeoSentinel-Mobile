@@ -105,6 +105,7 @@
     <string name="profile_guest_body">Accedi per segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
     <string name="profile_session_expired">La sessione è scaduta: accedi di nuovo.</string>
     <string name="profile_account_section">Account</string>
+    <string name="profile_activity_section">Attività</string>
     <string name="profile_login">Accedi</string>
     <string name="profile_logout">Esci</string>
     <string name="profile_name">Nome</string>
@@ -243,7 +244,7 @@
     <string name="report_sent_done">Fatto</string>
     <string name="report_photos">Foto</string>
     <string name="my_hazards_title">Le mie segnalazioni</string>
-    <string name="my_hazards_intro">Dalla più recente. Lo stato cambia quando un gestore del parco le verifica.</string>
+    <string name="my_hazards_intro">Dalla più recente. Lo stato lo aggiorna il gestore del parco.</string>
     <string name="my_hazards_empty_title">Nessuna segnalazione</string>
     <string name="my_hazards_empty_body">Se trovi un albero caduto, una frana o un altro pericolo, segnalalo dalla mappa: lo ritroverai qui con il suo stato.</string>
     <string name="my_hazards_go_to_map">Vai alla mappa</string>
@@ -307,15 +308,11 @@
     <string name="refuge_call">Chiama</string>
     <string name="refuge_directions">Indicazioni</string>
     <string name="refuge_nights_title">Disponibilità</string>
-    <string name="refuge_nights_hint">Posti liberi per notte, nelle prossime due settimane. Scorri per vederle tutte.</string>
+    <string name="refuge_nights_hint">Posti liberi per notte, nelle prossime due settimane.</string>
     <string name="refuge_tonight_full">stanotte è pieno</string>
     <plurals name="refuge_tonight_free">
         <item quantity="one">stanotte %1$d libero</item>
         <item quantity="other">stanotte %1$d liberi</item>
-    </plurals>
-    <plurals name="refuge_free_short">
-        <item quantity="one">libero</item>
-        <item quantity="other">liberi</item>
     </plurals>
     <string name="refuge_tonight">Stanotte</string>
     <string name="weekday_1">lun</string>
@@ -356,7 +353,7 @@
         <item quantity="one">%1$d persona</item>
         <item quantity="other">%1$d persone</item>
     </plurals>
-    <string name="my_bookings_open">Le mie prenotazioni</string>
+    <string name="my_bookings_short">Prenotazioni</string>
     <string name="my_bookings_title">Le mie prenotazioni</string>
     <string name="my_bookings_empty">Non hai ancora prenotazioni. Scegli un rifugio dalla lista o dalla mappa.</string>
     <string name="my_bookings_refuge_unknown">Rifugio</string>
@@ -375,7 +372,7 @@
 
     <!-- Soccorso (M7.2): scheda Allerte e dettaglio dell'operatore -->
     <string name="rescue_alerts_title">Allerte SOS</string>
-    <string name="rescue_alerts_intro">Le richieste di soccorso aperte, chi aspetta da più tempo in cima.</string>
+    <string name="rescue_alerts_intro">Le richieste aperte, chi aspetta da più tempo in cima.</string>
     <string name="rescue_alerts_empty_title">Nessuna allerta aperta</string>
     <string name="rescue_alerts_empty_body">Quando arriva un SOS compare qui e ricevi una notifica.</string>
     <string name="rescue_alert_open">apri l'allerta</string>
@@ -419,14 +416,14 @@
 
     <!-- Staff -->
     <string name="staff_queue_title">Segnalazioni del sentiero</string>
-    <string name="staff_queue_intro">Verifica o respingi le segnalazioni nuove. Risolvi quelle confermate quando il pericolo è sparito.</string>
+    <string name="staff_queue_intro">Verifica le nuove, risolvi le confermate quando il pericolo è sparito.</string>
     <string name="staff_queue_empty_title">Nessuna segnalazione</string>
     <string name="staff_queue_empty_body">Su questo sentiero non ci sono segnalazioni da gestire.</string>
     <string name="staff_queue_verify">Verifica</string>
     <string name="staff_queue_reject">Respingi</string>
     <string name="staff_queue_resolve">Risolvi</string>
     <string name="staff_pending_title">Da verificare</string>
-    <string name="staff_pending_intro">Le segnalazioni nuove di tutto il parco, dalla più recente. Verificale o respingile: solo quelle verificate compaiono sulla mappa.</string>
+    <string name="staff_pending_intro">Le nuove di tutto il parco. Solo le verificate vanno sulla mappa.</string>
     <string name="staff_pending_empty_body">Non ci sono segnalazioni in attesa di verifica.</string>
     <string name="staff_queue_off_trail">Lontano dai sentieri · %1$s, %2$s</string>
     <string name="staff_queue_already_handled">Questa segnalazione è già stata gestita: la lista è aggiornata.</string>
@@ -435,6 +432,22 @@
     <string name="staff_trail_status_rejected">Cambio di stato non permesso: un sentiero chiuso va prima riaperto.</string>
     <string name="staff_open_queue">Segnalazioni da verificare</string>
     <string name="staff_add_poi">Aggiungi un punto</string>
+    <string name="staff_capacity_title">Capacità del rifugio</string>
+    <string name="staff_capacity_body">Quante persone può ospitare. Non puoi scendere sotto gli ospiti già confermati.</string>
+    <string name="staff_capacity_label">Posti</string>
+    <string name="staff_capacity_save">Salva la capacità</string>
+    <string name="staff_capacity_saved">Capacità salvata.</string>
+    <string name="staff_capacity_below_booked">Troppo pochi posti: ci sono più ospiti già confermati in una delle prossime notti.</string>
+    <string name="staff_capacity_edit">Cambia i posti letto</string>
+    <string name="staff_team_title">Nuova squadra di soccorso</string>
+    <string name="staff_team_body">Registra un'unità di soccorso con la sua base. Gli operatori la vedranno per gli invii.</string>
+    <string name="staff_team_name">Nome</string>
+    <string name="staff_team_call_sign">Nominativo radio</string>
+    <string name="staff_team_contact">Telefono di contatto</string>
+    <string name="staff_team_base">Base</string>
+    <string name="staff_team_save">Registra la squadra</string>
+    <string name="staff_team_name_taken">Esiste già una squadra con questo nome.</string>
+    <string name="staff_team_open">Nuova squadra di soccorso</string>
 
     <!-- POI -->
     <string name="poi_create_title">Nuovo punto</string>
@@ -451,7 +464,7 @@
     <string name="staff_tab_tickets">Ticket</string>
     <string name="staff_open_ticket">Apri un ticket</string>
     <string name="ticket_list_title">Ticket di manutenzione</string>
-    <string name="ticket_list_intro">I lavori su sentieri e rifugi, dal più recente. Tocca un ticket per assegnarlo, aggiornarlo o chiuderlo.</string>
+    <string name="ticket_list_intro">I lavori su sentieri e rifugi, dal più recente.</string>
     <string name="ticket_list_empty_title">Nessun ticket</string>
     <string name="ticket_list_empty_body">Nessun ticket con questi filtri. Un ticket si apre dalla sezione Gestione di un sentiero.</string>
     <string name="ticket_filter_all">Tutti</string>

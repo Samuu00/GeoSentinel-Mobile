@@ -53,6 +53,7 @@ fun PoiCreateScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: () 
         onBack = onBack,
         title = Res.string.poi_create_title,
         body = Res.string.poi_create_body,
+        error = state.error?.resolve(),
         actions = {
             // senza un nome valido il pulsante è spento: il contatore sotto il campo dice perché
             PrimaryPillButton(
@@ -81,7 +82,6 @@ fun PoiCreateScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: () 
             supporting = stringResource(Res.string.poi_create_name_count, state.name.trim().length, POI_NAME_MAX, POI_NAME_MIN),
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
         )
-        FormErrorBanner(state.error?.resolve())
     }
 }
 

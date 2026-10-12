@@ -171,6 +171,7 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
             onBack = leave,
             title = Res.string.report_sent_title,
             body = Res.string.report_sent_body,
+            error = state.photoError?.resolve(),
             actions = {
                 PrimaryPillButton(text = stringResource(Res.string.report_sent_done), onClick = leave, loading = uploading)
             },
@@ -185,7 +186,6 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
                     HazardPhotos(state.photos, onTakePhoto = takePhoto, onPickPhoto = pickPhoto, onRetry = viewModel::retryPhoto, onRemove = viewModel::removePhoto)
                 }
             }
-            FormErrorBanner(state.photoError?.resolve())
         }
         return
     }
@@ -194,6 +194,7 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
         onBack = onBack,
         title = Res.string.report_title,
         body = Res.string.report_body,
+        error = state.error?.resolve(),
         actions = {
             PrimaryPillButton(text = stringResource(Res.string.report_send), onClick = viewModel::submit, loading = state.submitting)
         },
@@ -224,7 +225,6 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
             minLines = 3,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
         )
-        FormErrorBanner(state.error?.resolve())
     }
 }
 

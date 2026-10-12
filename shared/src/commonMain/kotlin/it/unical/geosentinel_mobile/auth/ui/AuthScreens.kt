@@ -98,6 +98,7 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Un
         onBack = onBack,
         title = Res.string.auth_login_title,
         body = Res.string.auth_login_body,
+        error = state.error?.resolve(),
         actions = {
             PrimaryPillButton(
                 text = stringResource(Res.string.auth_login_button),
@@ -115,7 +116,6 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Un
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
         )
         PasswordField(value = state.password, onValueChange = viewModel::onPasswordChange, onDone = viewModel::submit)
-        FormErrorBanner(state.error?.resolve())
     }
 }
 
@@ -131,6 +131,7 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
         onBack = onBack,
         title = Res.string.auth_register_title,
         body = Res.string.auth_register_body,
+        error = state.error?.resolve(),
         actions = {
             PrimaryPillButton(
                 text = stringResource(Res.string.auth_register_button),
@@ -166,7 +167,6 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
             error = state.fieldErrors[RegisterField.BIRTH_DATE]?.resolve(),
             onClick = { pickingDate = true },
         )
-        FormErrorBanner(state.error?.resolve())
     }
 
     if (pickingDate) {

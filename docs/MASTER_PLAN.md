@@ -195,7 +195,22 @@ Barra in basso, con le voci che dipendono dal ruolo:
 | Profilo (o "Accedi" per l'ospite) | Tutti |
 
 La barra è fluttuante (capsula staccata dai bordi), con la voce attiva su una pillola color muschio; al massimo 5
-voci, che vede tutte solo `ADMIN`.
+voci, che vede tutte solo `ADMIN`. Dal 12/10 è un'isola sopra la mappa: la mappa le passa sotto fino al bordo (il
+`NavHost` non ha margine in basso sulla scheda Mappa, `MapScreen(bottomBar)` sposta controlli, card e attribuzione).
+Isola e controlli della mappa hanno lo stesso aspetto (`mapControlColor`, anello `outline` al 45%, ombra 6 dp): sul
+bosco scuro della mappa notturna il tono delle card non si distingueva. Zoom in una capsula sola; "Segnala" pieno nel
+verde del tema, l'unica azione evidente della mappa. Nei form l'errore del server sta sopra il pulsante d'invio
+(`FormScaffold(error)`), non in fondo ai campi.
+Struttura delle pagine (12/10, `core/ui/PageLayout.kt`): testata da 148 dp (160 nei form) con il titolo subito sotto
+(`PageHeader`, azione secondaria a destra del titolo come "Prenotazioni" in `HeaderPill`, una riga di contesto);
+righe in gruppi (`GroupCard` + `GroupRow` + `GroupDivider`, stile raggruppato delle impostazioni) invece di una card per
+riga; nelle schede il contenuto scorre sotto l'isola (`LocalBottomBarInset`, `pageBottomInset()`). Profilo in gruppi
+nell'ordine d'uso (Attività, Account, Aspetto) con Esci ed Elimina account insieme in fondo. Pagina del rifugio con
+"Chiama" e "Indicazioni" tonali subito sotto il titolo e l'attribuzione della mappa in testata chiusa.
+Stesso schema (12/10) per Allerte (link "Nuova squadra" sotto il titolo), Gestione (schede Segnalazioni | Ticket nello
+slot `below` di `PageHeader`), Le mie segnalazioni e Le mie prenotazioni. Le liste paginate restano una riga per item:
+`Modifier.groupedItem(first, last)` disegna il pezzo di card di ogni riga (angoli sulla prima e sull'ultima). La coda
+delle segnalazioni del gestore resta a card separate (foto e azioni per riga). Introduzioni delle liste in una riga.
 
 Il pulsante SOS è una capsula rossa con la scritta "SOS" (72 dp) sopra la mappa, visibile a tutti. Apre la
 schermata SOS, che si "spinge" sopra la mappa e ha il suo pulsante Indietro (su iPhone non c'è quello di sistema);
@@ -373,7 +388,7 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
 - Controlla cosa genera per gli enum (`role`, `status`...), per `availableBedsPerNight` (mappa data → posti),
   `formFields` (oggetto libero), i `PagedModel*` e `ProblemDetail`.
 - Fatto il 02/10:
-  - **Generazione:** plugin `org.openapi.generator` 7.14.0, compatibile con Gradle 9.5 e con la configuration cache.
+  - **Generazione:** plugin `org.openapi.generator` 7.25.0 (7.14.0 fino al 10/10, aggiornato da Dependabot), compatibile con Gradle 9.5 e con la configuration cache.
     Il codice si genera in `apiClient/build/generated/openapi` a ogni build, quando il contratto cambia, e **non si
     committa**. `openApiGenerate` parte da solo prima della compilazione. `inputSpec` è un URI `file:///`: su Windows
     il percorso `C:\...` viene letto come un URI non valido. Il modulo compila solo `src/commonMain/kotlin`; il
@@ -434,7 +449,8 @@ fun createHttpClient(config: AppConfig, session: SessionManager, engine: HttpCli
     `apiClient/templates/data_class.mustache` è il template di 7.14.0 con il serializer che ci ripiega anche in
     `multiplatform` (blocchi marcati "GeoSentinel"). Gli enum sono tutti incorporati nei modelli, quindi
     `typeMappings` a `String` non era applicabile. Quando si aggiorna il generatore il template va ricopiato dal jar
-    e ripatchato. Nei `when` dell'app il caso sconosciuto va gestito (es. ruolo sconosciuto → vista da `HIKER`).
+    e ripatchato. Il 10/10 (7.14.0 → 7.25.0) il template di 7.14.0 ha funzionato senza modifiche: client rigenerato,
+    caso `unknown_default_open_api` presente, build e 305 test host verdi. Nei `when` dell'app il caso sconosciuto va gestito (es. ruolo sconosciuto → vista da `HIKER`).
   - **Refresh:** `SessionRepository.refreshTokens` svuota la sessione **solo** su un 401: un errore di rete
     restituisce null e l'utente resta loggato (in montagna la rete va e viene, e senza sessione non c'è SOS). Il
     plugin fa un refresh alla volta dentro il client; fuori dal client serve il `Mutex` del repository (M2.2).
@@ -1442,6 +1458,29 @@ M7.2 anche dal 08/10). Nessun CRITICAL; 4 HIGH (tutti nell'SOS), 11 MEDIUM e cir
 **M8.3 Rifugi e squadre**
 - Capacità dei propri rifugi (`updateRefugeCapacity`), con il 409 se si scende sotto gli ospiti confermati.
 - `ADMIN`: creazione delle squadre di soccorso (`createRescueTeam`).
+- **Fatta (12/10)**: bozza dell'utente corretta e completata da Claude su richiesta. Non compilava: in `StaffRepository`
+  `createRescueTeam` con i campi sciolti invece di un `CreateRescueTeamRequest`; in `RefugeCapacityViewModel` una
+  graffa mancante in `onFailure` e `uiState` mentre la schermata leggeva `state`; nessun binding Koin, nessuna rotta,
+  nessun punto d'ingresso. Il 409 mostrava il messaggio generico delle prenotazioni ("non ci sono posti nelle date
+  scelte").
+  - Posti letto (`RefugeCapacityScreen`, rotta `RefugeCapacity`): link "Cambia i posti letto" sotto il titolo del
+    rifugio (slot `manage` di `RefugeDetailScreen`), solo per `ADMIN` o per il gestore con `managerId` uguale al suo id.
+    Il 409 `capacity-exceeded` diventa "ci sono più ospiti già confermati"; almeno 1 posto, solo cifre (al massimo 4).
+    Il dettaglio rilegge rifugio e calendario al ritorno (`RefugeDetailViewModel.refresh`, senza tornare al caricamento).
+  - Nuova squadra (`RescueTeamCreateScreen`, rotta `RescueTeamCreate`): link nella scheda Allerte, solo `ADMIN`; base dal
+    centro della mappa (`LocationPicker`, parte dal parco a zoom 10), lunghezze del backend (nome 2–100, nominativo 2–32,
+    telefono 5–30). Il 422 `business-rule` del nome già usato (senza distinguere le maiuscole) diventa un messaggio.
+  - `ManageLink` ora `internal` (dettaglio del sentiero, del rifugio e scheda Allerte). `StaffViewModelsTest` (+4), 309
+    test host.
+- Checkpoint (emulatore `Medium_Phone`, backend locale, 12/10):
+  - [x] `manager@` su Monte Botte Donato (4 posti, stanotte pieno): 3 → 409 con il messaggio giusto, capacità invariata;
+    6 → "Capacità salvata.", tornando al dettaglio "6 posti letto · stanotte 2 liberi". Ripristinato a 4 via API.
+  - [x] `admin@`: link nella scheda Allerte; "cnsas stazione sila" → "Esiste già una squadra con questo nome."; un nome
+    nuovo crea la squadra (`POINT(lon lat)` corretto nel database) e torna alle Allerte. Squadra di prova cancellata.
+    Nel logcat né telefono né posizione.
+  - [ ] (con il Mac) le stesse schermate sul simulatore iPhone.
+  - Da rivedere con la review di M8: nel form della squadra l'errore sta sotto la mappa e con la tastiera chiusa va
+    cercato scorrendo (come nel form del POI).
 
 ### Milestone 9: qualità e rilascio
 

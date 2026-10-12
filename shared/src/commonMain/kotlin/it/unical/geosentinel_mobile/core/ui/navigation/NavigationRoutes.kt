@@ -49,6 +49,9 @@ sealed interface Route {
     // ticket di manutenzione (M8.2): il dettaglio dalla scheda Gestione, il form dal dettaglio del sentiero
     @Serializable data class TicketDetail(val ticketId: String) : Route
     @Serializable data class TicketCreate(val trailId: String) : Route
+    // rifugi e squadre (M8.3): i posti dal dettaglio del rifugio, la squadra (solo ADMIN) dalla scheda Allerte
+    @Serializable data class RefugeCapacity(val refugeId: String, val capacity: Int) : Route
+    @Serializable data class RescueTeamCreate(val lat: Double, val lon: Double, val zoom: Double) : Route
 
     // ---- account: "spinte" sopra il Profilo ----
     @Serializable data object Login : Route
@@ -62,6 +65,7 @@ sealed interface Route {
 val FormRoutes = setOf(
     Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
     Route.BookRefuge::class, Route.PoiCreate::class, Route.TicketCreate::class,
+    Route.RefugeCapacity::class, Route.RescueTeamCreate::class,
 )
 
 // Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta e le liste "mie" (con il loro Indietro)

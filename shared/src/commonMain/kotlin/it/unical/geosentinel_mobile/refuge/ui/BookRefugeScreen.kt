@@ -101,6 +101,7 @@ fun BookRefugeScreen(refugeId: String, refugeName: String, capacity: Int, onBack
         onBack = onBack,
         title = Res.string.booking_title,
         body = Res.string.booking_body,
+        error = state.error?.resolve(),
         actions = { PrimaryPillButton(stringResource(Res.string.booking_send), onClick = viewModel::submit, loading = state.submitting) },
     ) {
         Text(refugeName, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(bottom = 4.dp))
@@ -141,7 +142,6 @@ fun BookRefugeScreen(refugeId: String, refugeName: String, capacity: Int, onBack
                 modifier = Modifier.padding(top = 4.dp),
             )
         }
-        FormErrorBanner(state.error?.resolve())
     }
 
     if (pickingDate) {

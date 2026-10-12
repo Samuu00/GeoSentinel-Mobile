@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -73,6 +74,10 @@ import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.api.model.BookingResponse
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.core.ui.groupedItem
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
@@ -114,18 +119,11 @@ fun MyBookingsScreen(onBack: () -> Unit) {
             LazyColumn(
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-                item(key = "title") {
-                    Text(
-                        stringResource(Res.string.my_bookings_title),
-                        style = MaterialTheme.typography.headlineLarge,
-                        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).semantics { heading() },
-                    )
-                }
+                item(key = "header") { PageHeader(title = stringResource(Res.string.my_bookings_title)) }
+                item(key = "group-gap") { Spacer(Modifier.height(8.dp)) }
                 if (state.cancelError != null) {
                     item(key = "cancel-error") {
                         Box(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -175,9 +173,12 @@ fun MyBookingsScreen(onBack: () -> Unit) {
                     }
                     state.items.isEmpty() && state.pending.isEmpty() && state.rejected.isEmpty() -> item(key = "empty") { Message(stringResource(Res.string.my_bookings_empty)) }
                     else -> {
-                        items(state.items, key = { it.id }) { booking ->
+                        // le prenotazioni in un gruppo solo; in coda e rifiutate restano card a sé, sopra
+                        itemsIndexed(state.items, key = { _, booking -> booking.id }) { index, booking ->
                             val (status, colors) = booking.status.presentation()
                             BookingCard(
+                                first = index == 0,
+                                last = index == state.items.lastIndex,
                                 refugeName = state.refugeNames[booking.refugeId],
                                 stay = stayLabel(booking.checkIn, booking.checkOut, null, booking.guests),
                                 status = status,
@@ -245,6 +246,9 @@ private fun BookingCard(
     statusColors: Pair<Color, Color>,
     onCancel: (() -> Unit)? = null,
     cancelling: Boolean = false,
+    // posizione nel gruppo: da sola (in coda, rifiutata) è una card intera
+    first: Boolean = true,
+    last: Boolean = true,
 ) {
     val colors = MaterialTheme.colorScheme
     Column(
@@ -252,34 +256,35 @@ private fun BookingCard(
             .widthIn(max = ContentMaxWidth)
             .fillMaxWidth()
             .padding(horizontal = 20.dp)
-            .clip(CardShape)
-            .background(colors.surfaceContainerLowest)
-            .border(1.dp, colors.outlineVariant, CardShape)
-            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = if (onCancel != null) 4.dp else 14.dp),
+            .padding(bottom = if (last) 10.dp else 0.dp)
+            .groupedItem(first, last),
     ) {
-        Column(Modifier.semantics(mergeDescendants = true) { }) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    refugeName ?: stringResource(Res.string.my_bookings_refuge_unknown),
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    modifier = Modifier.weight(1f).padding(end = 8.dp),
-                )
-                Text(
-                    stringResource(status),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = statusColors.second,
-                    modifier = Modifier.clip(CircleShape).background(statusColors.first).padding(horizontal = 10.dp, vertical = 4.dp),
-                )
+        if (!first) GroupDivider()
+        Column(Modifier.padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = if (onCancel != null) 4.dp else 14.dp)) {
+            Column(Modifier.semantics(mergeDescendants = true) { }) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        refugeName ?: stringResource(Res.string.my_bookings_refuge_unknown),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.weight(1f).padding(end = 8.dp),
+                    )
+                    Text(
+                        stringResource(status),
+                        style = MaterialTheme.typography.labelMedium,
+                        color = statusColors.second,
+                        modifier = Modifier.clip(CircleShape).background(statusColors.first).padding(horizontal = 10.dp, vertical = 4.dp),
+                    )
+                }
+                Text(stay, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
             }
-            Text(stay, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 4.dp))
-        }
-        if (onCancel != null) {
-            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
-                if (cancelling) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
-                TextButton(onClick = onCancel, enabled = !cancelling, modifier = Modifier.heightIn(min = 48.dp)) {
-                    // prugna come gli altri errori del tema: annullare non è un'emergenza (il rosso resta all'SOS)
-                    Text(stringResource(Res.string.booking_cancel), color = colors.error, fontWeight = FontWeight.SemiBold)
+            if (onCancel != null) {
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    if (cancelling) CircularProgressIndicator(Modifier.size(20.dp), strokeWidth = 2.dp)
+                    TextButton(onClick = onCancel, enabled = !cancelling, modifier = Modifier.heightIn(min = 48.dp)) {
+                        // prugna come gli altri errori del tema: annullare non è un'emergenza (il rosso resta all'SOS)
+                        Text(stringResource(Res.string.booking_cancel), color = colors.error, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -59,6 +60,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.repeatOnLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
+import geosentinel_mobile.shared.generated.resources.staff_team_open
 import geosentinel_mobile.shared.generated.resources.rescue_age_hours
 import geosentinel_mobile.shared.generated.resources.rescue_age_minutes
 import geosentinel_mobile.shared.generated.resources.rescue_age_now
@@ -74,6 +76,13 @@ import it.unical.geosentinel_mobile.api.model.SosAlertResponse
 import it.unical.geosentinel_mobile.core.push.PushEvent
 import it.unical.geosentinel_mobile.core.push.PushManager
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.groupedItem
+import it.unical.geosentinel_mobile.core.ui.HeaderLink
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.core.ui.pageBottomInset
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
@@ -101,7 +110,7 @@ internal val RescueRefreshEvery = 30.seconds
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit) {
+fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit, onCreateTeam: (() -> Unit)? = null) {
     val viewModel = koinViewModel<RescueAlertsListViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
@@ -137,12 +146,17 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit) {
             LazyColumn(
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
-                contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
+                contentPadding = PaddingValues(bottom = 24.dp + pageBottomInset()),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-                item(key = "title") { Title() }
+                item(key = "header") {
+                    PageHeader(
+                        title = stringResource(Res.string.rescue_alerts_title),
+                        intro = stringResource(Res.string.rescue_alerts_intro),
+                        // "Nuova squadra di soccorso" (M8.3), solo per ADMIN
+                        below = onCreateTeam?.let { { HeaderLink(stringResource(Res.string.staff_team_open), it) } },
+                    )
+                }
                 when {
                     state.items.isEmpty() && state.loading -> item(key = "loading") { CenteredProgress() }
                     state.items.isEmpty() && state.error != null -> item(key = "error") {
@@ -154,7 +168,10 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit) {
                         Message(title = stringResource(Res.string.rescue_alerts_empty_title), text = stringResource(Res.string.rescue_alerts_empty_body))
                     }
                     else -> {
-                        items(state.items, key = { it.id }) { alert -> AlertCard(alert, now) { onOpenAlert(alert.id) } }
+                        item(key = "group-gap") { Spacer(Modifier.height(8.dp)) }
+                        itemsIndexed(state.items, key = { _, alert -> alert.id }) { index, alert ->
+                            AlertCard(alert, now, first = index == 0, last = index == state.items.lastIndex) { onOpenAlert(alert.id) }
+                        }
                         when {
                             state.loadingMore -> item(key = "more") { CenteredProgress(small = true) }
                             state.error != null -> item(key = "more-error") { InlineError(state.error!!.resolve(), onRetry = viewModel::retry) }
@@ -166,61 +183,43 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit) {
     }
 }
 
-@Composable
-private fun Title() {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 6.dp)) {
-        Text(
-            stringResource(Res.string.rescue_alerts_title),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            stringResource(Res.string.rescue_alerts_intro),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-    }
-}
-
 // Un'allerta: campanella rossa (piena senza squadra), stato a parole, da quanto è aperta e la squadra.
 // Tutta la card apre il dettaglio.
 @Composable
-private fun AlertCard(alert: SosAlertResponse, now: Instant, onOpen: () -> Unit) {
+private fun AlertCard(alert: SosAlertResponse, now: Instant, first: Boolean, last: Boolean, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     val openLabel = stringResource(Res.string.rescue_alert_open)
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(CardShape)
-            .background(colors.surfaceContainerLowest)
-            .border(1.dp, colors.outlineVariant, CardShape)
-            .clickable(onClickLabel = openLabel, role = Role.Button, onClick = onOpen)
-            .padding(16.dp)
-            .semantics(mergeDescendants = true) { },
-    ) {
-        AlertBadge(waiting = alert.status == SosAlertResponse.Status.ACTIVE)
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(stringResource(alert.status.label()), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-            Text(
-                stringResource(Res.string.rescue_raised_ago, ago(alert.createdAt, now)),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-            alert.assignedTeam?.let { team ->
+    // una riga del gruppo delle allerte (prima una card per allerta)
+    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
+        if (!first) GroupDivider(GroupIconIndent)
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = openLabel, role = Role.Button, onClick = onOpen)
+                .padding(16.dp)
+                .semantics(mergeDescendants = true) { },
+        ) {
+            AlertBadge(waiting = alert.status == SosAlertResponse.Status.ACTIVE)
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(alert.status.label()), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
                 Text(
-                    stringResource(Res.string.rescue_team_label, "${team.name} (${team.callSign})"),
+                    stringResource(Res.string.rescue_raised_ago, ago(alert.createdAt, now)),
                     style = MaterialTheme.typography.bodyMedium,
+                    color = colors.onSurfaceVariant,
                     modifier = Modifier.padding(top = 2.dp),
                 )
+                alert.assignedTeam?.let { team ->
+                    Text(
+                        stringResource(Res.string.rescue_team_label, "${team.name} (${team.callSign})"),
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.padding(top = 2.dp),
+                    )
+                }
             }
+            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
         }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
     }
 }
 

@@ -69,6 +69,20 @@ class RefugeDetailViewModel(
         }
     }
 
+    /**
+     * Rilegge rifugio e calendario senza tornare al caricamento (M8.3: i posti cambiati dal gestore). Solo con il
+     * rifugio già caricato: al primo ingresso c'è già [load]. Un errore lascia quello che si vede.
+     */
+    fun refresh() {
+        if (_state.value.refuge !is Section.Loaded) return
+        viewModelScope.launch {
+            val refuge = async { refuges.get(refugeId) }
+            val nights = async { refuges.availability(refugeId, from = today()) }
+            refuge.await().onSuccess { found -> _state.update { it.copy(refuge = Section.Loaded(found)) } }
+            nights.await().onSuccess { list -> _state.update { it.copy(nights = Section.Loaded(list)) } }
+        }
+    }
+
     private fun load() {
         _state.value = RefugeDetailUiState()
         viewModelScope.launch {

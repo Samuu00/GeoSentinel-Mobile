@@ -27,6 +27,8 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.AlertDialog
@@ -90,6 +92,7 @@ import geosentinel_mobile.shared.generated.resources.edit_name_body
 import geosentinel_mobile.shared.generated.resources.edit_name_button
 import geosentinel_mobile.shared.generated.resources.edit_name_title
 import geosentinel_mobile.shared.generated.resources.profile_account_section
+import geosentinel_mobile.shared.generated.resources.profile_activity_section
 import geosentinel_mobile.shared.generated.resources.profile_change_password
 import geosentinel_mobile.shared.generated.resources.profile_delete_account
 import geosentinel_mobile.shared.generated.resources.profile_deleting
@@ -117,6 +120,13 @@ import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.FooterLink
+import it.unical.geosentinel_mobile.core.ui.GroupCard
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.GroupHeader
+import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
+import it.unical.geosentinel_mobile.core.ui.GroupRow
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
+import it.unical.geosentinel_mobile.core.ui.pageBottomInset
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
@@ -172,78 +182,65 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ForestHeader(Modifier.fillMaxWidth().height(240.dp))
+        ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight))
         Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
             // Chi sei: iniziale e nome, sotto ruolo ed email (o cosa si guadagna accedendo)
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Monogram(profile?.displayName)
                 Spacer(Modifier.size(16.dp))
-                Text(
-                    text = profile?.displayName ?: stringResource(session.role.label()),
-                    style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.semantics { heading() },
-                )
-            }
-            val subtitle = when {
-                profile != null -> stringResource(profile.role.label()) + " · " + profile.email
-                session is SessionState.LoggedIn -> null // profilo non ancora letto (offline)
-                session is SessionState.Expired -> stringResource(Res.string.profile_session_expired)
-                else -> stringResource(Res.string.profile_guest_body)
-            }
-            if (subtitle != null) {
-                Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 12.dp),
-                )
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = profile?.displayName ?: stringResource(session.role.label()),
+                        style = MaterialTheme.typography.headlineLarge,
+                        modifier = Modifier.semantics { heading() },
+                    )
+                    val subtitle = when {
+                        profile != null -> stringResource(profile.role.label()) + " · " + profile.email
+                        session is SessionState.LoggedIn -> null // profilo non ancora letto (offline)
+                        session is SessionState.Expired -> stringResource(Res.string.profile_session_expired)
+                        else -> null
+                    }
+                    if (subtitle != null) {
+                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
 
             if (session is SessionState.LoggedIn) {
-                SectionHeader(Res.string.profile_account_section)
-                Card {
+                // Gruppi nell'ordine d'uso: quello che hai fatto, chi sei, come appare l'app; uscire e cancellarsi in fondo
+                GroupHeader(stringResource(Res.string.profile_activity_section))
+                GroupCard {
+                    GroupRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, icon = Icons.Filled.Warning)
+                }
+                GroupHeader(stringResource(Res.string.profile_account_section))
+                GroupCard {
                     // Senza profilo (avvio offline) il nome non si può modificare: non sappiamo quale sia
-                    SettingsRow(
-                        label = stringResource(Res.string.profile_name),
+                    GroupRow(
+                        title = stringResource(Res.string.profile_name),
                         value = profile?.displayName,
                         onClick = onEditName,
                         enabled = profile != null,
-                        chevron = true,
+                        icon = Icons.Filled.Person,
                     )
-                    RowDivider()
-                    SettingsRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, chevron = true)
-                    RowDivider()
-                    SettingsRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, chevron = true)
-                    RowDivider()
-                    // "Esci" è un'uscita, non un errore: verde, non prugna
-                    SettingsRow(stringResource(Res.string.profile_logout), onClick = onLogout, color = MaterialTheme.colorScheme.primary)
-                }
-                // Azione distruttiva da sola, lontana dalle altre e nel colore degli errori (mai il rosso dell'SOS)
-                Spacer(Modifier.size(16.dp))
-                Card {
-                    SettingsRow(
-                        label = stringResource(if (ui.deleting) Res.string.profile_deleting else Res.string.profile_delete_account),
-                        onClick = { deleteStep = DeleteExplain },
-                        enabled = !ui.deleting,
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
-                // es. personale: "si cancellano tramite l'amministratore"
-                ui.error?.let {
-                    Spacer(Modifier.size(12.dp))
-                    FormErrorBanner(it.resolve())
+                    GroupDivider(GroupIconIndent)
+                    GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = Icons.Filled.Lock)
                 }
             } else {
-                // Ospite: una sola azione evidente (Accedi, a tutta larghezza) e l'alternativa come link sotto,
-                // come nei form: niente due pulsanti grandi in competizione.
-                Spacer(Modifier.size(28.dp))
+                // Ospite: cosa si guadagna, una sola azione evidente (Accedi) e l'alternativa come link sotto
+                Text(
+                    stringResource(Res.string.profile_guest_body),
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 16.dp),
+                )
+                Spacer(Modifier.size(24.dp))
                 PrimaryPillButton(stringResource(Res.string.profile_login), onClick = onLogin)
                 Spacer(Modifier.size(4.dp))
                 FooterLink(Res.string.auth_no_account, Res.string.auth_register_link, onRegister)
             }
 
-            SectionHeader(Res.string.theme_section)
-            Card {
+            GroupHeader(stringResource(Res.string.theme_section))
+            GroupCard {
                 Row(
                     modifier = Modifier.fillMaxWidth().heightIn(min = 64.dp).padding(start = 16.dp, end = 8.dp),
                     verticalAlignment = Alignment.CenterVertically,
@@ -253,7 +250,30 @@ fun ProfileScreen(
                 }
             }
 
-            Spacer(Modifier.size(32.dp))
+            if (session is SessionState.LoggedIn) {
+                // Uscire e cancellarsi: in fondo, insieme, come nelle impostazioni di sistema. "Esci" è un'uscita, non un
+                // errore (verde); "Elimina account" nel colore degli errori (mai il rosso dell'SOS) e con due conferme
+                Spacer(Modifier.size(24.dp))
+                GroupCard {
+                    GroupRow(stringResource(Res.string.profile_logout), onClick = onLogout, color = MaterialTheme.colorScheme.primary, chevron = false)
+                    GroupDivider()
+                    GroupRow(
+                        title = stringResource(if (ui.deleting) Res.string.profile_deleting else Res.string.profile_delete_account),
+                        onClick = { deleteStep = DeleteExplain },
+                        enabled = !ui.deleting,
+                        color = MaterialTheme.colorScheme.error,
+                        chevron = false,
+                    )
+                }
+                // es. personale: "si cancellano tramite l'amministratore"
+                ui.error?.let {
+                    Spacer(Modifier.size(12.dp))
+                    FormErrorBanner(it.resolve())
+                }
+            }
+
+            // il contenuto scorre sotto la barra a isola
+            Spacer(Modifier.size(32.dp + pageBottomInset()))
         }
     }
 
@@ -312,6 +332,7 @@ fun EditNameScreen(onBack: () -> Unit, onSaved: () -> Unit) {
         onBack = onBack,
         title = Res.string.edit_name_title,
         body = Res.string.edit_name_body,
+        error = state.error?.resolve(),
         actions = {
             PrimaryPillButton(
                 text = stringResource(Res.string.edit_name_button),
@@ -330,7 +351,6 @@ fun EditNameScreen(onBack: () -> Unit, onSaved: () -> Unit) {
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words, imeAction = ImeAction.Done),
             keyboardActions = KeyboardActions(onDone = { viewModel.submit() }),
         )
-        FormErrorBanner(state.error?.resolve())
     }
 }
 
@@ -347,6 +367,7 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
         onBack = onBack,
         title = Res.string.change_password_title,
         body = Res.string.change_password_body,
+        error = state.error?.resolve(),
         actions = {
             PrimaryPillButton(
                 text = stringResource(Res.string.change_password_button),
@@ -372,69 +393,10 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
             hint = stringResource(Res.string.auth_password_rules),
             onDone = viewModel::submit,
         )
-        FormErrorBanner(state.error?.resolve())
     }
 }
 
 // ---- Mattoncini ----
-
-// Card: un passo di tono sopra lo sfondo e un filo di bordo, senza ombra
-@Composable
-private fun Card(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier) { content() }
-    }
-}
-
-// Riga di impostazione da 56 dp: etichetta, valore attuale a destra e freccia se apre un'altra schermata
-@Composable
-private fun SettingsRow(
-    label: String,
-    onClick: () -> Unit,
-    value: String? = null,
-    color: Color = MaterialTheme.colorScheme.onSurface,
-    enabled: Boolean = true,
-    chevron: Boolean = false,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .heightIn(min = 56.dp)
-            .clickable(enabled = enabled, role = Role.Button, onClick = onClick)
-            .padding(start = 16.dp, end = if (chevron) 8.dp else 16.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            label,
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = if (chevron) FontWeight.Normal else FontWeight.SemiBold,
-            color = color,
-            modifier = Modifier.weight(1f),
-        )
-        if (value != null) {
-            Text(
-                value,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.padding(start = 12.dp).widthIn(max = 200.dp),
-            )
-        }
-        if (chevron) {
-            // decorativa: l'etichetta dice già dove porta la riga
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-    }
-}
-
-@Composable
-private fun RowDivider() = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
 
 // Iniziale del nome su un tondo color muschio; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
 @Composable
@@ -450,16 +412,6 @@ private fun Monogram(name: String?, modifier: Modifier = Modifier) {
             Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
         }
     }
-}
-
-@Composable
-private fun SectionHeader(text: StringResource) {
-    Text(
-        text = stringResource(text),
-        style = MaterialTheme.typography.labelLarge,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(start = 4.dp, top = 28.dp, bottom = 10.dp).semantics { heading() },
-    )
 }
 
 // ---- Selettore del tema: capsula con tre simboli e un cursore che scorre ----

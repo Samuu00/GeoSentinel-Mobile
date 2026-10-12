@@ -51,7 +51,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.hazards_distance
-import geosentinel_mobile.shared.generated.resources.my_bookings_open
+import geosentinel_mobile.shared.generated.resources.my_bookings_short
 import geosentinel_mobile.shared.generated.resources.refuge_beds
 import geosentinel_mobile.shared.generated.resources.refuge_open
 import geosentinel_mobile.shared.generated.resources.refuges_empty
@@ -65,6 +65,13 @@ import it.unical.geosentinel_mobile.core.location.distanceTo
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
+import it.unical.geosentinel_mobile.core.ui.GroupCard
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
+import it.unical.geosentinel_mobile.core.ui.GroupRow
+import it.unical.geosentinel_mobile.core.ui.HeaderPill
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.core.ui.pageBottomInset
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.hazard.ui.distanceLabel
 import it.unical.geosentinel_mobile.trail.ui.DefaultArea
@@ -103,16 +110,22 @@ fun RefugeListScreen(onOpenRefuge: (String) -> Unit, onOpenBookings: () -> Unit)
         if (fix != null) viewModel.load(fix.position.toGeoPoint(), nearMe = true) else viewModel.load(DefaultArea, nearMe = false)
     }
 
+    val nearMe = (state as? RefugeList.Loaded)?.nearMe
     LazyColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
+        // il contenuto scorre sotto la barra a isola fino al bordo
+        contentPadding = PaddingValues(bottom = 24.dp + pageBottomInset()),
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
     ) {
-        item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-        item(key = "title") { Title(nearMe = (state as? RefugeList.Loaded)?.nearMe) }
-        // le proprie prenotazioni stanno qui, prima della lista (M5.2)
-        item(key = "bookings") { BookingsLink(onOpenBookings) }
+        item(key = "header") {
+            PageHeader(
+                title = stringResource(Res.string.refuges_title),
+                // finché non si sa da dove si parte, niente frase (cambierebbe subito dopo)
+                intro = nearMe?.let { stringResource(if (it) Res.string.refuges_intro_near_me else Res.string.refuges_intro_area) },
+                // le proprie prenotazioni (M5.2): accanto al titolo, sempre a portata, senza occupare una riga della lista
+                trailing = { HeaderPill(stringResource(Res.string.my_bookings_short), Icons.Filled.DateRange, onOpenBookings) },
+            )
+        }
         when (val list = state) {
             RefugeList.Loading -> item(key = "loading") {
                 Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
@@ -127,95 +140,32 @@ fun RefugeListScreen(onOpenRefuge: (String) -> Unit, onOpenBookings: () -> Unit)
             is RefugeList.Loaded -> if (list.refuges.isEmpty()) {
                 item(key = "empty") { Message(stringResource(Res.string.refuges_empty)) }
             } else {
-                items(list.refuges, key = { it.id }) { refuge -> RefugeCard(refuge, from = list.from) { onOpenRefuge(refuge.id) } }
+                // un gruppo solo, righe separate da un filo (stile raggruppato): prima una card con il bordo per rifugio
+                item(key = "refuges") {
+                    GroupCard(Modifier.widthIn(max = ContentMaxWidth).padding(horizontal = 20.dp).padding(top = 12.dp)) {
+                        list.refuges.forEachIndexed { index, refuge ->
+                            if (index > 0) GroupDivider(GroupIconIndent)
+                            RefugeRow(refuge, from = list.from) { onOpenRefuge(refuge.id) }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
+// Un rifugio: casetta su un tondo muschio, nome, posti letto e distanza; tutta la riga apre il dettaglio
 @Composable
-private fun Title(nearMe: Boolean?) {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 6.dp)) {
-        Text(
-            stringResource(Res.string.refuges_title),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.semantics { heading() },
-        )
-        // finché non si sa da dove si parte, niente frase (cambierebbe subito dopo)
-        if (nearMe != null) {
-            Text(
-                stringResource(if (nearMe) Res.string.refuges_intro_near_me else Res.string.refuges_intro_area),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 8.dp),
-            )
-        }
-    }
-}
-
-// Un rifugio: nome, posti letto e distanza; tutta la card apre il dettaglio
-@Composable
-private fun RefugeCard(refuge: RefugeResponse, from: GeoPoint, onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
+private fun RefugeRow(refuge: RefugeResponse, from: GeoPoint, onClick: () -> Unit) {
     val distance = distanceLabel(from.distanceTo(refuge.location.toGeoPoint()))
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(CardShape)
-            .background(colors.surfaceContainerLowest)
-            .border(1.dp, colors.outlineVariant, CardShape)
-            .clickable(onClickLabel = stringResource(Res.string.refuge_open), role = Role.Button, onClick = onClick)
-            .padding(16.dp)
-            .semantics(mergeDescendants = true) { },
-    ) {
-        // decorativa: il nome dice già che è un rifugio
-        Icon(Icons.Filled.Home, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(refuge.name, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-            Text(
-                pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity) + " · " +
-                    stringResource(Res.string.hazards_distance, distance),
-                style = MaterialTheme.typography.bodyMedium,
-                color = colors.onSurfaceVariant,
-                modifier = Modifier.padding(top = 2.dp),
-            )
-        }
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
-    }
-}
-
-// "Le mie prenotazioni": una card come quelle dei rifugi, in evidenza nel verde del tema
-@Composable
-private fun BookingsLink(onClick: () -> Unit) {
-    val colors = MaterialTheme.colorScheme
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(CardShape)
-            .background(colors.primaryContainer)
-            .clickable(role = Role.Button, onClick = onClick)
-            .heightIn(min = 56.dp)
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-    ) {
-        // decorativa: il testo dice già cosa apre
-        Icon(Icons.Filled.DateRange, contentDescription = null, tint = colors.onPrimaryContainer, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(14.dp))
-        Text(
-            stringResource(Res.string.my_bookings_open),
-            style = MaterialTheme.typography.bodyLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = colors.onPrimaryContainer,
-            modifier = Modifier.weight(1f),
-        )
-        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onPrimaryContainer)
-    }
+    GroupRow(
+        title = refuge.name,
+        subtitle = pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity) + " · " +
+            stringResource(Res.string.hazards_distance, distance),
+        icon = Icons.Filled.Home,
+        onClickLabel = stringResource(Res.string.refuge_open),
+        onClick = onClick,
+    )
 }
 
 // Stato vuoto o d'errore: testo centrato e, se c'è, una sola azione

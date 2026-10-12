@@ -66,6 +66,9 @@ import it.unical.geosentinel_mobile.api.model.UpdateHazardStatusRequest
 import it.unical.geosentinel_mobile.core.location.decimals5
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.core.ui.pageBottomInset
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.hazard.ui.label
@@ -105,12 +108,18 @@ fun HazardQueueScreen(
         LazyColumn(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
-            contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
+            contentPadding = PaddingValues(bottom = 24.dp + pageBottomInset()),
             modifier = Modifier.fillMaxSize(),
         ) {
-            item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-            if (tabs != null) item(key = "tabs") { tabs() }
-            item(key = "title") { Title(pending = trailId == null) }
+            item(key = "header") {
+                val pending = trailId == null
+                PageHeader(
+                    title = stringResource(if (pending) Res.string.staff_pending_title else Res.string.staff_queue_title),
+                    intro = stringResource(if (pending) Res.string.staff_pending_intro else Res.string.staff_queue_intro),
+                    // nella scheda Gestione: Segnalazioni | Ticket sotto il titolo
+                    below = tabs,
+                )
+            }
             if (actionError != null) {
                 item(key = "action-error") { Notice(actionError.resolve()) }
             }
@@ -142,23 +151,6 @@ fun HazardQueueScreen(
             }
         }
         if (onBack != null) BackButton(onBack)
-    }
-}
-
-@Composable
-private fun Title(pending: Boolean) {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 6.dp)) {
-        Text(
-            stringResource(if (pending) Res.string.staff_pending_title else Res.string.staff_queue_title),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            stringResource(if (pending) Res.string.staff_pending_intro else Res.string.staff_queue_intro),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
     }
 }
 

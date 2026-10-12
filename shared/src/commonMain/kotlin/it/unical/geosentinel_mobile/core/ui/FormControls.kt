@@ -191,6 +191,8 @@ fun FormErrorBanner(message: String?) {
 // - in alto la testata con il paesaggio (sotto la barra di stato) e il tondo Indietro (su iPhone non c'è quello di sistema);
 // - al centro titolo, testo e campi, che scorrono;
 // - in fondo, fissa, l'azione principale con il link alternativo sotto: sempre visibile e a portata di pollice.
+//   [error] (la risposta del server all'invio) sta lì, sopra il pulsante: dove si è appena toccato. In mezzo ai campi,
+//   sotto una mappa, non si vedeva e si continuava a premere senza sapere perché.
 //   Con la tastiera aperta sale sopra la tastiera: lo Scaffold di App applica safeDrawing, che comprende WindowInsets.ime.
 // Contenuto largo al massimo 480 dp.
 @Composable
@@ -198,6 +200,7 @@ internal fun FormScaffold(
     onBack: () -> Unit,
     title: StringResource,
     body: StringResource,
+    error: String? = null,
     actions: @Composable ColumnScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
@@ -207,7 +210,7 @@ internal fun FormScaffold(
                 modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                ForestHeader(Modifier.fillMaxWidth().height(200.dp))
+                ForestHeader(Modifier.fillMaxWidth().height(160.dp))
                 Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp)) {
                     Text(stringResource(title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Spacer(Modifier.size(8.dp))
@@ -221,8 +224,11 @@ internal fun FormScaffold(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
             Column(
                 Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
-                content = actions,
-            )
+            ) {
+                FormErrorBanner(error)
+                if (error != null) Spacer(Modifier.size(12.dp))
+                actions()
+            }
         }
         BackButton(onBack, Modifier.align(Alignment.TopStart))
     }

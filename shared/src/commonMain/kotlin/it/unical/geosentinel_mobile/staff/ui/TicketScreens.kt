@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -108,6 +109,11 @@ import it.unical.geosentinel_mobile.api.model.UpdateTicketRequest
 import it.unical.geosentinel_mobile.api.model.UpdateTicketStatusRequest
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.groupedItem
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.core.ui.pageBottomInset
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
@@ -139,7 +145,7 @@ fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Un
 private fun ManagementTabs(tickets: Boolean, onSelect: (Boolean) -> Unit) {
     val labels = listOf(Res.string.staff_tab_hazards, Res.string.staff_tab_tickets)
     SingleChoiceSegmentedButtonRow(
-        Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp),
+        Modifier.fillMaxWidth(),
     ) {
         labels.forEachIndexed { index, label ->
             SegmentedButton(
@@ -172,22 +178,15 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
 
     LazyColumn(
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-        contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
+        contentPadding = PaddingValues(bottom = 24.dp + pageBottomInset()),
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
     ) {
-        item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-        item(key = "tabs") { tabs() }
-        item(key = "title") {
-            Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-                Text(stringResource(Res.string.ticket_list_title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-                Text(
-                    stringResource(Res.string.ticket_list_intro),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp),
-                )
-            }
+        item(key = "header") {
+            PageHeader(
+                title = stringResource(Res.string.ticket_list_title),
+                intro = stringResource(Res.string.ticket_list_intro),
+                below = tabs,
+            )
         }
         item(key = "filters") { Filters(state, viewModel) }
         when {
@@ -200,7 +199,9 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
             state.tickets.isEmpty() -> item(key = "empty") {
                 Message(title = stringResource(Res.string.ticket_list_empty_title), text = stringResource(Res.string.ticket_list_empty_body))
             }
-            else -> items(state.tickets, key = { it.id }) { ticket -> TicketRow(ticket) { onOpenTicket(ticket.id) } }
+            else -> itemsIndexed(state.tickets, key = { _, ticket -> ticket.id }) { index, ticket ->
+                TicketRow(ticket, first = index == 0, last = index == state.tickets.lastIndex) { onOpenTicket(ticket.id) }
+            }
         }
     }
 }
@@ -208,7 +209,7 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
 // Due righe di filtri che scorrono in orizzontale: stato (con "Solo i miei") e priorità
 @Composable
 private fun Filters(state: TicketListUiState, viewModel: TicketListViewModel) {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth()) {
+    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(top = 4.dp, bottom = 12.dp)) {
         Row(
             Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -241,16 +242,21 @@ private fun Filters(state: TicketListUiState, viewModel: TicketListViewModel) {
 
 // Un ticket: titolo e stato, poi priorità, luogo e data
 @Composable
-private fun TicketRow(ticket: TicketResponse, onClick: () -> Unit) {
+private fun TicketRow(ticket: TicketResponse, first: Boolean, last: Boolean, onClick: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    // una riga del gruppo dei ticket (prima una card per ticket)
+    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
+        if (!first) GroupDivider()
+        TicketRowContent(ticket, onClick)
+    }
+}
+
+@Composable
+private fun TicketRowContent(ticket: TicketResponse, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     Column(
         modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(CardShape)
-            .background(colors.surfaceContainerLowest)
-            .border(1.dp, colors.outlineVariant, CardShape)
             .clickable(role = Role.Button, onClick = onClick)
             .padding(16.dp),
     ) {
@@ -294,7 +300,7 @@ fun TicketDetailScreen(ticketId: String, onBack: () -> Unit, onOpenTrail: (Strin
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ForestHeader(Modifier.fillMaxWidth().height(200.dp))
+            ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight))
             when {
                 ticket == null && loadError != null -> Message(text = loadError.resolve(), isError = true) {
                     PrimaryPillButton(stringResource(Res.string.trail_retry), onClick = viewModel::reload)
@@ -439,6 +445,7 @@ fun TicketCreateScreen(trailId: String, onBack: () -> Unit, onCreated: () -> Uni
         onBack = onBack,
         title = Res.string.ticket_create_title,
         body = Res.string.ticket_create_body,
+        error = state.error?.resolve(),
         actions = {
             PrimaryPillButton(stringResource(Res.string.ticket_create_save), onClick = viewModel::save, enabled = state.canSave, loading = state.busy)
         },
@@ -452,7 +459,6 @@ fun TicketCreateScreen(trailId: String, onBack: () -> Unit, onCreated: () -> Uni
         Field(title = Res.string.ticket_field_priority, error = null) {
             Choices(CreatePriorities, selected = state.priority, label = { priorityLabel(it.value) }, onSelect = viewModel::onPriorityChange)
         }
-        FormErrorBanner(state.error?.resolve())
     }
 }
 

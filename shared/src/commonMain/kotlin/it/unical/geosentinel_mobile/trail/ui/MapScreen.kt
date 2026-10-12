@@ -81,6 +81,7 @@ import androidx.compose.ui.semantics.liveRegion
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -242,6 +243,9 @@ private enum class LocationGoal { Center, NearMe, Nearby, NearbyHazards }
 // Le due schede del foglio "Vicino a te"
 private enum class NearTab(val label: StringResource) { Trails(Res.string.near_me_trails), Hazards(Res.string.near_me_hazards) }
 
+// Spazio sotto i controlli per il pulsante SOS (72 dp) e il suo margine
+private val SosClearance = 104.dp
+
 // Il tocco su "Pericoli vicini" porta almeno a questo zoom: il triangolo si vede in mezzo ai sentieri
 private const val HazardZoom = 15.0
 
@@ -249,6 +253,7 @@ private const val HazardZoom = 15.0
  * [showHazards]: pericoli sulla mappa e "Pericoli vicini", solo da loggati (M4.4). Al logout spariscono.
  * [onOpenRefuge]: i rifugi sulla mappa (M5.1), null per l'ospite (le rotte dei rifugi richiedono il login).
  * [onOpenAlert]: le allerte SOS aperte (M7.2), solo per gli operatori; null per tutti gli altri.
+ * [bottomBar]: quanto occupa la barra in basso, che galleggia sopra la mappa: la mappa ci passa sotto, i controlli no.
  */
 @Composable
 fun MapScreen(
@@ -259,6 +264,7 @@ fun MapScreen(
     onCreatePoi: ((center: GeoPoint, zoom: Double) -> Unit)?,
     onOpenRefuge: ((String) -> Unit)?,
     onOpenAlert: ((String) -> Unit)?,
+    bottomBar: Dp = 0.dp,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
@@ -436,11 +442,11 @@ fun MapScreen(
     Box(Modifier.fillMaxSize()) {
         MaplibreMap(
             state = mapState,
-            // la mappa arriva sotto la barra di stato; scala, bussola e attribuzione restano visibili,
-            // e in basso lasciano spazio al pulsante SOS
+            // la mappa arriva sotto la barra di stato e sotto la barra in basso; scala, bussola e attribuzione restano
+            // visibili sopra la barra e sopra il pulsante SOS
             viewportInsets = PaddingValues(
                 top = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding(),
-                bottom = 96.dp,
+                bottom = bottomBar + 96.dp,
             ),
             // Overlay di default di MapLibre senza il logo (la licenza BSD non lo richiede), stesso posizionamento.
             // L'attribuzione (la "i") resta: OpenStreetMap (ODbL) e OpenFreeMap la chiedono visibile sulla mappa.
@@ -501,22 +507,21 @@ fun MapScreen(
                 MapPill(status, onClick = onRetry)
             }
         }
-        // Controlli grandi a destra, a metà altezza: lontani dall'SOS (in basso) e raggiungibili col pollice
+        // Controlli grandi a destra, a metà dello spazio libero: sopra l'SOS e la barra in basso, raggiungibili col pollice.
+        // Tre gruppi: la vista (tipo, zoom), la posizione (dove sono, vicino a te), le azioni (segnala, nuovo punto)
         Column(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End))
-                .padding(end = 16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Top))
+                .padding(end = 16.dp, top = 56.dp, bottom = bottomBar + SosClearance),
+            verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             MapButton(Res.string.map_type_button, Glyph.Layers) { choosingType = true }
-            Spacer(Modifier.size(4.dp))
-            MapButton(Res.string.map_zoom_in, Glyph.Plus) {
-                scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom + 1)) }
-            }
-            MapButton(Res.string.map_zoom_out, Glyph.Minus) {
-                scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom - 1)) }
-            }
+            MapZoomButtons(
+                onZoomIn = { scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom + 1)) } },
+                onZoomOut = { scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom - 1)) } },
+            )
+            Spacer(Modifier.size(6.dp))
             MapButton(Res.string.map_my_location, Glyph.Locate) {
                 withLocation(LocationGoal.Center) { centerOnFix = true }
             }
@@ -524,8 +529,8 @@ fun MapScreen(
             MapButton(Res.string.near_me_button, Glyph.NearMe) { withLocation(LocationGoal.NearMe, ::openNearMe) }
             // solo da loggati (null per l'ospite): il form parte dal punto che si sta guardando
             if (onReportHazard != null) {
-                Spacer(Modifier.size(4.dp))
-                MapButton(Res.string.report_open, Glyph.Hazard) {
+                Spacer(Modifier.size(6.dp))
+                MapButton(Res.string.report_open, Glyph.Hazard, emphasized = true) {
                     onReportHazard(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
                 }
             }
@@ -543,8 +548,8 @@ fun MapScreen(
                 onClose = { selectedPoiId = null },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
-                    .padding(start = 16.dp, end = 136.dp, bottom = 16.dp),
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+                    .padding(start = 16.dp, end = 136.dp, bottom = bottomBar + 16.dp),
             )
         }
         // Pericolo toccato (o scelto da "Pericoli vicini"): stessa posizione della card dei POI, mai insieme
@@ -555,8 +560,8 @@ fun MapScreen(
                 onClose = hazardViewModel::clearSelection,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start + WindowInsetsSides.Bottom))
-                    .padding(start = 16.dp, end = 136.dp, bottom = 16.dp),
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+                    .padding(start = 16.dp, end = 136.dp, bottom = bottomBar + 16.dp),
             )
         }
     }

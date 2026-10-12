@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -68,6 +69,10 @@ import it.unical.geosentinel_mobile.api.model.HazardResponse
 import it.unical.geosentinel_mobile.media.ui.HazardPhotoStrip
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.core.ui.groupedItem
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.trail.ui.color
@@ -114,12 +119,12 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
             LazyColumn(
                 state = listState,
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(10.dp),
                 contentPadding = PaddingValues(bottom = 24.dp + WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()),
                 modifier = Modifier.fillMaxSize(),
             ) {
-                item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
-                item(key = "title") { Title() }
+                item(key = "header") {
+                    PageHeader(title = stringResource(Res.string.my_hazards_title), intro = stringResource(Res.string.my_hazards_intro))
+                }
                 when {
                     state.items.isEmpty() && state.loading -> item(key = "loading") { CenteredProgress() }
                     state.items.isEmpty() && state.error != null -> item(key = "error") {
@@ -133,7 +138,10 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
                         }
                     }
                     else -> {
-                        items(state.items, key = { it.id }) { hazard -> HazardCard(hazard, onOpenTrail) }
+                        item(key = "group-gap") { Spacer(Modifier.height(8.dp)) }
+                        itemsIndexed(state.items, key = { _, hazard -> hazard.id }) { index, hazard ->
+                            HazardCard(hazard, onOpenTrail, first = index == 0, last = index == state.items.lastIndex)
+                        }
                         when {
                             state.loadingMore -> item(key = "more") { CenteredProgress(small = true) }
                             // errore sulla pagina dopo: le righe già caricate restano, sotto il motivo e "Riprova"
@@ -147,39 +155,26 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
     }
 }
 
-@Composable
-private fun Title() {
-    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 6.dp)) {
-        Text(
-            stringResource(Res.string.my_hazards_title),
-            style = MaterialTheme.typography.headlineLarge,
-            modifier = Modifier.semantics { heading() },
-        )
-        Text(
-            stringResource(Res.string.my_hazards_intro),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 8.dp),
-        )
-    }
-}
-
 // Una segnalazione: icona nel colore della gravità (il rosso solo per CRITICAL), tipo e stato in alto, gravità e data
 // sotto, l'inizio della descrizione. Con un sentiero tutta la card lo apre (freccia a destra).
 @Composable
-private fun HazardCard(hazard: HazardResponse, onOpenTrail: (String) -> Unit) {
+private fun HazardCard(hazard: HazardResponse, onOpenTrail: (String) -> Unit, first: Boolean, last: Boolean) {
+    // una riga del gruppo delle segnalazioni (prima una card per segnalazione)
+    Column(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
+        if (!first) GroupDivider(54.dp)
+        HazardRowContent(hazard, onOpenTrail)
+    }
+}
+
+@Composable
+private fun HazardRowContent(hazard: HazardResponse, onOpenTrail: (String) -> Unit) {
     val trailId = hazard.trailId
     val openLabel = stringResource(Res.string.my_hazards_open_trail)
     val colors = MaterialTheme.colorScheme
     Row(
         verticalAlignment = Alignment.Top,
         modifier = Modifier
-            .widthIn(max = ContentMaxWidth)
             .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(CardShape)
-            .background(colors.surfaceContainerLowest)
-            .border(1.dp, colors.outlineVariant, CardShape)
             .then(if (trailId != null) Modifier.clickable(onClickLabel = openLabel, role = Role.Button) { onOpenTrail(trailId) } else Modifier)
             .padding(16.dp)
             .semantics(mergeDescendants = true) { },

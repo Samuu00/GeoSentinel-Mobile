@@ -39,7 +39,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -65,6 +65,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import geosentinel_mobile.shared.generated.resources.Res
@@ -83,7 +84,6 @@ import geosentinel_mobile.shared.generated.resources.refuge_beds
 import geosentinel_mobile.shared.generated.resources.refuge_call
 import geosentinel_mobile.shared.generated.resources.refuge_directions
 import geosentinel_mobile.shared.generated.resources.refuge_free_beds
-import geosentinel_mobile.shared.generated.resources.refuge_free_short
 import geosentinel_mobile.shared.generated.resources.refuge_full
 import geosentinel_mobile.shared.generated.resources.refuge_nights_hint
 import geosentinel_mobile.shared.generated.resources.refuge_nights_title
@@ -107,6 +107,7 @@ import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.core.ui.directionsUri
@@ -146,6 +147,7 @@ private const val HeroZoom = 12.5
  * Dettaglio di un rifugio (M5.1, rinnovato il 10/10): in testata le foto del rifugio (la mappa se non ce ne sono), poi
  * nome con quota e posti, la stagione, la descrizione, la disponibilità delle prossime 14 notti come striscia di giorni,
  * i servizi, i sentieri che passano vicino e i contatti (chiamata e indicazioni). "Prenota" (M5.2) sta in fondo, fisso.
+ * [manage] sono le azioni del gestore (M8.3), sotto il titolo; App le passa solo a chi può gestire il rifugio.
  */
 @Composable
 fun RefugeDetailScreen(
@@ -153,9 +155,15 @@ fun RefugeDetailScreen(
     onBack: () -> Unit,
     onBook: (refugeId: String, name: String, capacity: Int) -> Unit,
     onOpenTrail: (String) -> Unit,
+    manage: @Composable (RefugeResponse) -> Unit = {},
 ) {
     val viewModel = koinViewModel<RefugeDetailViewModel> { parametersOf(refugeId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
+    // tornando dal form dei posti (M8.3) posti e disponibilità si rileggono
+    LifecycleResumeEffect(viewModel) {
+        viewModel.refresh()
+        onPauseOrDispose { }
+    }
     val bottomInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()
     val loaded = state.refuge as? Section.Loaded
 
@@ -168,17 +176,22 @@ fun RefugeDetailScreen(
         ) {
             when (val refuge = state.refuge) {
                 Section.Loading, Section.Hidden -> {
-                    item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
+                    item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight)) }
                     item(key = "loading") { CenteredProgress() }
                 }
                 is Section.Failed -> {
-                    item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(200.dp)) }
+                    item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight)) }
                     item(key = "error") { RetryMessage(refuge.message, onRetry = viewModel::retry) }
                 }
                 is Section.Loaded -> {
                     val value = refuge.value
                     item(key = "hero") { if (state.photos.isEmpty()) RefugeHero(value) else RefugeGallery(state.photos) }
                     item(key = "title") { Title(value, state.nights) }
+                    // le azioni del luogo subito sotto il titolo, a metà schermo (prima in fondo alla pagina)
+                    item(key = "contacts") { Contacts(value) }
+                    item(key = "manage") {
+                        Box(Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) { manage(value) }
+                    }
                     value.description?.let { description ->
                         item(key = "description") { Paragraph(description) }
                     }
@@ -199,7 +212,6 @@ fun RefugeDetailScreen(
                         item(key = "trails-title") { SectionTitle(Res.string.refuge_trails_title) }
                         item(key = "trails") { NearbyTrails(state.nearbyTrails, onOpenTrail) }
                     }
-                    item(key = "contacts") { Contacts(value) }
                 }
             }
         }
@@ -304,7 +316,7 @@ private fun RefugeHero(refuge: RefugeResponse) {
                 )
                 // sopra la sfumatura, sul bordo in basso a destra (ha il suo fondo): in alto coprirebbe Indietro, al
                 // centro il rifugio
-                AttributionButton(mapState, Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp, end = 8.dp), alignEnd = true)
+                AttributionButton(mapState, Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp, end = 8.dp), alignEnd = true, startExpanded = false)
             },
         )
     }
@@ -408,7 +420,7 @@ private fun NightCard(night: NightAvailability, tonight: Boolean) {
             .clip(shape)
             .background(container)
             .border(1.dp, if (tonight) Color.Transparent else colors.outlineVariant, shape)
-            .padding(horizontal = 12.dp, vertical = 14.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
             .clearAndSetSemantics { contentDescription = "$dayLabel, $bedsLabel" },
     ) {
         Text(
@@ -431,11 +443,6 @@ private fun NightCard(night: NightAvailability, tonight: Boolean) {
                 style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.SemiBold,
                 color = if (tonight) content else colors.primary,
-            )
-            Text(
-                pluralStringResource(Res.plurals.refuge_free_short, night.freeBeds),
-                style = MaterialTheme.typography.labelMedium,
-                color = if (tonight) content else colors.onSurfaceVariant,
             )
         }
     }
@@ -496,7 +503,7 @@ private fun Contacts(refuge: RefugeResponse) {
     val uriHandler = LocalUriHandler.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 28.dp),
+        modifier = Modifier.widthIn(max = ContentMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 18.dp),
     ) {
         refuge.phone?.let { phone ->
             ContactButton(Icons.Filled.Call, stringResource(Res.string.refuge_call), Modifier.weight(1f)) { dial(phone) }
@@ -509,7 +516,8 @@ private fun Contacts(refuge: RefugeResponse) {
 
 @Composable
 private fun ContactButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    OutlinedButton(onClick = onClick, modifier = modifier.heightIn(min = 52.dp)) {
+    // tonali: si vedono come pulsanti al primo sguardo, ma "Prenota" resta l'unica azione piena della pagina
+    FilledTonalButton(onClick = onClick, modifier = modifier.heightIn(min = 52.dp)) {
         // decorativa: l'azione è scritta accanto
         Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
         Spacer(Modifier.width(8.dp))

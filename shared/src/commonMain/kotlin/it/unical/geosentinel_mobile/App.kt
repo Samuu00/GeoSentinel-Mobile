@@ -40,6 +40,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -83,6 +84,7 @@ import it.unical.geosentinel_mobile.core.push.RequestNotificationPermission
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
+import it.unical.geosentinel_mobile.core.ui.LocalBottomBarInset
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItems
 import it.unical.geosentinel_mobile.core.ui.navigation.NoBottomBarRoutes
@@ -110,6 +112,14 @@ import it.unical.geosentinel_mobile.staff.ui.ManagementScreen
 import it.unical.geosentinel_mobile.staff.ui.TicketCreateScreen
 import it.unical.geosentinel_mobile.staff.ui.TicketDetailScreen
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateScreen
+import it.unical.geosentinel_mobile.staff.ui.ManageLink
+import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityScreen
+import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateScreen
+import it.unical.geosentinel_mobile.trail.ui.DefaultArea
+import it.unical.geosentinel_mobile.trail.ui.MapControlElevation
+import it.unical.geosentinel_mobile.trail.ui.mapControlBorder
+import it.unical.geosentinel_mobile.trail.ui.mapControlColor
+import geosentinel_mobile.shared.generated.resources.staff_capacity_edit
 import it.unical.geosentinel_mobile.staff.ui.TrailManagementSection
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.sos.data.SosState
@@ -125,6 +135,8 @@ private const val PushMillis = 320
 private const val PopMillis = 240
 // Dal dettaglio di un sentiero la mappa della segnalazione parte dall'inizio del percorso, da vicino
 private const val ReportFromTrailZoom = 15.0
+// La base di una squadra nuova (M8.3): il parco intero, da cui si avvicina il punto
+private const val TeamBaseZoom = 10.0
 
 @Composable
 fun App() {
@@ -261,6 +273,12 @@ fun App() {
                 }
             },
         ) { innerPadding ->
+            // Il contenuto passa sotto la barra in basso, che galleggia come un'isola (§2): niente margine sotto. La
+            // mappa sposta da sola i suoi controlli, le altre schede aggiungono LocalBottomBarInset in fondo.
+            val bottomBar = innerPadding.calculateBottomPadding()
+            // solo le schede: le schermate spinte con la barra visibile (SOS) si fermano sopra la barra come prima
+            val barShown = BottomNavItems.any { item -> destination?.hasRoute(item.route::class) == true }
+            CompositionLocalProvider(LocalBottomBarInset provides if (barShown) bottomBar else 0.dp) {
             NavHost(
                 navController = navController,
                 startDestination = Route.Map,
@@ -269,7 +287,7 @@ fun App() {
                 modifier = Modifier.padding(
                     start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                     end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                    bottom = innerPadding.calculateBottomPadding(),
+                    bottom = if (barShown) 0.dp else bottomBar,
                 ),
                 // cambio di scheda: dissolvenza breve, niente movimento
                 enterTransition = { fadeIn(tween(150)) },
@@ -313,6 +331,7 @@ fun App() {
                         },
                         // le allerte aperte solo per chi vede la scheda Allerte (M7.2): il tocco apre il dettaglio
                         onOpenAlert = if (role.canViewAlerts()) openAlert else null,
+                        bottomBar = bottomBar,
                     )
                 }
                 composable<Route.TrailDetail>(
@@ -407,6 +426,34 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         onBook = { id, name, capacity -> navController.navigate(Route.BookRefuge(id, name, capacity)) { launchSingleTop = true } },
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
+                        // posti letto (M8.3): il gestore di questo rifugio o un ADMIN; il server risponde comunque 403 agli altri
+                        manage = { refuge ->
+                            val userId = (sessionState as? SessionState.LoggedIn)?.profile?.id
+                            if (role == UserRole.ADMIN || (role.canManagePark() && refuge.managerId == userId)) {
+                                ManageLink(stringResource(Res.string.staff_capacity_edit)) {
+                                    navController.navigate(Route.RefugeCapacity(refuge.id, refuge.capacity)) { launchSingleTop = true }
+                                }
+                            }
+                        },
+                    )
+                }
+                composable<Route.RefugeCapacity>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.RefugeCapacity>()
+                    RefugeCapacityScreen(route.refugeId, route.capacity, onBack = { navController.popBackStack() })
+                }
+                composable<Route.RescueTeamCreate>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.RescueTeamCreate>()
+                    RescueTeamCreateScreen(
+                        GeoPoint(route.lat, route.lon),
+                        route.zoom,
+                        onBack = { navController.popBackStack() },
+                        onCreated = { navController.popBackStack() },
                     )
                 }
                 composable<Route.BookRefuge>(
@@ -423,7 +470,15 @@ fun App() {
                     MyBookingsScreen(onBack = { navController.popBackStack() })
                 }
                 composable<Route.Alerts> {
-                    RescueAlertsListScreen(onOpenAlert = { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } })
+                    RescueAlertsListScreen(
+                        onOpenAlert = { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } },
+                        // nuova squadra (M8.3) solo per ADMIN: la base parte dal centro del parco
+                        onCreateTeam = if (role == UserRole.ADMIN) {
+                            { navController.navigate(Route.RescueTeamCreate(DefaultArea.lat, DefaultArea.lon, TeamBaseZoom)) { launchSingleTop = true } }
+                        } else {
+                            null
+                        },
+                    )
                 }
                 composable<Route.AlertDetail>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
@@ -519,6 +574,7 @@ fun App() {
                     SosScreen(onBack = { navController.popBackStack() }, onLogin = { navController.navigate(Route.Login) })
                 }
             }
+            }
         }
     }
 }
@@ -538,10 +594,11 @@ private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Ro
         Surface(
             // in orizzontale e sui tablet non si allunga da bordo a bordo
             modifier = Modifier.widthIn(max = 560.dp),
-            shape = MaterialTheme.shapes.large,
-            color = MaterialTheme.colorScheme.surfaceContainer,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-            shadowElevation = 3.dp,
+            // un'isola sopra il contenuto: stessi toni e anello dei controlli della mappa, che le passa sotto
+            shape = CircleShape,
+            color = mapControlColor(),
+            border = mapControlBorder(),
+            shadowElevation = MapControlElevation,
         ) {
             // voci centrate in altezza: con l'allineamento di default (in alto) la pillola toccava il bordo
             Row(

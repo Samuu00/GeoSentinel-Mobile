@@ -11,6 +11,12 @@ import it.unical.geosentinel_mobile.api.model.PoiResponse
 import it.unical.geosentinel_mobile.api.model.TrailDetailResponse
 import it.unical.geosentinel_mobile.api.model.UpdateHazardStatusRequest
 import it.unical.geosentinel_mobile.api.model.UpdateTrailStatusRequest
+import it.unical.geosentinel_mobile.api.RefugesApi
+import it.unical.geosentinel_mobile.api.RescueTeamsApi
+import it.unical.geosentinel_mobile.api.model.CreateRescueTeamRequest
+import it.unical.geosentinel_mobile.api.model.RefugeResponse
+import it.unical.geosentinel_mobile.api.model.RescueTeamResponse
+import it.unical.geosentinel_mobile.api.model.UpdateCapacityRequest
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.network.apiCall
 
@@ -24,6 +30,8 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
     private val hazardsApi by lazy { HazardReportsApi(apiBaseUrl, client) }
     private val trailsApi by lazy { TrailsApi(apiBaseUrl, client) }
     private val poisApi by lazy { PointsOfInterestApi(apiBaseUrl, client) }
+    private val refugesApi by lazy { RefugesApi(apiBaseUrl, client) }
+    private val teamsApi by lazy { RescueTeamsApi(apiBaseUrl, client) }
 
     suspend fun changeHazardStatus(hazardId: String, status: UpdateHazardStatusRequest.Status): Result<HazardResponse> =
         apiCall { hazardsApi.changeHazardStatus(hazardId, UpdateHazardStatusRequest(status = status)) }
@@ -42,4 +50,23 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
                 ),
             )
         }
+
+    suspend fun updateRefugeCapacity(refugeId: String, capacity: Int): Result<RefugeResponse> =
+        apiCall { refugesApi.updateRefugeCapacity(refugeId, UpdateCapacityRequest(capacity = capacity)) }
+
+    suspend fun createRescueTeam(
+        name: String,
+        callSign: String,
+        contactNumber: String,
+        baseLocation: GeoPoint
+    ): Result<RescueTeamResponse> = apiCall {
+        teamsApi.createRescueTeam(
+            CreateRescueTeamRequest(
+                baseLocation = GeoPointDto(lat = baseLocation.lat, lon = baseLocation.lon),
+                callSign = callSign,
+                contactNumber = contactNumber,
+                name = name,
+            ),
+        )
+    }
 }

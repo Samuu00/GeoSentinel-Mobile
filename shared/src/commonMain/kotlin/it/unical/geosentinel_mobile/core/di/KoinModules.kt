@@ -44,6 +44,8 @@ import it.unical.geosentinel_mobile.staff.data.StaffRepository
 import it.unical.geosentinel_mobile.staff.data.TicketRepository
 import it.unical.geosentinel_mobile.staff.ui.HazardQueueViewModel
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateViewModel
+import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityViewModel
+import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.TicketCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.TicketDetailViewModel
 import it.unical.geosentinel_mobile.staff.ui.TicketListViewModel
@@ -187,6 +189,9 @@ fun coreModule(
     viewModel { TicketListViewModel(get(), get()) }
     viewModel { (ticketId: String) -> TicketDetailViewModel(ticketId, get(), get()) }
     viewModel { (trailId: String) -> TicketCreateViewModel(trailId, get()) }
+    // rifugi e squadre (M8.3); id e posti del rifugio dalla rotta
+    viewModel { (refugeId: String, capacity: Int) -> RefugeCapacityViewModel(refugeId, capacity, get()) }
+    viewModel { RescueTeamCreateViewModel(get()) }
 }
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su
