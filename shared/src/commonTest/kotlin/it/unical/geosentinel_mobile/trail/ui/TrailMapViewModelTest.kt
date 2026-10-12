@@ -104,8 +104,8 @@ class TrailMapViewModelTest {
     }
 
     @Test
-    fun `con 200 sentieri l'area non è completa e si avvisa`() = runTest {
-        catalog.trails = (1..200).map { trailJson(id = "t$it") }
+    fun `con il massimo dei sentieri l'area non è completa e si avvisa`() = runTest {
+        catalog.trails = (1..TrailRepository.MAX_BBOX_RESULTS).map { trailJson(id = "t$it") }
         val viewModel = viewModel()
         viewModel.onCameraIdle(sila, zoom = 10.0)
         advanceUntilIdle()
@@ -150,8 +150,8 @@ class TrailMapViewModelTest {
     @Test
     fun `i POI si chiedono solo da vicino`() = runTest {
         val viewModel = viewModel()
-        // sotto la soglia dei POI (10) ma sopra quella dei sentieri (8)
-        viewModel.onCameraIdle(sila, zoom = 9.0)
+        // sotto la soglia dei POI ma sopra quella dei sentieri
+        viewModel.onCameraIdle(sila, zoom = TrailMapViewModel.MinPoiZoom - 0.5)
         advanceUntilIdle()
         assertEquals(0, catalog.count("pois-nearby"))
 
@@ -216,14 +216,16 @@ class TrailMapViewModelTest {
     }
 
     @Test
-    fun `da lontano non si disegna tutta la cache`() = runTest {
+    fun `da lontano restano quelli in cache e non si chiede al server`() = runTest {
         val viewModel = viewModel()
         viewModel.onCameraIdle(sila, zoom = 10.0)
         advanceUntilIdle()
         assertEquals(1, viewModel.state.value.trails.size)
 
-        viewModel.onCameraIdle(GeoBounds.of(6.0, 36.0, 19.0, 47.0), zoom = 5.0)
+        // sotto la soglia li nasconde la mappa, in dissolvenza (TrailMapLayers): la lista resta, la rete no
+        viewModel.onCameraIdle(GeoBounds.of(6.0, 36.0, 19.0, 47.0), zoom = TrailMapViewModel.MinTrailZoom - 2)
         advanceUntilIdle()
-        assertTrue(viewModel.state.value.trails.isEmpty())
+        assertEquals(1, viewModel.state.value.trails.size)
+        assertEquals(1, catalog.count("bbox"))
     }
 }

@@ -294,7 +294,7 @@ class RefugeViewModelsTest {
         val viewModel = RefugeMapViewModel(repository())
         viewModel.setEnabled(true)
 
-        viewModel.onCameraIdle(GeoBounds.of(15.0, 38.0, 18.0, 41.0), zoom = 7.0)
+        viewModel.onCameraIdle(GeoBounds.of(15.0, 38.0, 18.0, 41.0), zoom = RefugeMapViewModel.MinZoom - 1)
         advanceUntilIdle()
 
         assertTrue(calls.isEmpty())

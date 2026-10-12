@@ -140,12 +140,13 @@ class TrailRepositoryTest {
     }
 
     @Test
-    fun `con 200 sentieri la cache non si svuota`() = runTest {
+    fun `con il massimo dei sentieri la cache non si svuota`() = runTest {
         val repository = repository()
         dao.upsertSummaries(listOf(summary("fuori-dalla-risposta")))
-        catalog.trails = (1..200).map { trailJson(id = "t$it") }
+        val max = TrailRepository.MAX_BBOX_RESULTS
+        catalog.trails = (1..max).map { trailJson(id = "t$it") }
 
-        assertEquals(200, repository.refreshInBounds(sila).getOrThrow())
+        assertEquals(max, repository.refreshInBounds(sila).getOrThrow())
 
         val ids = repository.observeInBounds(sila).first().map { it.id }
         assertTrue("fuori-dalla-risposta" in ids, "con una risposta parziale non si cancella niente")

@@ -17,6 +17,9 @@ val generateApiClient = tasks.named<GenerateTask>("openApiGenerate") {
     library.set("multiplatform")
     // URI file:/// e non il percorso: su Windows "C:\..." viene letto come un URI non valido
     inputSpec.set(rootProject.layout.projectDirectory.file("api/openapi.json").asFile.toURI().toString())
+    // come stringa URI il contratto non è un input che Gradle controlla: senza questa riga, dopo un cambio di
+    // api/openapi.json il task restava "aggiornato" e il client non si rigenerava (successo con MediaResponse.credit)
+    inputs.file(rootProject.layout.projectDirectory.file("api/openapi.json"))
     outputDir.set(generatedDir.get().asFile.path)
     packageName.set("it.unical.geosentinel_mobile.api")
     apiPackage.set("it.unical.geosentinel_mobile.api")

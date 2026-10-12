@@ -293,6 +293,7 @@
     <string name="refuge_full">Pieno</string>
     <string name="refuge_altitude">%1$d m</string>
     <string name="refuge_photo_count">%1$d/%2$d</string>
+    <string name="photo_credit">Crediti della foto</string>
     <string name="refuge_amenities_title">Servizi</string>
     <string name="refuge_amenity_drinking_water">Acqua potabile</string>
     <string name="refuge_amenity_restaurant">Ristoro</string>

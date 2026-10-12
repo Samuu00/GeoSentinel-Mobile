@@ -115,6 +115,7 @@ import it.unical.geosentinel_mobile.core.ui.directionsUri
 import it.unical.geosentinel_mobile.core.ui.rememberDialer
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.media.data.MediaRepository
+import it.unical.geosentinel_mobile.media.ui.PhotoCredit
 import it.unical.geosentinel_mobile.media.ui.PhotoViewer
 import it.unical.geosentinel_mobile.media.ui.photoRequest
 import it.unical.geosentinel_mobile.media.ui.rememberSignedUrl
@@ -273,6 +274,8 @@ private fun RefugeGallery(photos: List<MediaResponse>) {
                 .height(72.dp)
                 .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background))),
         )
+        // autore e licenza della foto mostrata (solo per le foto importate)
+        PhotoCredit(photos[pager.currentPage].credit, Modifier.align(Alignment.BottomStart).padding(4.dp))
         if (photos.size > 1) {
             Text(
                 stringResource(Res.string.refuge_photo_count, pager.currentPage + 1, photos.size),

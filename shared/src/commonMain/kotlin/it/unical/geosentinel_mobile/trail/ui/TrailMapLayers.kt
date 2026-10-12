@@ -9,11 +9,18 @@ import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.graphics.vector.path
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import it.unical.geosentinel_mobile.api.model.PoiResponse
@@ -29,15 +36,20 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.maplibre.compose.expressions.ast.Expression
 import org.maplibre.compose.expressions.dsl.case
 import org.maplibre.compose.expressions.dsl.const
+import org.maplibre.compose.expressions.dsl.exponential
 import org.maplibre.compose.expressions.dsl.feature
 import org.maplibre.compose.expressions.dsl.image
+import org.maplibre.compose.expressions.dsl.interpolate
+import org.maplibre.compose.expressions.dsl.linear
 import org.maplibre.compose.expressions.dsl.switch
+import org.maplibre.compose.expressions.dsl.zoom
+import org.maplibre.compose.expressions.value.FloatValue
 import org.maplibre.compose.expressions.value.LineCap
 import org.maplibre.compose.expressions.value.LineJoin
 import org.maplibre.compose.interaction.ClickResult
-import org.maplibre.compose.layers.CircleLayer
 import org.maplibre.compose.layers.FeaturesClickHandler
 import org.maplibre.compose.layers.LineLayer
 import org.maplibre.compose.layers.SymbolLayer
@@ -66,7 +78,7 @@ fun TrailLines(trails: List<TrailSummaryResponse>, casing: Color, unknownColor: 
     TrailState.entries.forEach { state ->
         val features = remember(byState, state) { byState[state].orEmpty().mapNotNull { it.toFeature() } }
         val source = rememberGeoJsonSource(GeoJsonData.Features(FeatureCollection(features)))
-        PathLayers("sentieri-${state.name.lowercase()}", source, state.lineColor(unknownColor), casing, state == TrailState.CLOSED, onClick)
+        PathLayers("sentieri-${state.name.lowercase()}", source, state.lineColor(unknownColor), casing, state == TrailState.CLOSED, onClick, TrailMapViewModel.MinTrailZoom)
     }
 }
 
@@ -86,22 +98,41 @@ private fun TrailState.lineColor(unknown: Color): Color = when (this) {
     TrailState.UNKNOWN -> unknown
 }
 
+// Spessore che cresce con lo zoom: da lontano linee sottili, così i sentieri vicini restano distinti (prima 4 dp sempre)
+private val LineWidth = interpolate(exponential(1.4f), zoom(), 7 to const(1.dp), 11 to const(2.dp), 14 to const(3.5.dp), 17 to const(5.dp))
+// Il bordo chiaro sotto la linea: sempre un po' più largo, per staccarla dalla mappa
+private val CasingWidth = interpolate(exponential(1.4f), zoom(), 7 to const(2.5.dp), 11 to const(3.5.dp), 14 to const(6.dp), 17 to const(8.dp))
+
+/**
+ * Comparsa graduale: un livello con `minZoom = from` è spento sotto [from] e da lì diventa pieno in [FadeZoom] livelli.
+ * Così sentieri e simboli compaiono e spariscono in dissolvenza mentre si zooma, non di colpo.
+ */
+internal fun fadeInFrom(from: Double): Expression<FloatValue> = interpolate(linear(), zoom(), from to const(0f), from + FadeZoom to const(1f))
+internal const val FadeZoom = 0.6
+
 @Composable
 @MaplibreComposable
-private fun PathLayers(id: String, source: GeoJsonSource, color: Color, casing: Color, dashed: Boolean, onClick: FeaturesClickHandler?) {
+private fun PathLayers(id: String, source: GeoJsonSource, color: Color, casing: Color, dashed: Boolean, onClick: FeaturesClickHandler?, minZoom: Double? = null) {
+    // senza soglia (dettaglio del sentiero) sempre pieno
+    val opacity = minZoom?.let(::fadeInFrom) ?: const(1f)
+    val from = minZoom?.toFloat() ?: 0f
     LineLayer(
         id = "$id-bordo",
         source = source,
+        minZoom = from,
         color = const(casing),
-        width = const(7.dp),
+        width = CasingWidth,
+        opacity = opacity,
         cap = const(LineCap.Round),
         join = const(LineJoin.Round),
     )
     LineLayer(
         id = id,
         source = source,
+        minZoom = from,
         color = const(color),
-        width = const(4.dp),
+        width = LineWidth,
+        opacity = opacity,
         cap = const(if (dashed) LineCap.Butt else LineCap.Round),
         join = const(LineJoin.Round),
         // trattini lunghi due volte lo spessore, spazi di una volta e mezza
@@ -129,43 +160,74 @@ fun PoiMarkers(pois: List<PoiResponse>, background: Color, outline: Color, symbo
     }
     val source = rememberGeoJsonSource(GeoJsonData.Features(FeatureCollection(features)))
     val onClick = remember(onPoiClick) { idClickHandler(onPoiClick) }
-    CircleLayer(
-        id = "poi-sfondo",
-        source = source,
-        color = const(background),
-        radius = const(14.dp),
-        strokeColor = const(outline),
-        strokeWidth = const(1.5.dp),
-        onClick = onClick,
-        hitPadding = 8.dp,
-    )
-    val size = DpSize(18.dp, 18.dp)
-    val shelter = rememberVectorPainter(Icons.Filled.Home)
-    val water = rememberVectorPainter(WaterDrop)
-    val viewpoint = rememberVectorPainter(Icons.Filled.Star)
-    val danger = rememberVectorPainter(Icons.Filled.Warning)
-    val equipment = rememberVectorPainter(Icons.Filled.Build)
-    val info = rememberVectorPainter(Icons.Filled.Info)
-    val other = rememberVectorPainter(Icons.Filled.Place)
+    val shelter = rememberBadge(Icons.Filled.Home, background, outline, symbol)
+    val water = rememberBadge(WaterDrop, background, outline, symbol)
+    val viewpoint = rememberBadge(Icons.Filled.Star, background, outline, symbol)
+    val danger = rememberBadge(Icons.Filled.Warning, background, outline, symbol)
+    val equipment = rememberBadge(Icons.Filled.Build, background, outline, symbol)
+    val info = rememberBadge(Icons.Filled.Info, background, outline, symbol)
+    val other = rememberBadge(Icons.Filled.Place, background, outline, symbol)
+    val from = TrailMapViewModel.MinPoiZoom
     SymbolLayer(
-        id = "poi-simbolo",
+        id = "poi",
         source = source,
-        // SDF: le icone si colorano qui con il colore del tema, qualunque sia quello del painter
+        minZoom = from.toFloat(),
         iconImage = switch(
             feature["type"],
-            case(PoiResponse.Type.SHELTER.value, image(shelter, size, drawAsSdf = true)),
-            case(PoiResponse.Type.WATER_SOURCE.value, image(water, size, drawAsSdf = true)),
-            case(PoiResponse.Type.VIEWPOINT.value, image(viewpoint, size, drawAsSdf = true)),
-            case(PoiResponse.Type.DANGER_ZONE.value, image(danger, size, drawAsSdf = true)),
-            case(PoiResponse.Type.EQUIPMENT_POINT.value, image(equipment, size, drawAsSdf = true)),
-            case(PoiResponse.Type.INFORMATION.value, image(info, size, drawAsSdf = true)),
-            fallback = image(other, size, drawAsSdf = true),
+            case(PoiResponse.Type.SHELTER.value, image(shelter, PoiBadge)),
+            case(PoiResponse.Type.WATER_SOURCE.value, image(water, PoiBadge)),
+            case(PoiResponse.Type.VIEWPOINT.value, image(viewpoint, PoiBadge)),
+            case(PoiResponse.Type.DANGER_ZONE.value, image(danger, PoiBadge)),
+            case(PoiResponse.Type.EQUIPMENT_POINT.value, image(equipment, PoiBadge)),
+            case(PoiResponse.Type.INFORMATION.value, image(info, PoiBadge)),
+            fallback = image(other, PoiBadge),
         ),
-        iconColor = const(symbol),
-        // tutti visibili e sopra le etichette della mappa base: sono pochi (al massimo 50)
-        iconAllowOverlap = const(true),
-        iconIgnorePlacement = const(true),
+        // più piccoli da lontano, pieni da vicino
+        iconSize = interpolate(linear(), zoom(), from to const(0.65f), 14 to const(1f)),
+        iconOpacity = fadeInFrom(from),
+        // Collisioni: un POI che coprirebbe un altro simbolo (o un rifugio, che ha la precedenza) si nasconde, con una
+        // dissolvenza, e torna avvicinandosi. Prima tutti sovrapposti: con centinaia di POI non si capiva niente
+        iconAllowOverlap = const(false),
+        iconIgnorePlacement = const(false),
+        onClick = onClick,
+        hitPadding = 6.dp,
     )
+}
+
+private val PoiBadge = DpSize(28.dp, 28.dp)
+
+/**
+ * Un "bollino" da mappa: tondo pieno con un filo di bordo e il simbolo al centro, in un'immagine sola. Con il tondo
+ * in un CircleLayer e il simbolo in un SymbolLayer le collisioni non funzionavano (i cerchi non ne hanno): così il
+ * bollino intero si nasconde quando si sovrappone. Lo usano anche i rifugi (RefugeMapLayers).
+ */
+@Composable
+internal fun rememberBadge(icon: ImageVector, fill: Color, ring: Color, tint: Color, ringWidth: Dp = 1.5.dp, glyphFraction: Float = 0.62f): Painter {
+    val glyph = rememberVectorPainter(icon)
+    return remember(glyph, fill, ring, tint, ringWidth, glyphFraction) { BadgePainter(glyph, fill, ring, tint, ringWidth, glyphFraction) }
+}
+
+private class BadgePainter(
+    private val glyph: Painter,
+    private val fill: Color,
+    private val ring: Color,
+    private val tint: Color,
+    private val ringWidth: Dp,
+    private val glyphFraction: Float,
+) : Painter() {
+    override val intrinsicSize: Size get() = Size.Unspecified
+
+    override fun DrawScope.onDraw() {
+        val diameter = size.minDimension
+        val ringPx = ringWidth.toPx()
+        val radius = diameter / 2 - ringPx / 2
+        drawCircle(fill, radius)
+        drawCircle(ring, radius, style = Stroke(ringPx))
+        val glyphSize = diameter * glyphFraction
+        translate((size.width - glyphSize) / 2, (size.height - glyphSize) / 2) {
+            with(glyph) { draw(Size(glyphSize, glyphSize), colorFilter = ColorFilter.tint(tint)) }
+        }
+    }
 }
 
 /** Il simbolo di un tipo di POI, uguale sulla mappa e nella lista del dettaglio. */

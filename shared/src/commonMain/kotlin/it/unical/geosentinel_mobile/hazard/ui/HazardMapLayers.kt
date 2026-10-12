@@ -13,6 +13,7 @@ import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
 import it.unical.geosentinel_mobile.core.ui.theme.TrailWarning
+import it.unical.geosentinel_mobile.trail.ui.FadeZoom
 import it.unical.geosentinel_mobile.trail.ui.idClickHandler
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -20,7 +21,10 @@ import org.maplibre.compose.expressions.dsl.case
 import org.maplibre.compose.expressions.dsl.const
 import org.maplibre.compose.expressions.dsl.feature
 import org.maplibre.compose.expressions.dsl.image
+import org.maplibre.compose.expressions.dsl.interpolate
+import org.maplibre.compose.expressions.dsl.linear
 import org.maplibre.compose.expressions.dsl.switch
+import org.maplibre.compose.expressions.dsl.zoom
 import org.maplibre.compose.layers.SymbolLayer
 import org.maplibre.compose.sources.GeoJsonData
 import org.maplibre.compose.sources.rememberGeoJsonSource
@@ -52,9 +56,13 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
     val source = rememberGeoJsonSource(GeoJsonData.Features(FeatureCollection(features)))
     val onClick = remember(onHazardClick) { idClickHandler(onHazardClick) }
     val triangle = rememberVectorPainter(Icons.Filled.Warning)
+    val from = HazardMapViewModel.MinZoom
     SymbolLayer(
         id = "pericoli",
         source = source,
+        minZoom = from.toFloat(),
+        // più piccoli da lontano: restano tutti visibili (un pericolo non si nasconde), ma si sovrappongono meno
+        iconSize = interpolate(linear(), zoom(), from to const(0.6f), 13 to const(1f)),
         // SDF: il colore si sceglie qui, per gravità
         iconImage = image(triangle, DpSize(30.dp, 30.dp), drawAsSdf = true),
         iconColor = switch(
@@ -64,7 +72,13 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
             fallback = const(otherColor),
         ),
         // le proprie segnalazioni in verifica attenuate: la card dice "In verifica" a parole
-        iconOpacity = switch(feature["status"], case(HazardResponse.Status.SUBMITTED.value, const(0.5f)), fallback = const(1f)),
+        // e tutti in dissolvenza alla soglia di zoom
+        iconOpacity = interpolate(
+            linear(),
+            zoom(),
+            from to const(0f),
+            from + FadeZoom to switch(feature["status"], case(HazardResponse.Status.SUBMITTED.value, const(0.5f)), fallback = const(1f)),
+        ),
         iconHaloColor = const(halo),
         iconHaloWidth = const(2.dp),
         // tutti visibili: sono al massimo 50, e un pericolo nascosto da un'etichetta non va bene

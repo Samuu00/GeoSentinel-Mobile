@@ -80,7 +80,8 @@ class RefugeMapViewModel(private val refuges: RefugeRepository) : ViewModel() {
 
     companion object {
         val Debounce = 400.milliseconds
-        const val MinZoom = 8.0
+        // come i sentieri: a 7 la Calabria intera sta sullo schermo
+        const val MinZoom = 7.0
         private const val Margin = 0.5
     }
 }

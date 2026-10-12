@@ -20,7 +20,6 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.filterNotNull
-import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.milliseconds
@@ -83,9 +82,11 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         viewModelScope.launch {
             visible.filterNotNull().collectLatest { view ->
                 val area = view.bounds.expandedBy(Margin)
-                // da lontano niente: la cache dell'area intera potrebbe avere migliaia di sentieri (si invita ad avvicinarsi)
-                val trails = if (view.zoom >= MinTrailZoom) repository.observeInBounds(area) else flowOf(emptyList())
-                val pois = if (view.zoom >= MinPoiZoom) repository.observePoisInBounds(area) else flowOf(emptyList())
+                // Anche da lontano: la cache ha solo quello già scaricato (la Calabria intera sono circa 350 sentieri).
+                // Sotto le soglie li nascondono i livelli, con una dissolvenza (minZoom e opacità in TrailMapLayers):
+                // svuotare la lista qui li faceva sparire di colpo
+                val trails = repository.observeInBounds(area)
+                val pois = repository.observePoisInBounds(area)
                 combine(trails, pois) { trailList, poiList -> trailList to poiList }.collect { (trails, poiList) ->
                     _state.update { it.copy(trails = trails, pois = poiList) }
                 }
@@ -176,11 +177,11 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
 
     companion object {
         val Debounce = 400.milliseconds
-        // Sotto, la vista copre mezza regione: troppi sentieri da scaricare e da disegnare
-        const val MinTrailZoom = 8.0
-        // I POI da una valle in giù (prima 12: comparivano solo da vicinissimo). A 10 la vista supera i 50 km del server:
-        // la risposta è parziale (al massimo 50, i più vicini al centro) e quelli ai bordi arrivano avvicinandosi
-        const val MinPoiZoom = 10.0
+        // A 7 la Calabria intera sta sullo schermo, e i suoi sentieri in una richiesta (fino a 500)
+        const val MinTrailZoom = 7.0
+        // I POI da un massiccio in giù. A 9 la vista supera i 50 km del server: la risposta è parziale (fino a 300, i
+        // più vicini al centro) e quelli ai bordi arrivano avvicinandosi; quelli che si sovrappongono si nascondono
+        const val MinPoiZoom = 9.0
         // Margine caricato attorno alla vista, su ogni lato
         private const val Margin = 0.5
     }

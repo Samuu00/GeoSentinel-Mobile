@@ -201,8 +201,8 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
 
     companion object {
         val Debounce = 400.milliseconds
-        // come i sentieri: più lontano la vista copre mezza regione
-        const val MinZoom = 8.0
+        // come i sentieri: a 7 la Calabria intera sta sullo schermo
+        const val MinZoom = 7.0
         // dopo, anche dentro l'area già caricata si richiede: i pericoli cambiano spesso
         val MaxAge = 5.minutes
         private const val Margin = 0.5

@@ -179,6 +179,10 @@ internal fun PhotoViewer(photo: MediaResponse, media: MediaRepository, onClose: 
             ) {
                 Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.photo_viewer_close))
             }
+            PhotoCredit(
+                photo.credit,
+                Modifier.align(Alignment.BottomStart).windowInsetsPadding(WindowInsets.safeDrawing).padding(8.dp),
+            )
         }
     }
 }

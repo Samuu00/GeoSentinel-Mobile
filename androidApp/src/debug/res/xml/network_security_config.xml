@@ -4,6 +4,8 @@
     <domain-config cleartextTrafficPermitted="true">
         <!-- il PC visto dall'emulatore -->
         <domain includeSubdomains="false">10.0.2.2</domain>
-        <!-- per un telefono vero aggiungi qui l'IP del PC sulla rete locale -->
+        <!-- il PC sulla rete locale: MinIO firma gli URL delle foto con MINIO_PUBLIC_ENDPOINT, che punta qui perché
+             le foto si vedano anche dall'iPhone. Se l'IP del PC cambia, va cambiato anche qui -->
+        <domain includeSubdomains="false">192.168.1.188</domain>
     </domain-config>
 </network-security-config>

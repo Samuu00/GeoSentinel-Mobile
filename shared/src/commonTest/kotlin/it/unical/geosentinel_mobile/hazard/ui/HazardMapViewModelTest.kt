@@ -162,7 +162,7 @@ class HazardMapViewModelTest {
         viewModel.onCameraIdle(sila, zoom = 12.0)
         advanceUntilIdle()
 
-        viewModel.onCameraIdle(GeoBounds.of(15.0, 38.0, 18.0, 41.0), zoom = 7.0)
+        viewModel.onCameraIdle(GeoBounds.of(15.0, 38.0, 18.0, 41.0), zoom = HazardMapViewModel.MinZoom - 1)
         advanceUntilIdle()
 
         assertEquals(1, calls.size)

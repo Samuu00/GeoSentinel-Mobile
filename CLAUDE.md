@@ -66,7 +66,13 @@ nel backend), 316 test host. M9 fatta (12/10, progetto per ora in locale): test 
 verso il backend locale) provata sull'emulatore, `assembleRelease` in CI, 325 test host. Rimandato alla pubblicazione
 quello che serve agli store (fine di M9.3). Poi (12/10): card del POI e del pericolo chiuse tornando sulla mappa;
 avvio senza schermata di transizione (splash di Android 12+ senza icona e con lo sfondo dell'app, `Theme.GeoSentinel`
-in `androidApp/res`; scelta chiaro/scuro passata al sistema con `setApplicationNightMode`). Da lanciare: la review di M9.
+in `androidApp/res`; scelta chiaro/scuro passata al sistema con `setApplicationNightMode`). Dati veri (12/10): tolti
+quelli di prova dal database locale (restano gli utenti), importati da OpenStreetMap 351 sentieri (2.904 km), 944 POI e
+61 rifugi della Calabria, tutti con una foto libera da Wikimedia Commons (4 vere, 57 illustrative e dichiarate tali; autore e licenza in `MediaResponse.credit`, backend V12, mostrati
+dalla "i" di `media/ui/PhotoCredit.kt` sulla testata del rifugio e a schermo intero;
+in debug Android l'HTTP in chiaro vale anche per l'IP del PC, `192.168.1.188`, su cui MinIO firma gli URL) (`../GeoSentinel-Backend/tools/osm-import`, seed
+`R__calabria_osm.sql`); squadre: le 4 stazioni vere del Soccorso Alpino Calabria (SASC: Pollino, Sila, Aspromonte,
+Catanzaro) in `R__calabria_rescue.sql`, con sede indicativa e il 112 come numero (il sito SASC non ne pubblica altri). Da lanciare: la review di M9.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -99,7 +105,7 @@ in `androidApp/res`; scelta chiaro/scuro passata al sistema con `setApplicationN
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
 | Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox, un solo `AppDatabase` (`core/db`): builder dalla piattaforma (`initKoin(context, config)` su Android, `startKoinWith` su iOS), niente migrazioni distruttive, schema in `shared/schemas` da committare. ETag per rotta, non per riga (il backend lo calcola sul body). DataStore per le preferenze |
 | Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS (update, non delete + add; pulito alla prima lettura dopo un'installazione). Token in `AuthTokens`, il cui `toString` non li stampa. Errori dello store mai un crash: in `SessionManager` diventano un errore o "ospite" |
-| Mappa | MapLibre Compose 0.19. Sentieri e POI in `trail/ui/TrailMapLayers.kt` (una sorgente GeoJSON per stato, chiusi tratteggiati); bbox e `[lon, lat]` solo da `core/location/GeoBounds.kt`. Tipi Stradale (OpenFreeMap ricolorato tipo Google Maps, chiaro/scuro) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. Niente raster PNG (es. OpenTopoMap): il motore su Android non li disegna in modo affidabile. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
+| Mappa | MapLibre Compose 0.19. Sentieri e POI in `trail/ui/TrailMapLayers.kt` (una sorgente GeoJSON per stato, chiusi tratteggiati; spessore che cresce con lo zoom; ogni livello ha `minZoom` alla sua soglia e compare in dissolvenza con `fadeInFrom`; POI e rifugi sono "bollini" in un solo `SymbolLayer` con le collisioni attive, i pericoli restano sempre visibili; soglie: sentieri, rifugi e pericoli 7, POI 9; il server dà fino a 500 sentieri per riquadro e 300 POI per richiesta); bbox e `[lon, lat]` solo da `core/location/GeoBounds.kt`. Tipi Stradale (OpenFreeMap ricolorato tipo Google Maps, chiaro/scuro) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. Niente raster PNG (es. OpenTopoMap): il motore su Android non li disegna in modo affidabile. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
 | Piattaforma | Posizione dal modulo `location` di MapLibre Compose (provider creato nella UI con `rememberLocationState`; `core/location/Location.kt` per `GeoPoint` e `current()`). Ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
 | Stringhe | `composeResources/values/strings.xml`, italiano come lingua base |

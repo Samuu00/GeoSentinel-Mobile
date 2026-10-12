@@ -76,7 +76,7 @@ class TrailRepository(
             val at = now()
             val rows = withContext(converting) { trails.mapNotNull { it.toEntity(at) } }
             // Con la risposta completa si tolgono dalla cache anche quelli che il server non ha più (cancellati o
-            // spostati); con 200 risultati no, la risposta è solo una parte
+            // spostati); con [MAX_BBOX_RESULTS] risultati no, la risposta è solo una parte
             if (trails.size < MAX_BBOX_RESULTS) {
                 dao.replaceSummariesInBox(area.minLon, area.minLat, area.maxLon, area.maxLat, rows)
             } else {
@@ -99,17 +99,17 @@ class TrailRepository(
 
     /**
      * I POI di [area] nella cache: il server li dà per raggio, con il cerchio che contiene tutto il riquadro (fino a
-     * 50 km). Con una risposta completa (meno di 50, raggio non tagliato) quelli nel riquadro che il server non ha più
+     * 50 km). Con una risposta completa (meno di [MAX_POI_RESULTS], raggio non tagliato) quelli nel riquadro che il server non ha più
      * spariscono anche qui. Restituisce true se la risposta era completa.
      */
     suspend fun refreshPoisIn(area: GeoBounds): Result<Boolean> = guarded {
         val radius = area.radiusMeters
         apiCall {
-            poisApi.findPoisNearby(lon = area.center.lon, lat = area.center.lat, radius = radius.coerceIn(1.0, MAX_RADIUS_METERS), limit = MAX_NEARBY_RESULTS)
+            poisApi.findPoisNearby(lon = area.center.lon, lat = area.center.lat, radius = radius.coerceIn(1.0, MAX_RADIUS_METERS), limit = MAX_POI_RESULTS)
         }.map { pois ->
             val at = now()
             val rows = pois.map { it.toEntity(at) }
-            val complete = pois.size < MAX_NEARBY_RESULTS && radius <= MAX_RADIUS_METERS
+            val complete = pois.size < MAX_POI_RESULTS && radius <= MAX_RADIUS_METERS
             if (complete) dao.replacePoisInBox(area.minLon, area.minLat, area.maxLon, area.maxLat, rows) else dao.upsertPois(rows)
             complete
         }
@@ -257,7 +257,10 @@ class TrailRepository(
 
     companion object {
         // Limiti del backend (TrailService, TrailController, PoiController): oltre, il server taglia o risponde 400
-        const val MAX_BBOX_RESULTS = 200
+        // Il massimo del server per un riquadro: tutti i sentieri della Calabria (circa 350) in una richiesta
+        const val MAX_BBOX_RESULTS = 500
+        // POI per richiesta (il server ne dà fino a 300): sulla mappa quelli che si sovrappongono si nascondono da soli
+        const val MAX_POI_RESULTS = 300
         const val MAX_NEARBY_RESULTS = 50
         const val MAX_RADIUS_METERS = 50_000.0
         const val NEARBY_RADIUS_METERS = 10_000.0
