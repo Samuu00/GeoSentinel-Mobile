@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		4C1E8F2A9B3D7E5F60A1B2C3 /* FirebaseMessaging in Frameworks */ = {isa = PBXBuildFile; productRef = 5D2F903BAC4E8F6071B2C3D4 /* FirebaseMessaging */; };
+		7A41C0D2E5F6071829304A5B /* GoogleSignIn in Frameworks */ = {isa = PBXBuildFile; productRef = 8B52D1E3F607182930415B6C /* GoogleSignIn */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -46,6 +47,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4C1E8F2A9B3D7E5F60A1B2C3 /* FirebaseMessaging in Frameworks */,
+				7A41C0D2E5F6071829304A5B /* GoogleSignIn in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -91,6 +93,7 @@
 			name = iosApp;
 			packageProductDependencies = (
 				5D2F903BAC4E8F6071B2C3D4 /* FirebaseMessaging */,
+				8B52D1E3F607182930415B6C /* GoogleSignIn */,
 			);
 			productName = iosApp;
 			productReference = 88897D4BA5F1ADF2414D172A /* geosentinel_mobile.app */;
@@ -122,6 +125,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				6E30A14CBD5F907182C3D4E5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				9C63E2F4A71829304A526C7D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = B93ABBF7CC2135670CF2D635 /* Products */;
@@ -389,6 +393,14 @@
 				minimumVersion = 12.19.2;
 			};
 		};
+		9C63E2F4A71829304A526C7D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/google/GoogleSignIn-iOS";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 9.0.0;
+			};
+		};
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -396,6 +408,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 6E30A14CBD5F907182C3D4E5 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseMessaging;
+		};
+		8B52D1E3F607182930415B6C /* GoogleSignIn */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 9C63E2F4A71829304A526C7D /* XCRemoteSwiftPackageReference "GoogleSignIn-iOS" */;
+			productName = GoogleSignIn;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

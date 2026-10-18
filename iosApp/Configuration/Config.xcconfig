@@ -8,5 +8,10 @@ PRODUCT_BUNDLE_IDENTIFIER=it.unical.geosentinel-mobile.geosentinel-mobile$(TEAM_
 API_BASE_URL[config=Debug]=http:/$()/localhost:8080
 API_BASE_URL[config=Release]=https:/$()/api.geosentinel.dev
 
+// Login con Google: client OAuth di tipo iOS (Google Cloud Console) e lo stesso al contrario per lo schema URL.
+// Vuoto: niente pulsante "Continua con Google". Il workflow "iOS device build" li prende dalle variabili del repo.
+GOOGLE_IOS_CLIENT_ID=
+GOOGLE_REVERSED_CLIENT_ID=geosentinel-google-non-configurato
+
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0

@@ -2,6 +2,7 @@ import UIKit
 import UserNotifications
 import FirebaseCore
 import FirebaseMessaging
+import GoogleSignIn
 import Shared
 
 // Push (M7.1): Firebase Cloud Messaging sopra APNs. GoogleService-Info.plist non è nel repo: senza, l'app parte lo stesso
@@ -15,6 +16,7 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Koin prima di tutto: il tocco su una notifica ad app chiusa arriva prima che la UI sia pronta
         MainViewControllerKt.startShared()
         UNUserNotificationCenter.current().delegate = self
+        startGoogleSignIn()
         guard Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist") != nil else { return true }
         FirebaseApp.configure()
         Messaging.messaging().delegate = self
@@ -29,6 +31,39 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         // Il permesso lo chiede l'app quando serve (RequestNotificationPermission): registrarsi ad APNs non lo richiede
         application.registerForRemoteNotifications()
         return true
+    }
+
+    // Login con Google (ADR-0024 del backend): l'SDK legge GIDClientID dall'Info.plist e restituisce l'ID token, che
+    // Kotlin manda a POST /auth/google. Senza client ID il launcher non c'è e il pulsante non compare.
+    private func startGoogleSignIn() {
+        guard let clientId = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String, !clientId.isEmpty else { return }
+        GoogleSignInBridge.shared.setLauncher { callback in
+            DispatchQueue.main.async {
+                guard let presenter = Self.topViewController() else {
+                    callback.onFailed()
+                    return
+                }
+                GIDSignIn.sharedInstance.signIn(withPresenting: presenter) { result, error in
+                    if let token = result?.user.idToken?.tokenString {
+                        callback.onToken(idToken: token)
+                    } else if let error = error as NSError?, error.code == GIDSignInError.canceled.rawValue {
+                        callback.onCancelled()
+                    } else {
+                        callback.onFailed()
+                    }
+                }
+            }
+        }
+    }
+
+    // Il foglio di Google si presenta sopra quello che è già aperto (es. un dialogo)
+    private static func topViewController() -> UIViewController? {
+        let window = UIApplication.shared.connectedScenes
+            .compactMap { ($0 as? UIWindowScene)?.keyWindow }
+            .first
+        var top = window?.rootViewController
+        while let presented = top?.presentedViewController { top = presented }
+        return top
     }
 
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {

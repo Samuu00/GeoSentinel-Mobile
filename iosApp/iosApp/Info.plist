@@ -8,6 +8,17 @@
 	<true/>
 	<key>API_BASE_URL</key>
 	<string>$(API_BASE_URL)</string>
+	<key>GIDClientID</key>
+	<string>$(GOOGLE_IOS_CLIENT_ID)</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>$(GOOGLE_REVERSED_CLIENT_ID)</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>La posizione serve a mostrarti sulla mappa, a trovare i sentieri vicini e a inviarla ai soccorsi con un SOS. GeoSentinel la usa solo mentre l'app è aperta.</string>
 	<key>NSCameraUsageDescription</key>

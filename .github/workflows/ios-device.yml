@@ -34,7 +34,13 @@ jobs:
       - name: Build
         env:
           API_BASE_URL: ${{ inputs.api_base_url }}
+          # login con Google: client OAuth iOS (Settings → Variables → GOOGLE_IOS_CLIENT_ID); vuota = niente pulsante
+          GOOGLE_IOS_CLIENT_ID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
         run: |
+          REVERSED_CLIENT_ID=geosentinel-google-non-configurato
+          if [ -n "$GOOGLE_IOS_CLIENT_ID" ]; then
+            REVERSED_CLIENT_ID="com.googleusercontent.apps.${GOOGLE_IOS_CLIENT_ID%.apps.googleusercontent.com}"
+          fi
           xcodebuild build \
             -project iosApp/iosApp.xcodeproj \
             -scheme iosApp \
@@ -42,7 +48,8 @@ jobs:
             -destination 'generic/platform=iOS' \
             -derivedDataPath build/ios \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            API_BASE_URL="$API_BASE_URL"
+            API_BASE_URL="$API_BASE_URL" \
+            GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" GOOGLE_REVERSED_CLIENT_ID="$REVERSED_CLIENT_ID"
       - name: Pacchetto .ipa
         run: |
           mkdir -p Payload
