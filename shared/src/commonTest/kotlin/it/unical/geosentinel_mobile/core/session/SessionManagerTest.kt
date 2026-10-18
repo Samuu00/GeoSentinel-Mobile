@@ -11,6 +11,7 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.io.IOException
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
+import kotlinx.datetime.LocalDate
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -446,5 +447,64 @@ class SessionManagerTest {
         override suspend fun read(): AuthTokens? = throw IOException("store illeggibile")
         override suspend fun write(tokens: AuthTokens) = throw IOException("disco pieno")
         override suspend fun clear() = throw IOException("disco pieno")
+    }
+
+    // ---- login con Google e reset della password -------------------------------------------------------------
+
+    @Test
+    fun `primo accesso con Google senza data chiede la data e con la data apre la sessione senza password`() = runTest {
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+
+        val first = session.loginWithGoogle("google:nuovo@gmail.com")
+        assertEquals("birth-date-required", ((first.exceptionOrNull() as ApiException).error as ApiError.BusinessRule).slug)
+        assertEquals(SessionState.Anonymous, session.state.value)
+
+        assertTrue(session.loginWithGoogle("google:nuovo@gmail.com", LocalDate(1990, 5, 1)).isSuccess)
+        val profile = (session.state.value as SessionState.LoggedIn).profile!!
+        assertEquals(false, profile.hasPassword)
+        // rotta pubblica: nessun bearer, nemmeno da loggati
+        assertTrue(backend.requests.filter { "/auth/google" in it }.all { it.endsWith(" -") })
+    }
+
+    @Test
+    fun `token Google rifiutato non apre la sessione`() = runTest {
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+
+        val result = session.loginWithGoogle("falso")
+
+        assertTrue((result.exceptionOrNull() as ApiException).error is ApiError.Unauthorized)
+        assertEquals(SessionState.Anonymous, session.state.value)
+        assertNull(store.tokens)
+    }
+
+    @Test
+    fun `reset della password senza bearer e con il codice giusto la password nuova vale`() = runTest {
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+
+        assertTrue(session.requestPasswordReset(" hiker@test.dev ").isSuccess)
+        // email sconosciuta: stessa risposta
+        assertTrue(session.requestPasswordReset("nessuno@test.dev").isSuccess)
+        val wrong = session.confirmPasswordReset("hiker@test.dev", "SBAGLIATO", "nuova-password-lunga")
+        assertEquals("invalid-reset-code", ((wrong.exceptionOrNull() as ApiException).error as ApiError.BusinessRule).slug)
+        assertTrue(session.confirmPasswordReset("hiker@test.dev", " ABCD1234EFGH5678 ", "nuova-password-lunga").isSuccess)
+
+        assertTrue(session.login("hiker@test.dev", "nuova-password-lunga").isSuccess)
+        assertTrue(backend.requests.filter { "/password-reset/" in it }.all { it.endsWith(" -") })
+    }
+
+    @Test
+    fun `password impostata dal profilo chiude la sessione di questo telefono come scaduta`() = runTest {
+        val (session, _) = sessionWith(backend, store)
+        session.restore()
+        session.login("hiker@test.dev", "password-giusta-1")
+
+        session.requestPasswordReset("hiker@test.dev")
+        session.confirmPasswordReset("hiker@test.dev", "ABCD1234EFGH5678", "nuova-password-lunga")
+
+        assertEquals(SessionState.Expired, session.state.value)
+        assertNull(store.tokens)
     }
 }

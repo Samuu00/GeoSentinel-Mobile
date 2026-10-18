@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -35,6 +36,13 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+        // Login con Google: client ID "Web" della Google Cloud Console (è l'audience dell'ID token, il backend lo
+        // accetta in GOOGLE_CLIENT_IDS). Non è un segreto, ma è del progetto Google di chi sviluppa: sta in
+        // local.properties (google.webClientId=...). Vuoto: il pulsante "Continua con Google" non compare.
+        val localProperties = Properties().apply {
+            rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+        }
+        buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("google.webClientId", "")}\"")
     }
     packaging {
         resources {

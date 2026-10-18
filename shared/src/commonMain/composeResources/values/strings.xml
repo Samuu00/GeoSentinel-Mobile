@@ -79,6 +79,31 @@
     <string name="auth_confirm">OK</string>
     <string name="auth_cancel">Annulla</string>
     <string name="error_login_failed">Email o password non corretti.</string>
+    <string name="auth_forgot_password">Password dimenticata?</string>
+    <string name="auth_google_button">Continua con Google</string>
+    <string name="auth_google_birth_date_title">La tua data di nascita</string>
+    <string name="error_google_failed">Accesso con Google non riuscito. Riprova.</string>
+    <string name="error_google_unavailable">Nessun account Google disponibile su questo dispositivo.</string>
+    <string name="error_google_staff">Gli account del personale entrano con email e password.</string>
+    <string name="error_google_rejected">Questo account Google non si può usare: l'email non è verificata oppure l'account GeoSentinel è già collegato a un altro Google.</string>
+    <string name="reset_email_title">Password dimenticata</string>
+    <string name="reset_email_body">Scrivi l'email del tuo account: ti mandiamo un codice per impostare una password nuova.</string>
+    <string name="reset_email_button">Invia il codice</string>
+    <string name="reset_code_title">Controlla l'email</string>
+    <string name="reset_code_body">Se c'è un account con questa email, ti abbiamo mandato un codice. Vale 15 minuti.</string>
+    <string name="reset_code">Codice</string>
+    <string name="reset_code_hint">16 caratteri, come nell'email</string>
+    <string name="reset_new_password">Nuova password</string>
+    <string name="reset_code_button">Imposta la password</string>
+    <string name="reset_not_arrived">Non è arrivato?</string>
+    <string name="reset_send_again">Invia di nuovo</string>
+    <string name="reset_change_email">Usa un'altra email</string>
+    <string name="reset_done_title">Password aggiornata</string>
+    <string name="reset_done_body">Accedi con la password nuova. Le sessioni aperte su altri dispositivi sono state chiuse.</string>
+    <string name="reset_done_button">Accedi</string>
+    <string name="error_field_reset_code">Inserisci il codice ricevuto per email.</string>
+    <string name="error_invalid_reset_code">Codice non valido o scaduto. Controlla l'email o chiedine uno nuovo.</string>
+    <string name="profile_set_password">Imposta una password</string>
     <string name="error_register_failed">Registrazione non riuscita: l'email potrebbe essere già registrata.</string>
     <string name="error_field_email">Inserisci un indirizzo email valido.</string>
     <string name="error_field_password_short">Servono almeno 12 caratteri.</string>
@@ -102,11 +127,13 @@
     <string name="location_open_settings">Apri impostazioni</string>
 
     <!-- Profilo -->
-    <string name="profile_guest_body">Accedi per segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
+    <string name="profile_guest_body">Segnala pericoli, prenota un rifugio e chiedi soccorso dall'app.</string>
     <string name="profile_session_expired">La sessione è scaduta: accedi di nuovo.</string>
     <string name="profile_account_section">Account</string>
     <string name="profile_activity_section">Attività</string>
     <string name="profile_login">Accedi</string>
+    <string name="profile_guest_title">Accedi a GeoSentinel</string>
+    <string name="profile_login_email">Accedi con email</string>
     <string name="profile_logout">Esci</string>
     <string name="profile_name">Nome</string>
     <string name="profile_change_password">Cambia password</string>

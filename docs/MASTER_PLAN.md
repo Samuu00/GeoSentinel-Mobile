@@ -3,13 +3,18 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (12/10/2026):** M0–M9 fatte. M4–M7 revisionate il 09/10, M8 il 12/10 (nessun CRITICAL/HIGH, 316 test host).
+> **Stato (12/10/2026):** M0–M9 fatte. M4–M7 revisionate il 09/10, M8 il 12/10 (nessun CRITICAL/HIGH).
 > M9 (12/10, scritta da Claude su richiesta) fatta per un progetto **che per ora resta in locale**: test di UI di
-> Compose con Robolectric (login, SOS, prenotazione, testo al 200%), R8 sulla release provato sull'emulatore con la
-> build `staging`, 325 test host. Rimandato alla pubblicazione quello che serve solo agli store (fine di M9.3).
+> Compose con Robolectric, R8 sulla release provato con la build `staging`. Rimandato alla pubblicazione quello che
+> serve solo agli store (fine di M9.3). Poi, sempre il 12/10 ("Dopo M9", in fondo a §5): dati veri della Calabria al
+> posto di quelli di prova (OpenStreetMap, foto da Wikimedia Commons con i crediti, le stazioni del Soccorso Alpino),
+> mappa più leggibile (linee in base allo zoom, icone senza sovrapposizioni, dissolvenze), avvio senza splash.
+> 325 test host. Build `4b92074` installata sull'iPhone. Repository dell'app pubblico dal 12/10: GitHub Actions senza
+> limite di minuti (prima la CI si era fermata per i crediti esauriti). CI verde su `4b92074`, **anche il job `ios`**
+> (compilazione Kotlin/Native e test comuni sul simulatore), aperto da M0.
 > Da decidere: i controlli della mappa in orizzontale (fine di M8.3); da lanciare: la review di M9 (§6).
-> Il dettaglio giorno per giorno è nei singoli task e in `CLAUDE.md`. Aperti: job `ios` della CI e checkpoint sul
-> simulatore (Mac), push su iOS (APNs), satellite nero su iPhone.
+> Il dettaglio giorno per giorno è nei singoli task e in `CLAUDE.md`. Aperti: prove a mano sul simulatore (Mac), push
+> su iOS (APNs, serve un account Apple a pagamento), satellite nero su iPhone.
 
 ---
 
@@ -1504,7 +1509,7 @@ serve solo per pubblicare sugli store è in fondo a M9.3, rimandato.
   `waitFor`/`waitForText` (`idleFor` a ogni giro), altrimenti un `delay` sul main non scade mai.
 - Checkpoint:
   - [x] 325 test host verdi (316 + 9 di UI); in CI nel job `android`.
-  - [ ] i test comuni nel job `ios` (serve il Mac o la CI su GitHub, come prima).
+  - [x] i test comuni nel job `ios` della CI: verdi su `4b92074` (12/10).
 
 **M9.2 Accessibilità, prestazioni, batteria**
 - SOS: stato in una live region, pulsante con ruolo e azione "tieni premuto" del lettore di schermo, "Chiama 112" da
@@ -1545,6 +1550,88 @@ serve solo per pubblicare sugli store è in fondo a M9.3, rimandato.
     un requisito; `DELETE /users/me` con la risposta persa (account cancellato, errore mostrato);
   - il filtro dei log sulle query con posizione è una lista di nomi (`lat`, `lon`, `bbox`, `radius`): rivederlo a ogni
     endpoint geografico nuovo.
+
+
+### Dopo M9 (12/10): dati veri, mappa, foto
+
+Scritto da Claude su richiesta, fuori dalle milestone. Le parti del backend sono nel suo repository.
+
+**Avvio e mappa (app)**
+- Card del POI e del pericolo chiuse tornando sulla mappa (`remember` al posto di `rememberSaveable`; la selezione del
+  pericolo si svuota lasciando la mappa).
+- Avvio senza schermata di transizione: lo splash di Android 12+ non si può togliere, quindi è senza icona e con lo
+  sfondo dell'app (`Theme.GeoSentinel`, `values-v31`); la scelta chiaro/scuro del Profilo passa al sistema con
+  `setApplicationNightMode`, così anche il primo fotogramma ha il colore giusto. `configChanges="uiMode"`.
+- Mappa più leggibile (`TrailMapLayers.kt`): spessore dei sentieri che cresce con lo zoom (1 dp a regione intera,
+  5 dp da vicino); ogni livello ha `minZoom` alla sua soglia e compare in dissolvenza (`fadeInFrom`); POI e rifugi
+  sono "bollini" (`rememberBadge`, tondo e simbolo in un'immagine sola) in un `SymbolLayer` con le collisioni attive,
+  così quelli che si sovrappongono si nascondono e tornano avvicinandosi; i pericoli restano sempre tutti visibili.
+  Soglie: sentieri, rifugi e pericoli da zoom 7 (la Calabria intera), POI da 9. La lista dei sentieri non si svuota
+  più sotto soglia (li nasconde la mappa).
+- Il server dà fino a 500 sentieri per riquadro (prima 200: da lontano ogni risposta era troncata e ogni movimento
+  richiedeva di nuovo) e 300 POI per richiesta (prima 50). Tutta la Calabria arriva in una richiesta.
+
+**Dati veri (backend, `tools/osm-import`)**
+- Tolti dal database locale i dati di prova (sentieri, POI, rifugi, prenotazioni, segnalazioni, ticket, SOS, squadre,
+  foto anche su MinIO); restano gli utenti. `R__local_seed.sql` ora ha solo gli utenti di sviluppo.
+- Da OpenStreetMap (estratto Geofabrik letto con GDAL in Docker, ritagliato sul confine della Calabria): 351 sentieri
+  (2.904 km, difficoltà dalla scala CAI per 317), 944 POI (sorgenti, belvedere, ripari) e 61 rifugi, nel seed generato
+  `R__calabria_osm.sql`. Posti letto stimati (20 rifugio, 6 bivacco) dove OSM non li dà, detto nella descrizione.
+  Dati © OpenStreetMap contributors (ODbL), citato in ogni descrizione.
+- Squadre: le 4 stazioni vere del Soccorso Alpino e Speleologico Calabria (Pollino, Sila, Aspromonte, Catanzaro) in
+  `R__calabria_rescue.sql`. Il sito SASC non pubblica sedi né telefoni: sede indicativa nella zona di competenza,
+  codice ricavato dal nome, 112 come numero.
+- Foto dei rifugi da Wikimedia Commons, solo licenze libere (`photos.py`): 4 vere, 57 illustrative (rifugi
+  appenninici scelti a mano, senza nomi leggibili), dichiarate tali. Autore e licenza in `media_files.credit`
+  (backend V12, `MediaResponse.credit`), mostrati dalla "i" di `media/ui/PhotoCredit.kt` sulla testata del rifugio e
+  sulla foto a schermo intero.
+
+**Problemi trovati e corretti**
+- Le foto non si vedevano sull'emulatore: MinIO firma gli URL con `MINIO_PUBLIC_ENDPOINT` (l'IP del PC,
+  `192.168.1.188`, per l'iPhone) e la build di debug Android permetteva HTTP in chiaro solo verso `10.0.2.2`. Aggiunto
+  l'IP in `network_security_config.xml` di debug: se l'IP del PC cambia, va cambiato lì e nella variabile.
+- Cambiando `api/openapi.json` il client non si rigenerava: il contratto era passato al generatore come stringa URI e
+  Gradle non lo controllava. Ora è un input del task (`apiClient/build.gradle.kts`).
+- Import: `least(NULL, 1000)` in PostgreSQL vale 1000, e i rifugi senza posti risultavano da 1000; corretto.
+- Checkpoint:
+  - [x] sull'emulatore: mappa a zoom 7, 9,5 e 12; foto e crediti sul rifugio; avvio senza icona né lampo chiaro.
+  - [x] build `4b92074` installata sull'iPhone (workflow "iOS device build", xtool).
+  - [ ] sull'iPhone: mappa, foto e crediti come sull'emulatore.
+### Dopo M9 (18/10): password dimenticata e login con Google
+
+Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (ADR-0024).
+
+- **Password dimenticata** (`auth/ui/PasswordResetViewModel.kt`, `PasswordResetScreen` in `AuthScreens.kt`, rotta
+  `PasswordReset(email)`): link "Password dimenticata?" sotto il campo password del login, con l'email già scritta.
+  Tre passi: email → codice e password nuova → fatto, si torna al login. La richiesta risponde sempre 204 (il testo non
+  dice se l'account esiste); "Invia di nuovo" e "Usa un'altra email"; 422 `invalid-reset-code` sul campo del codice.
+  `SessionManager.requestPasswordReset` / `confirmPasswordReset`: se l'email è quella dell'utente loggato, la sessione
+  locale si chiude come scaduta (`SessionEnd.EXPIRED`, l'outbox resta), perché il server le ha chiuse tutte.
+- **Login con Google** (`SessionManager.loginWithGoogle`, `auth/ui/GoogleSignIn.kt` expect/actual): su Android
+  Credential Manager con `GetSignInWithGoogleOption` (client ID "Web" in `local.properties`, `google.webClientId`, →
+  `BuildConfig.GOOGLE_WEB_CLIENT_ID` → `AppConfig.googleWebClientId`); senza client ID il pulsante "Continua con
+  Google" non compare. Primo accesso: 422 `birth-date-required` → calendario → stessa richiesta con lo stesso token
+  (tenuto nel ViewModel, fuori dallo stato della UI). Messaggi propri per 401, 409 `account-managed` (personale) e 422
+  `business-rule`. iOS: niente pulsante finché non c'è l'SDK GoogleSignIn (serve il Mac).
+- **Dove si entra (18/10, su richiesta):** il Profilo da ospite è una card sola, come l'accesso all'account nelle
+  Impostazioni di iOS: sagoma, "Accedi a GeoSentinel", "Accedi con email" e sotto "Continua con Google" con il design
+  di Google (logo a colori, bianco in chiaro e quasi nero in scuro, `ContinueWithGoogle` in
+  `auth/ui/GoogleSignInButton.kt`), "Registrati" come link. La pagina Accedi resta solo email e password.
+- **Profilo:** `UserProfile.hasPassword`; senza password (account Google) la riga è "Imposta una password" e apre il reset
+  con l'email, invece di "Cambia password" che darebbe 422.
+- **Sicurezza:** `/auth/google` e `/auth/password-reset/*` nelle rotte senza bearer di `AuthScope` (un 401 lì non fa
+  partire il refresh); ID token, codice e password mai nei log né nel `toString` degli stati.
+- **Bug trovati e corretti:** nel backend i tre 422 del login Google avevano lo stesso slug (vedi M7.2.3 del suo piano:
+  ora `birth-date-required`); nelle stringhe nuove `'` restava visibile (Compose resources non lo toglie: apostrofo
+  semplice).
+- Checkpoint:
+  - [x] 334 test host (325 + 9: sessione, ViewModel, login con il link al reset).
+  - [x] sull'emulatore con Mailpit: codice sbagliato → errore sul campo, codice in minuscolo accettato, accesso con la
+    password nuova; "Imposta una password" su un account senza password → sessione chiusa, Indietro torna al Profilo;
+    nel log del backend e in logcat né email né codice né password.
+  - [ ] Google dal vivo: client OAuth Android (SHA-1 del debug), Web e iOS nella Google Cloud Console,
+    `google.webClientId` in `local.properties`, `GOOGLE_CLIENT_IDS` nel `.env` del backend.
+  - [ ] iOS: SDK GoogleSignIn e ponte Swift (Mac).
 
 ---
 

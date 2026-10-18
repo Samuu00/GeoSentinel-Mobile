@@ -7,7 +7,10 @@ import it.unical.geosentinel_mobile.api.AuthenticationApi
 import it.unical.geosentinel_mobile.api.DevicesApi
 import it.unical.geosentinel_mobile.api.UserProfileApi
 import it.unical.geosentinel_mobile.api.model.ChangePasswordRequest
+import it.unical.geosentinel_mobile.api.model.GoogleLoginRequest
 import it.unical.geosentinel_mobile.api.model.LoginRequest
+import it.unical.geosentinel_mobile.api.model.PasswordResetConfirmRequest
+import it.unical.geosentinel_mobile.api.model.PasswordResetRequest
 import it.unical.geosentinel_mobile.api.model.RefreshRequest
 import it.unical.geosentinel_mobile.api.model.RegisterRequest
 import it.unical.geosentinel_mobile.api.model.TokenResponse
@@ -48,7 +51,8 @@ sealed interface SessionState {
 val SessionState.role: UserRole
     get() = if (this is SessionState.LoggedIn) profile?.role ?: UserRole.HIKER else UserRole.GUEST
 
-data class UserProfile(val id: String, val email: String, val displayName: String, val role: UserRole)
+// hasPassword false: account aperto con Google (ADR-0024), la password si imposta dal reset via codice
+data class UserProfile(val id: String, val email: String, val displayName: String, val role: UserRole, val hasPassword: Boolean = true)
 
 class RegisterForm(val email: String, val password: String, val displayName: String, val birthDate: LocalDate) {
     override fun toString() = "RegisterForm(…)" // contiene password ed email
@@ -102,6 +106,26 @@ class SessionManager(
         apiCall {
             authApi.register(RegisterRequest(form.birthDate, form.displayName.trim(), form.email.trim(), form.password))
         }.andThen { startSession(it) }
+
+    // ID token dal SDK Google della piattaforma. Primo accesso senza data di nascita: 422 birth-date-required, la UI
+    // la chiede e ripete con lo stesso token (vale circa un'ora). Un account esistente collegato a Google perde la
+    // password e le altre sessioni (lo fa il server).
+    suspend fun loginWithGoogle(idToken: String, birthDate: LocalDate? = null): Result<Unit> =
+        apiCall { authApi.loginWithGoogle(GoogleLoginRequest(idToken, birthDate)) }.andThen { startSession(it) }
+
+    // Sempre 204, anche per un'email non registrata: la risposta non dice se l'account esiste
+    suspend fun requestPasswordReset(email: String): Result<Unit> =
+        apiCall { authApi.requestPasswordReset(PasswordResetRequest(email.trim())) }
+
+    // Il server chiude tutte le sessioni dell'utente: se è quello di questo telefono (password impostata dal Profilo),
+    // si chiude anche qui, come una sessione scaduta (l'outbox resta: rientrando, un SOS in coda riparte)
+    suspend fun confirmPasswordReset(email: String, code: String, newPassword: String): Result<Unit> =
+        apiCall { authApi.confirmPasswordReset(PasswordResetConfirmRequest(code.trim(), email.trim(), newPassword)) }.map {
+            val current = _state.value
+            if (current is SessionState.LoggedIn && current.profile?.email.equals(email.trim(), ignoreCase = true)) {
+                endSession(SessionState.Expired, SessionEnd.EXPIRED)
+            }
+        }
 
     // Nell'ordine del contratto: unregisterDevice, logout, pulizia locale. La pulizia locale avviene comunque,
     // anche senza rete o con la coroutine annullata.
@@ -304,4 +328,5 @@ private fun UserProfileResponse.toUserProfile() = UserProfile(
         // ruolo nuovo del server: la vista meno privilegiata tra quelle di un utente loggato
         UserProfileResponse.Role.unknown_default_open_api -> UserRole.HIKER
     },
+    hasPassword = hasPassword,
 )

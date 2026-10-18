@@ -53,6 +53,9 @@ kotlin {
             implementation(libs.ktor.client.okhttp)
             // Photo Picker (M4.2): già nel catalogo, la usa anche androidApp
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.credentials)
+            implementation(libs.androidx.credentials.playServices)
+            implementation(libs.googleid)
             // Su Android il motore di MapLibre va scelto (OpenGL ES o Vulkan): senza, la mappa va in crash all'apertura
             // (libmaplibre-native-c.so mancante). OpenGL ES: tutti i telefoni e l'emulatore. Su iOS arriva Metal da solo.
             implementation(libs.maplibre.native.runtime.opengl)

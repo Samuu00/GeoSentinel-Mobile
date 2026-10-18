@@ -5,7 +5,7 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9.
 
-**Stato (12/10/2026, in ordine di data):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, job `ios` verde, simulatore iPhone).
+**Stato (12/10/2026, in ordine di data):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, simulatore iPhone; job `ios` verde dal 12/10).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
 logout, refresh unico, nome, cambio password e cancellazione dell'account. M3.1 fatta: mappa (Stradale chiara/scura e
 Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate e
@@ -64,15 +64,17 @@ Review di M8 (12/10, codice, Kotlin e sicurezza anche sul backend): nessun CRITI
 nel backend), 316 test host. M9 fatta (12/10, progetto per ora in locale): test di UI di Compose con Robolectric in
 `androidHostTest/.../ui` (login, SOS anche al 200%, prenotazione), R8 sulla release e build `staging` (release con R8
 verso il backend locale) provata sull'emulatore, `assembleRelease` in CI, 325 test host. Rimandato alla pubblicazione
-quello che serve agli store (fine di M9.3). Poi (12/10): card del POI e del pericolo chiuse tornando sulla mappa;
-avvio senza schermata di transizione (splash di Android 12+ senza icona e con lo sfondo dell'app, `Theme.GeoSentinel`
-in `androidApp/res`; scelta chiaro/scuro passata al sistema con `setApplicationNightMode`). Dati veri (12/10): tolti
-quelli di prova dal database locale (restano gli utenti), importati da OpenStreetMap 351 sentieri (2.904 km), 944 POI e
-61 rifugi della Calabria, tutti con una foto libera da Wikimedia Commons (4 vere, 57 illustrative e dichiarate tali; autore e licenza in `MediaResponse.credit`, backend V12, mostrati
-dalla "i" di `media/ui/PhotoCredit.kt` sulla testata del rifugio e a schermo intero;
-in debug Android l'HTTP in chiaro vale anche per l'IP del PC, `192.168.1.188`, su cui MinIO firma gli URL) (`../GeoSentinel-Backend/tools/osm-import`, seed
-`R__calabria_osm.sql`); squadre: le 4 stazioni vere del Soccorso Alpino Calabria (SASC: Pollino, Sila, Aspromonte,
-Catanzaro) in `R__calabria_rescue.sql`, con sede indicativa e il 112 come numero (il sito SASC non ne pubblica altri). Da lanciare: la review di M9.
+quello che serve agli store (fine di M9.3). Poi (12/10, dettaglio in "Dopo M9" del piano):
+card del POI e del pericolo chiuse tornando sulla mappa; avvio senza splash visibile (`Theme.GeoSentinel`,
+`setApplicationNightMode`); dati veri al posto di quelli di prova (da `../GeoSentinel-Backend/tools/osm-import`: 351
+sentieri, 944 POI e 61 rifugi della Calabria da OpenStreetMap, le 4 stazioni del Soccorso Alpino Calabria, foto dei
+rifugi da Wikimedia Commons con autore e licenza in `MediaResponse.credit`, mostrati da `media/ui/PhotoCredit.kt`);
+mappa più leggibile (linee in base allo zoom, POI e rifugi a bollino con le collisioni, dissolvenze, soglie 7 e 9,
+fino a 500 sentieri per richiesta). 325 test host. Build `4b92074` sull'iPhone; CI verde su `4b92074`, job `ios`
+compreso (la prima volta). Da lanciare: la review di M9. Poi (18/10, "Dopo M9" del piano): password dimenticata con
+codice via email e login con Google (Credential Manager su Android, pulsante solo con `google.webClientId` in
+`local.properties`; iOS da fare con il Mac), riga "Imposta una password" per gli account Google, 334 test host,
+reset verificato sull'emulatore con Mailpit; Google dal vivo aspetta i client OAuth.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -148,8 +150,9 @@ shared/src/
 - **Enum:** un valore nuovo dal server non deve far crashare l'app: arriva come `unknown_default_open_api` e i `when` lo gestiscono.
 - **Token:** il bearer va solo a schema, host e porta di `apiBaseUrl`; su `/auth/login`, `/auth/register`, `/auth/refresh` e verso altri host il plugin `Auth` è spento (`AuthScope`). Un solo `HttpClient` autenticato; il refresh token vale una volta sola, quindi un refresh alla volta in tutta l'app (`Mutex` nel repository, preso per tutta la richiesta di refresh, al massimo 20 s). Lo store si scrive e si svuota solo con quel `Mutex` preso, che però non deve mai avvolgere una richiesta autenticata (deadlock). La sessione si svuota solo su un 401 del refresh (non durante un cambio password), mai per un errore di rete. Le operazioni che ruotano o revocano i token (cambio password, cancellazione, logout) girano in `NonCancellable`.
 - **Interfaccia:**
-  - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezioni: `EmergencyRed` e le
-    anteprime del selettore della mappa, che riproducono i colori degli stili);
+  - colori solo da `MaterialTheme.colorScheme`, mai esadecimali nei componenti (eccezioni: `EmergencyRed`, le
+    anteprime del selettore della mappa, che riproducono i colori degli stili, e il pulsante "Continua con Google",
+    che segue le linee guida di Google in `auth/ui/GoogleSignInButton.kt`);
   - il rosso solo per SOS, pericoli `CRITICAL` e sentieri `CLOSED` (questi sempre tratteggiati e con l'etichetta "Chiuso"); gli errori usano il ruolo `error` del tema (prugna);
   - contrasto almeno WCAG AA, verificato in chiaro e in scuro;
   - bersagli: 72 dp per le azioni d'emergenza (SOS, Chiama 112), 56 dp per l'invio dei form, 48 dp minimo per il resto;
@@ -174,11 +177,14 @@ shared/src/
 ./gradlew :shared:clean                    # se dopo aver tolto stringhe la build dà "Unresolved reference _collect..."
 ./gradlew :apiClient:checkApiContract      # il contratto in api/ è ancora uguale a quello del backend?
 ./gradlew :apiClient:openApiGenerate       # rigenera il client a mano (di solito parte da solo con la build)
+gh workflow run ios-device.yml -f api_base_url=http://192.168.1.188:8080   # .ipa per l'iPhone (runner macOS)
+.\tools\ios-device\install.ps1             # da PowerShell: scarica l'ultima .ipa e la installa (xtool in WSL)
 ```
 Le versioni delle librerie stanno solo in `gradle/libs.versions.toml`. Il PC è Windows: iOS non si compila qui. I checkpoint iOS si chiudono con un Mac o con un runner macOS in CI.
 
 ## CI (`.github/workflows/ci.yml`)
-- Gira a ogni push su `main` e su ogni PR. Tre job: `android` (`testAndroidHostTest` + `assembleDebug` + `assembleRelease` con R8, Ubuntu),
+- Repository pubblico dal 12/10: GitHub Actions senza limite di minuti (da privato la CI si fermava a fine crediti,
+  "spending limit"). Gira a ogni push su `main` e su ogni PR. Tre job: `android` (`testAndroidHostTest` + `assembleDebug` + `assembleRelease` con R8, Ubuntu),
   `ios` (`compileKotlinIosSimulatorArm64` + `iosSimulatorArm64Test`, macOS), `secrets` (gitleaks su tutta la storia).
 - Allineata al backend: `permissions: contents: read`, gitleaks 8.30.1 come binario con SHA-256 verificato.
   Dependabot non aggiorna gitleaks: versione e checksum vanno cambiati a mano, insieme.

@@ -11,6 +11,7 @@ import geosentinel_mobile.shared.generated.resources.error_conflict
 import geosentinel_mobile.shared.generated.resources.error_forbidden
 import geosentinel_mobile.shared.generated.resources.error_generic
 import geosentinel_mobile.shared.generated.resources.error_idempotency_key_reused
+import geosentinel_mobile.shared.generated.resources.error_invalid_reset_code
 import geosentinel_mobile.shared.generated.resources.error_media_payload_too_large
 import geosentinel_mobile.shared.generated.resources.error_media_quota_exceeded
 import geosentinel_mobile.shared.generated.resources.error_media_unsupported_type
@@ -58,6 +59,7 @@ internal fun ApiError.messageResource(): StringResource = when (this) {
         "media-unsupported-type" -> Res.string.error_media_unsupported_type
         "media-payload-too-large" -> Res.string.error_media_payload_too_large
         "precondition-required" -> Res.string.error_precondition_required
+        "invalid-reset-code" -> Res.string.error_invalid_reset_code
         else -> Res.string.error_generic
     }
     // internal-error e storage-unavailable: Server non porta lo slug, e un 503 può venire anche da un proxy

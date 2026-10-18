@@ -56,6 +56,8 @@ sealed interface Route {
     // ---- account: "spinte" sopra il Profilo ----
     @Serializable data object Login : Route
     @Serializable data object Register : Route
+    // password dimenticata (dal login) o da impostare (Profilo di un account Google): l'email già scritta, se c'è
+    @Serializable data class PasswordReset(val email: String = "") : Route
     @Serializable data object EditName : Route
     @Serializable data object ChangePassword : Route
     @Serializable data object MyHazards : Route
@@ -63,7 +65,7 @@ sealed interface Route {
 
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
 val FormRoutes = setOf(
-    Route.Login::class, Route.Register::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
+    Route.Login::class, Route.Register::class, Route.PasswordReset::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
     Route.BookRefuge::class, Route.PoiCreate::class, Route.TicketCreate::class,
     Route.RefugeCapacity::class, Route.RescueTeamCreate::class,
 )

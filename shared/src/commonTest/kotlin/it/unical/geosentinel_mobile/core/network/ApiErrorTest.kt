@@ -126,7 +126,7 @@ class ApiErrorTest {
     fun `una risposta 2xx diventa un successo`() = runTest {
         val api = usersApi(respondingWith(
             HttpStatusCode.OK,
-            """{"id":"u1","email":"a@b.c","displayName":"A","role":"HIKER","createdAt":"2026-10-02T10:00:00Z"}""",
+            """{"id":"u1","email":"a@b.c","displayName":"A","role":"HIKER","hasPassword":true,"createdAt":"2026-10-02T10:00:00Z"}""",
             contentType = "application/json",
         ))
 

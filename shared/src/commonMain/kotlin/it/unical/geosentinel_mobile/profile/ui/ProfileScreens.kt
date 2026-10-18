@@ -69,7 +69,9 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
@@ -98,7 +100,8 @@ import geosentinel_mobile.shared.generated.resources.profile_change_password
 import geosentinel_mobile.shared.generated.resources.profile_delete_account
 import geosentinel_mobile.shared.generated.resources.profile_deleting
 import geosentinel_mobile.shared.generated.resources.profile_guest_body
-import geosentinel_mobile.shared.generated.resources.profile_login
+import geosentinel_mobile.shared.generated.resources.profile_guest_title
+import geosentinel_mobile.shared.generated.resources.profile_login_email
 import geosentinel_mobile.shared.generated.resources.profile_logout
 import geosentinel_mobile.shared.generated.resources.profile_logout_anyway
 import geosentinel_mobile.shared.generated.resources.profile_logout_sos_raised
@@ -107,6 +110,7 @@ import geosentinel_mobile.shared.generated.resources.profile_logout_sos_title
 import geosentinel_mobile.shared.generated.resources.profile_logout_stay
 import geosentinel_mobile.shared.generated.resources.profile_name
 import geosentinel_mobile.shared.generated.resources.profile_session_expired
+import geosentinel_mobile.shared.generated.resources.profile_set_password
 import geosentinel_mobile.shared.generated.resources.role_admin
 import geosentinel_mobile.shared.generated.resources.role_guest
 import geosentinel_mobile.shared.generated.resources.role_hiker
@@ -117,6 +121,7 @@ import geosentinel_mobile.shared.generated.resources.theme_light
 import geosentinel_mobile.shared.generated.resources.theme_section
 import geosentinel_mobile.shared.generated.resources.theme_system
 import geosentinel_mobile.shared.generated.resources.theme_title
+import it.unical.geosentinel_mobile.auth.ui.ContinueWithGoogle
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
@@ -159,6 +164,7 @@ fun ProfileScreen(
     onRegister: () -> Unit,
     onEditName: () -> Unit,
     onChangePassword: () -> Unit,
+    onSetPassword: (email: String) -> Unit,
     onMyHazards: () -> Unit,
     themeMode: ThemeMode,
     onThemeModeSelected: (ThemeMode) -> Unit,
@@ -184,29 +190,27 @@ fun ProfileScreen(
     ) {
         ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight))
         Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-            // Chi sei: iniziale e nome, sotto ruolo ed email (o cosa si guadagna accedendo)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Monogram(profile?.displayName)
-                Spacer(Modifier.size(16.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(
-                        text = profile?.displayName ?: stringResource(session.role.label()),
-                        style = MaterialTheme.typography.headlineLarge,
-                        modifier = Modifier.semantics { heading() },
-                    )
-                    val subtitle = when {
-                        profile != null -> stringResource(profile.role.label()) + " · " + profile.email
-                        session is SessionState.LoggedIn -> null // profilo non ancora letto (offline)
-                        session is SessionState.Expired -> stringResource(Res.string.profile_session_expired)
-                        else -> null
-                    }
-                    if (subtitle != null) {
-                        Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (session is SessionState.LoggedIn) {
+                // Chi sei: iniziale e nome, sotto ruolo ed email
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Monogram(profile?.displayName)
+                    Spacer(Modifier.size(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            text = profile?.displayName ?: stringResource(session.role.label()),
+                            style = MaterialTheme.typography.headlineLarge,
+                            modifier = Modifier.semantics { heading() },
+                        )
+                        // senza profilo (avvio offline) niente sottotitolo
+                        if (profile != null) {
+                            Text(
+                                stringResource(profile.role.label()) + " · " + profile.email,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
-            }
-
-            if (session is SessionState.LoggedIn) {
                 // Gruppi nell'ordine d'uso: quello che hai fatto, chi sei, come appare l'app; uscire e cancellarsi in fondo
                 GroupHeader(stringResource(Res.string.profile_activity_section))
                 GroupCard {
@@ -223,20 +227,17 @@ fun ProfileScreen(
                         icon = Icons.Filled.Person,
                     )
                     GroupDivider(GroupIconIndent)
-                    GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = Icons.Filled.Lock)
+                    // Account aperto con Google: non c'è una password da cambiare (il server darebbe 422), si imposta via email
+                    if (profile?.hasPassword == false) {
+                        GroupRow(stringResource(Res.string.profile_set_password), onClick = { onSetPassword(profile.email) }, icon = Icons.Filled.Lock)
+                    } else {
+                        GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = Icons.Filled.Lock)
+                    }
                 }
             } else {
-                // Ospite: cosa si guadagna, una sola azione evidente (Accedi) e l'alternativa come link sotto
-                Text(
-                    stringResource(Res.string.profile_guest_body),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 16.dp),
-                )
-                Spacer(Modifier.size(24.dp))
-                PrimaryPillButton(stringResource(Res.string.profile_login), onClick = onLogin)
-                Spacer(Modifier.size(4.dp))
-                FooterLink(Res.string.auth_no_account, Res.string.auth_register_link, onRegister)
+                // Ospite (o sessione scaduta): un solo blocco con le due strade per entrare, una sopra l'altra, e la
+                // registrazione come alternativa sotto. Come l'accesso all'account nelle Impostazioni di iOS.
+                SignInCard(expired = session is SessionState.Expired, onLogin = onLogin, onRegister = onRegister)
             }
 
             GroupHeader(stringResource(Res.string.theme_section))
@@ -320,6 +321,39 @@ fun ProfileScreen(
     }
 }
 
+// Accesso dal Profilo: sagoma, titolo, cosa si guadagna, poi "Accedi con email" e "Continua con Google" (quest'ultimo
+// solo se configurato) della stessa larghezza e altezza, e "Registrati" come link sotto
+@Composable
+private fun SignInCard(expired: Boolean, onLogin: () -> Unit, onRegister: () -> Unit) {
+    GroupCard(Modifier.padding(top = 8.dp)) {
+        Column(
+            Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 28.dp, bottom = 12.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+        ) {
+            Monogram(null, size = 72.dp)
+            Spacer(Modifier.size(16.dp))
+            Text(
+                stringResource(Res.string.profile_guest_title),
+                style = MaterialTheme.typography.headlineSmall,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.semantics { heading() },
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                stringResource(if (expired) Res.string.profile_session_expired else Res.string.profile_guest_body),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+            )
+            Spacer(Modifier.size(24.dp))
+            PrimaryPillButton(stringResource(Res.string.profile_login_email), onClick = onLogin)
+            ContinueWithGoogle(Modifier.padding(top = 12.dp))
+            Spacer(Modifier.size(4.dp))
+            FooterLink(Res.string.auth_no_account, Res.string.auth_register_link, onRegister)
+        }
+    }
+}
+
 // ---- Nome visualizzato ---------------------------------------------------------------------------------------
 
 @Composable
@@ -400,16 +434,16 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
 
 // Iniziale del nome su un tondo color muschio; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
 @Composable
-private fun Monogram(name: String?, modifier: Modifier = Modifier) {
+private fun Monogram(name: String?, modifier: Modifier = Modifier, size: Dp = 56.dp) {
     val initial = name?.trim()?.firstOrNull()?.uppercaseChar()
     Box(
-        modifier = modifier.size(56.dp).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics { },
+        modifier = modifier.size(size).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
         if (initial != null) {
             Text(initial.toString(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
         } else {
-            Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(28.dp))
+            Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(size / 2))
         }
     }
 }

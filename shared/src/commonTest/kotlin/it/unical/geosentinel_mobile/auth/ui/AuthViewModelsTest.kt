@@ -6,6 +6,8 @@ import geosentinel_mobile.shared.generated.resources.error_field_email
 import geosentinel_mobile.shared.generated.resources.error_field_password_long
 import geosentinel_mobile.shared.generated.resources.error_field_password_short
 import geosentinel_mobile.shared.generated.resources.error_login_failed
+import geosentinel_mobile.shared.generated.resources.error_invalid_reset_code
+import geosentinel_mobile.shared.generated.resources.error_google_staff
 import geosentinel_mobile.shared.generated.resources.error_rate_limited_seconds
 import geosentinel_mobile.shared.generated.resources.error_register_failed
 import io.ktor.http.HttpStatusCode
@@ -183,5 +185,75 @@ class AuthViewModelsTest {
         viewModel.onPasswordChange("password-lunga-123")
 
         assertNull(viewModel.state.value.fieldErrors[RegisterField.PASSWORD])
+    }
+
+    // ---- Google e password dimenticata ----------------------------------------------------------------------
+
+    @Test
+    fun `primo accesso con Google - chiede la data e poi entra con lo stesso token`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = LoginViewModel(session)
+
+        viewModel.onGoogleStarted()
+        viewModel.onGoogleResult(GoogleSignInResult.Token("google:nuovo@gmail.com"))
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.askBirthDate)
+        assertEquals(false, viewModel.state.value.submitting)
+
+        viewModel.onGoogleBirthDate(LocalDate(1990, 5, 1))
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.loggedIn)
+        assertEquals(UserRole.HIKER, session.state.value.role)
+    }
+
+    @Test
+    fun `Google annullato non mostra errori e account del personale ha il suo messaggio`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = LoginViewModel(session)
+
+        viewModel.onGoogleStarted()
+        viewModel.onGoogleResult(GoogleSignInResult.Cancelled)
+        assertNull(viewModel.state.value.error)
+        assertEquals(false, viewModel.state.value.submitting)
+
+        viewModel.onGoogleResult(GoogleSignInResult.Token("google:rescuer@test.dev"))
+        advanceUntilIdle()
+        assertEquals(UiMessage(Res.string.error_google_staff), viewModel.state.value.error)
+    }
+
+    @Test
+    fun `password dimenticata - codice sbagliato sul campo poi fatto`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = PasswordResetViewModel(session, "hiker@test.dev")
+
+        viewModel.requestCode()
+        advanceUntilIdle()
+        assertEquals(ResetStep.CODE, viewModel.state.value.step)
+
+        viewModel.onCodeChange("sbagliato")
+        viewModel.onPasswordChange("nuova-password-lunga")
+        viewModel.confirm()
+        advanceUntilIdle()
+        assertEquals(UiMessage(Res.string.error_invalid_reset_code), viewModel.state.value.fieldErrors[ResetField.CODE])
+
+        viewModel.onCodeChange("ABCD1234EFGH5678")
+        viewModel.confirm()
+        advanceUntilIdle()
+        assertEquals(ResetStep.DONE, viewModel.state.value.step)
+        assertEquals("", viewModel.state.value.newPassword)
+    }
+
+    @Test
+    fun `password dimenticata - controlli locali senza richieste`() = runTest {
+        val session = session()
+        val viewModel = PasswordResetViewModel(session, "")
+
+        viewModel.requestCode()
+        assertEquals(UiMessage(Res.string.error_field_email), viewModel.state.value.fieldErrors[ResetField.EMAIL])
+        assertTrue(backend.requests.isEmpty())
     }
 }

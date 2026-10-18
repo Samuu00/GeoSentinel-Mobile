@@ -76,6 +76,7 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.sos_button
 import geosentinel_mobile.shared.generated.resources.sos_button_description
 import it.unical.geosentinel_mobile.auth.ui.LoginScreen
+import it.unical.geosentinel_mobile.auth.ui.PasswordResetScreen
 import it.unical.geosentinel_mobile.auth.ui.RegisterScreen
 import it.unical.geosentinel_mobile.core.session.SessionManager
 import it.unical.geosentinel_mobile.core.push.PushEvent
@@ -508,6 +509,8 @@ fun App() {
                         onRegister = { navController.navigate(Route.Register) },
                         onEditName = { navController.navigate(Route.EditName) },
                         onChangePassword = { navController.navigate(Route.ChangePassword) },
+                        // account aperto con Google: la password si imposta con il codice via email
+                        onSetPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
                         onMyHazards = { navController.navigate(Route.MyHazards) { launchSingleTop = true } },
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
@@ -538,6 +541,7 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         // la registrazione prende il posto dell'accesso: Indietro torna al Profilo
                         onRegister = { navController.navigate(Route.Register) { popUpTo<Route.Login> { inclusive = true } } },
+                        onForgotPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
                         // dal Profilo si torna al Profilo; dal dettaglio di un sentiero (Profilo non nella pila) al sentiero
                         onLoggedIn = { if (!navController.popBackStack<Route.Profile>(inclusive = false)) navController.popBackStack() },
                     )
@@ -550,6 +554,21 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         onLogin = { navController.navigate(Route.Login) { popUpTo<Route.Register> { inclusive = true } } },
                         onRegistered = { if (!navController.popBackStack<Route.Profile>(inclusive = false)) navController.popBackStack() },
+                    )
+                }
+                composable<Route.PasswordReset>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    PasswordResetScreen(
+                        email = entry.toRoute<Route.PasswordReset>().email,
+                        onBack = { navController.popBackStack() },
+                        // fatto: al login che c'era sotto; dal Profilo un login nuovo al posto del reset
+                        onDone = {
+                            if (!navController.popBackStack<Route.Login>(inclusive = false)) {
+                                navController.navigate(Route.Login) { popUpTo<Route.PasswordReset> { inclusive = true } }
+                            }
+                        },
                     )
                 }
                 composable<Route.EditName>(

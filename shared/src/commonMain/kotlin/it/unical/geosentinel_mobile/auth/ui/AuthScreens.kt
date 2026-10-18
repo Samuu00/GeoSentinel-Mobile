@@ -44,6 +44,7 @@ import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
@@ -56,6 +57,22 @@ import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.auth_confirm
 import geosentinel_mobile.shared.generated.resources.auth_display_name
 import geosentinel_mobile.shared.generated.resources.auth_email
+import geosentinel_mobile.shared.generated.resources.auth_forgot_password
+import geosentinel_mobile.shared.generated.resources.reset_change_email
+import geosentinel_mobile.shared.generated.resources.reset_code
+import geosentinel_mobile.shared.generated.resources.reset_code_body
+import geosentinel_mobile.shared.generated.resources.reset_code_button
+import geosentinel_mobile.shared.generated.resources.reset_code_hint
+import geosentinel_mobile.shared.generated.resources.reset_code_title
+import geosentinel_mobile.shared.generated.resources.reset_done_body
+import geosentinel_mobile.shared.generated.resources.reset_done_button
+import geosentinel_mobile.shared.generated.resources.reset_done_title
+import geosentinel_mobile.shared.generated.resources.reset_email_body
+import geosentinel_mobile.shared.generated.resources.reset_email_button
+import geosentinel_mobile.shared.generated.resources.reset_email_title
+import geosentinel_mobile.shared.generated.resources.reset_new_password
+import geosentinel_mobile.shared.generated.resources.reset_not_arrived
+import geosentinel_mobile.shared.generated.resources.reset_send_again
 import geosentinel_mobile.shared.generated.resources.auth_have_account
 import geosentinel_mobile.shared.generated.resources.auth_hide_password
 import geosentinel_mobile.shared.generated.resources.auth_login_body
@@ -87,9 +104,10 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
+import org.koin.core.parameter.parametersOf
 
 @Composable
-fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Unit) {
+fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (email: String) -> Unit, onLoggedIn: () -> Unit) {
     val viewModel = koinViewModel<LoginViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.loggedIn) { if (state.loggedIn) onLoggedIn() }
@@ -116,6 +134,84 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onLoggedIn: () -> Un
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Next),
         )
         PasswordField(value = state.password, onValueChange = viewModel::onPasswordChange, onDone = viewModel::submit)
+        TextButton(
+            onClick = { onForgotPassword(state.email.trim()) },
+            modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
+        ) { Text(stringResource(Res.string.auth_forgot_password), fontWeight = FontWeight.SemiBold) }
+    }
+}
+
+// Password dimenticata: un form per passo, con lo stesso scheletro degli altri
+@Composable
+fun PasswordResetScreen(email: String, onBack: () -> Unit, onDone: () -> Unit) {
+    val viewModel = koinViewModel<PasswordResetViewModel> { parametersOf(email) }
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    when (state.step) {
+        ResetStep.EMAIL -> FormScaffold(
+            onBack = onBack,
+            title = Res.string.reset_email_title,
+            body = Res.string.reset_email_body,
+            error = state.error?.resolve(),
+            actions = {
+                PrimaryPillButton(stringResource(Res.string.reset_email_button), onClick = viewModel::requestCode, loading = state.submitting)
+                Spacer(Modifier.size(12.dp))
+            },
+        ) {
+            FormTextField(
+                value = state.email,
+                onValueChange = viewModel::onEmailChange,
+                label = stringResource(Res.string.auth_email),
+                error = state.fieldErrors[ResetField.EMAIL]?.resolve(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { viewModel.requestCode() }),
+            )
+        }
+        ResetStep.CODE -> FormScaffold(
+            onBack = viewModel::changeEmail,
+            title = Res.string.reset_code_title,
+            body = Res.string.reset_code_body,
+            error = state.error?.resolve(),
+            actions = {
+                PrimaryPillButton(stringResource(Res.string.reset_code_button), onClick = viewModel::confirm, loading = state.submitting)
+                FooterLink(Res.string.reset_not_arrived, Res.string.reset_send_again, viewModel::requestCode)
+            },
+        ) {
+            Text(state.email, style = MaterialTheme.typography.titleMedium)
+            FormTextField(
+                value = state.code,
+                onValueChange = viewModel::onCodeChange,
+                label = stringResource(Res.string.reset_code),
+                error = state.fieldErrors[ResetField.CODE]?.resolve(),
+                supporting = stringResource(Res.string.reset_code_hint),
+                keyboardOptions = KeyboardOptions(
+                    capitalization = KeyboardCapitalization.Characters,
+                    autoCorrectEnabled = false,
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Next,
+                ),
+            )
+            PasswordField(
+                value = state.newPassword,
+                onValueChange = viewModel::onPasswordChange,
+                label = stringResource(Res.string.reset_new_password),
+                error = state.fieldErrors[ResetField.PASSWORD]?.resolve(),
+                hint = stringResource(Res.string.auth_password_rules),
+                onDone = viewModel::confirm,
+            )
+            TextButton(onClick = viewModel::changeEmail, modifier = Modifier.heightIn(min = 48.dp)) {
+                Text(stringResource(Res.string.reset_change_email), fontWeight = FontWeight.SemiBold)
+            }
+        }
+        ResetStep.DONE -> FormScaffold(
+            onBack = onDone,
+            title = Res.string.reset_done_title,
+            body = Res.string.reset_done_body,
+            actions = {
+                PrimaryPillButton(stringResource(Res.string.reset_done_button), onClick = onDone)
+                Spacer(Modifier.size(12.dp))
+            },
+        ) {}
     }
 }
 
@@ -170,22 +266,34 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
     }
 
     if (pickingDate) {
-        val pickerState = rememberDatePickerState()
-        DatePickerDialog(
-            onDismissRequest = { pickingDate = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    // il DatePicker lavora in millisecondi UTC a mezzanotte
-                    pickerState.selectedDateMillis?.let {
-                        viewModel.onBirthDateChange(Instant.fromEpochMilliseconds(it).toLocalDateTime(TimeZone.UTC).date)
-                    }
-                    pickingDate = false
-                }) { Text(stringResource(Res.string.auth_confirm)) }
+        BirthDatePickerDialog(
+            title = Res.string.auth_birth_date,
+            onPicked = {
+                viewModel.onBirthDateChange(it)
+                pickingDate = false
             },
-            dismissButton = { TextButton(onClick = { pickingDate = false }) { Text(stringResource(Res.string.auth_cancel)) } },
-        ) {
-            DatePicker(pickerState)
-        }
+            onDismiss = { pickingDate = false },
+        )
+    }
+}
+
+// Calendario della data di nascita, per la registrazione e per il primo accesso con Google
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+internal fun BirthDatePickerDialog(title: StringResource, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit) {
+    val pickerState = rememberDatePickerState()
+    DatePickerDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            TextButton(onClick = {
+                // il DatePicker lavora in millisecondi UTC a mezzanotte; senza una data è come annullare
+                val picked = pickerState.selectedDateMillis
+                if (picked == null) onDismiss() else onPicked(Instant.fromEpochMilliseconds(picked).toLocalDateTime(TimeZone.UTC).date)
+            }) { Text(stringResource(Res.string.auth_confirm)) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(Res.string.auth_cancel)) } },
+    ) {
+        DatePicker(pickerState, title = { Text(stringResource(title), modifier = Modifier.padding(start = 24.dp, end = 12.dp, top = 16.dp)) })
     }
 }
 

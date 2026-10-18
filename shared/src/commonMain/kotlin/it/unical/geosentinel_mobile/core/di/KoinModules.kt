@@ -4,6 +4,7 @@ import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.room.RoomDatabase
 import io.ktor.client.HttpClient
 import it.unical.geosentinel_mobile.auth.ui.LoginViewModel
+import it.unical.geosentinel_mobile.auth.ui.PasswordResetViewModel
 import it.unical.geosentinel_mobile.auth.ui.RegisterViewModel
 import it.unical.geosentinel_mobile.core.config.AppConfig
 import it.unical.geosentinel_mobile.core.db.AppDatabase
@@ -153,6 +154,7 @@ fun coreModule(
     // accesso e profilo
     viewModel { LoginViewModel(get()) }
     viewModel { RegisterViewModel(get()) }
+    viewModel { (email: String) -> PasswordResetViewModel(get(), email) }
     viewModel { ProfileViewModel(get()) }
     viewModel { EditNameViewModel(get()) }
     viewModel { ChangePasswordViewModel(get()) }

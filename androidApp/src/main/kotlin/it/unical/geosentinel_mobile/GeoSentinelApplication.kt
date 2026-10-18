@@ -17,7 +17,11 @@ class GeoSentinelApplication : Application() {
         super.onCreate()
         initKoin(
             context = this,
-            config = AppConfig(apiBaseUrl = BuildConfig.API_BASE_URL, isDebug = BuildConfig.DEBUG),
+            config = AppConfig(
+                apiBaseUrl = BuildConfig.API_BASE_URL,
+                isDebug = BuildConfig.DEBUG,
+                googleWebClientId = BuildConfig.GOOGLE_WEB_CLIENT_ID.ifBlank { null },
+            ),
         )
         startPush()
     }

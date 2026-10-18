@@ -71,9 +71,9 @@ object HttpClientFactory {
             }
 
             // Il plugin Auth, su un 401 di una richiesta partita senza token, la rimanda CON il token. Quindi non
-            // basta non mandarlo: per gli altri host (storage, URL firmati) e per login, registrazione e refresh
-            // il plugin si spegne del tutto. Lì un 401 è definitivo (es. password sbagliata): rimandare la richiesta
-            // raddoppierebbe i tentativi e un refresh consumerebbe il refresh token, che vale una volta sola.
+            // basta non mandarlo: per gli altri host (storage, URL firmati) e per login (anche Google), registrazione,
+            // refresh e reset della password il plugin si spegne del tutto. Lì un 401 è definitivo (es. password
+            // sbagliata): rimandare la richiesta raddoppierebbe i tentativi e un refresh consumerebbe il refresh token, che vale una volta sola.
             // Va installato prima di Auth, che legge il flag quando aggiunge l'header.
             install(createClientPlugin("AuthScope") {
                 onRequest { request, _ ->
@@ -145,8 +145,11 @@ object HttpClientFactory {
         }
     }
 
-    // Le uniche rotte /auth senza bearer: un 401 lì non è un token scaduto
-    private val publicAuthPaths = listOf("/auth/login", "/auth/register", "/auth/refresh")
+    // Le rotte /auth senza bearer (TOKENLESS_AUTH_PATHS del backend): un 401 lì non è un token scaduto
+    private val publicAuthPaths = listOf(
+        "/auth/login", "/auth/register", "/auth/refresh", "/auth/google",
+        "/auth/password-reset/request", "/auth/password-reset/confirm",
+    )
 
     private fun isPublicAuthPath(path: String) = publicAuthPaths.any { path.endsWith(it) }
 }

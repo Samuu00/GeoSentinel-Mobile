@@ -35,6 +35,10 @@ class FakeBackend {
     val users = mutableMapOf("hiker@test.dev" to "password-giusta-1", "rescuer@test.dev" to "password-giusta-2")
     val roles = mutableMapOf("hiker@test.dev" to "HIKER", "rescuer@test.dev" to "RESCUE_OPERATOR")
     val names = mutableMapOf<String, String>() // nome visualizzato, se cambiato (altrimenti "Nome")
+    // Login Google (ADR-0024): un ID token "google:<email>" è valido, ogni altro dà 401. Gli account creati da Google
+    // non hanno password. Reset (M7.2.2): l'ultimo codice mandato per email (solo agli account esistenti).
+    val googleOnly = mutableSetOf<String>()
+    val resetCodes = mutableMapOf<String, String>()
     var offline = false
     var refreshStatus = HttpStatusCode.OK
     var loginStatus: HttpStatusCode? = null // forza una risposta (es. 429)
@@ -79,6 +83,36 @@ class FakeBackend {
                 tokens(issueFor(email))
             }
             request.method == HttpMethod.Post && path == "/api/v1/auth/logout" -> respond("", HttpStatusCode.NoContent)
+            request.method == HttpMethod.Post && path == "/api/v1/auth/google" -> {
+                val email = field(body, "idToken").removePrefix("google:").takeIf { field(body, "idToken").startsWith("google:") }
+                    ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                if (roles[email]?.let { it != "HIKER" } == true) return problem(HttpStatusCode.Conflict, "account-managed")
+                val created = email !in roles
+                if (created) {
+                    if (field(body, "birthDate").isEmpty()) return problem(HttpStatusCode.UnprocessableEntity, "birth-date-required")
+                    roles[email] = "HIKER"
+                }
+                // collegato: la password non vale più
+                users.remove(email)
+                googleOnly += email
+                respond(tokenJson(issueFor(email)), if (created) HttpStatusCode.Created else HttpStatusCode.OK, json)
+            }
+            request.method == HttpMethod.Post && path == "/api/v1/auth/password-reset/request" -> {
+                val email = field(body, "email")
+                if (email in roles) resetCodes[email] = "ABCD1234EFGH5678"
+                respond("", HttpStatusCode.NoContent)
+            }
+            request.method == HttpMethod.Post && path == "/api/v1/auth/password-reset/confirm" -> {
+                val email = field(body, "email")
+                if (resetCodes[email] == null || resetCodes[email] != field(body, "code")) {
+                    return problem(HttpStatusCode.UnprocessableEntity, "invalid-reset-code")
+                }
+                resetCodes.remove(email)
+                users[email] = field(body, "newPassword")
+                googleOnly -= email
+                revokeAll(email)
+                respond("", HttpStatusCode.NoContent)
+            }
             request.method == HttpMethod.Get && path == "/api/v1/users/me" -> {
                 val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
                 respond(profileJson(email), HttpStatusCode.OK, json)
@@ -116,7 +150,7 @@ class FakeBackend {
     }
 
     private fun profileJson(email: String) =
-        """{"id":"id-$email","email":"$email","displayName":"${names[email] ?: "Nome"}","role":"${roles.getValue(email)}","createdAt":"2026-10-02T10:00:00Z"}"""
+        """{"id":"id-$email","email":"$email","displayName":"${names[email] ?: "Nome"}","role":"${roles.getValue(email)}","hasPassword":${email !in googleOnly},"createdAt":"2026-10-02T10:00:00Z"}"""
 
     private fun MockRequestHandleScope.tokens(tokens: AuthTokens) = respond(tokenJson(tokens), HttpStatusCode.OK, json)
 

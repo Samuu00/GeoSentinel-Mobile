@@ -7,10 +7,13 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import it.unical.geosentinel_mobile.auth.ui.LoginScreen
 import it.unical.geosentinel_mobile.auth.ui.LoginViewModel
+import it.unical.geosentinel_mobile.core.config.AppConfig
 import it.unical.geosentinel_mobile.core.session.FakeBackend
+import it.unical.geosentinel_mobile.core.session.TEST_BASE_URL
 import it.unical.geosentinel_mobile.core.session.SessionManager
 import kotlinx.coroutines.runBlocking
 import org.junit.After
@@ -23,6 +26,7 @@ import org.koin.core.context.stopKoin
 import org.koin.core.module.dsl.viewModel
 import org.koin.dsl.module
 import org.robolectric.RobolectricTestRunner
+import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -36,19 +40,21 @@ class LoginScreenTest {
     private val backend = FakeBackend()
     private lateinit var session: SessionManager
     private var loggedIn = false
+    private var forgotFor: String? = null
 
     @Before
     fun setUp() {
         session = uiSession(backend).first
         runBlocking { session.restore() }
-        startKoin { modules(module { viewModel { LoginViewModel(session) } }) }
+        // senza client ID Google: il pulsante "Continua con Google" non c'è
+        startKoin { modules(module { viewModel { LoginViewModel(session) }; single { AppConfig(TEST_BASE_URL, isDebug = false) } }) }
     }
 
     @After
     fun tearDown() = stopKoin()
 
     private fun show() = compose.setContent {
-        TestTheme { LoginScreen(onBack = {}, onRegister = {}, onLoggedIn = { loggedIn = true }) }
+        TestTheme { LoginScreen(onBack = {}, onRegister = {}, onForgotPassword = { forgotFor = it }, onLoggedIn = { loggedIn = true }) }
     }
 
     private fun email() = compose.onNode(hasSetTextAction() and hasText("Email"))
@@ -76,5 +82,15 @@ class LoginScreenTest {
 
         compose.waitForText("Email o password non corretti.")
         assertFalse(loggedIn)
+    }
+
+    @Test
+    fun `password dimenticata porta al reset con l'email gia scritta`() {
+        show()
+        email().performTextInput(" hiker@test.dev ")
+        compose.onNode(hasClickAction() and hasText("Password dimenticata?")).performScrollTo().performClick()
+
+        compose.waitFor { forgotFor != null }
+        assertEquals("hiker@test.dev", forgotFor)
     }
 }
