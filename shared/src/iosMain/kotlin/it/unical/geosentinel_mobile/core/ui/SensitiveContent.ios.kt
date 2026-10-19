@@ -25,7 +25,8 @@ actual fun SecureScreen() {
             @Suppress("DEPRECATION")
             val window = UIApplication.sharedApplication.keyWindow ?: return@addObserverForName
             cover?.removeFromSuperview()
-            val view = UIView(frame = window.bounds).apply { backgroundColor = UIColor.systemBackgroundColor }
+            // nero pieno: systemBackgroundColor (categoria di UIColor) non è visibile da Kotlin/Native
+            val view = UIView(frame = window.bounds).apply { backgroundColor = UIColor.blackColor }
             window.addSubview(view)
             cover = view
         }
