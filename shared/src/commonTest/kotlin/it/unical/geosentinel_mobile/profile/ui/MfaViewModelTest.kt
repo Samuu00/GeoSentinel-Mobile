@@ -64,7 +64,7 @@ class MfaViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `attivazione in tre passi - chiave, primo codice, codici di recupero una volta sola`() = runTest {
+    fun `attivazione in tre passi - chiave poi primo codice poi codici di recupero una volta sola`() = runTest {
         val session = loggedIn()
         val viewModel = mfaViewModel(session)
         assertFalse(viewModel.state.value.enabled)
@@ -109,7 +109,7 @@ class MfaViewModelTest {
     }
 
     @Test
-    fun `disattivazione - codice sbagliato sul campo, poi con un codice di recupero`() = runTest {
+    fun `disattivazione - codice sbagliato sul campo poi con un codice di recupero`() = runTest {
         backend.mfaTotp["hiker@test.dev"] = "777888"
         backend.mfaRecovery["hiker@test.dev"] = mutableSetOf("ABCD-EFGH")
         val session = loggedIn(mfaCode = "777888")
@@ -149,7 +149,7 @@ class MfaViewModelTest {
     private fun resetViewModel() = MfaResetViewModel(StaffRepository({ client }, TEST_BASE_URL))
 
     @Test
-    fun `azzeramento da ADMIN - fatto, 404 senza 2FA, 422 sulla propria`() = runTest {
+    fun `azzeramento da ADMIN - fatto e 404 senza 2FA e 422 sulla propria`() = runTest {
         backend.mfaTotp["hiker@test.dev"] = "777888"
         backend.mfaTotp["admin@test.dev"] = "999000"
         loggedIn("admin@test.dev", "password-giusta-3", mfaCode = "999000")
