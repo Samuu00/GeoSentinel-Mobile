@@ -20,6 +20,8 @@ import kotlinx.coroutines.test.TestScope
 import kotlinx.io.IOException
 
 const val TEST_BASE_URL = "http://api.test"
+const val MFA_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
+const val MFA_SETUP_CODE = "123456"
 
 class FakeSecureTokenStore(var tokens: AuthTokens? = null) : SecureTokenStore {
     override suspend fun read() = tokens
@@ -39,6 +41,13 @@ class FakeBackend {
     // non hanno password. Reset (M7.2.2): l'ultimo codice mandato per email (solo agli account esistenti).
     val googleOnly = mutableSetOf<String>()
     val resetCodes = mutableMapOf<String, String>()
+    // Verifica in due passaggi (M10): email -> il TOTP valido adesso (un codice vale una volta sola, come sul server) e
+    // i codici di recupero. Il setup dà sempre MFA_SECRET; enable accetta MFA_SETUP_CODE.
+    val mfaTotp = mutableMapOf<String, String>()
+    val mfaRecovery = mutableMapOf<String, MutableSet<String>>()
+    private val usedTotp = mutableSetOf<String>()
+    // foto profilo (M11): email -> avatarMediaId
+    val avatars = mutableMapOf<String, String>()
     var offline = false
     var refreshStatus = HttpStatusCode.OK
     var loginStatus: HttpStatusCode? = null // forza una risposta (es. 429)
@@ -67,7 +76,9 @@ class FakeBackend {
             request.method == HttpMethod.Post && path == "/api/v1/auth/login" -> {
                 loginStatus?.let { return problem(it, "rate-limit-exceeded", retryAfter = "60") }
                 val email = field(body, "email")
-                if (users[email] == field(body, "password")) tokens(issueFor(email)) else problem(HttpStatusCode.Unauthorized, "unauthorized")
+                if (users[email] != field(body, "password")) return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                checkMfa(email, body)?.let { return problem(HttpStatusCode.Unauthorized, it) }
+                tokens(issueFor(email))
             }
             request.method == HttpMethod.Post && path == "/api/v1/auth/register" -> {
                 registerProblem?.let { (status, json) -> return respond(json, status, headersOf(HttpHeaders.ContentType, "application/problem+json")) }
@@ -88,6 +99,7 @@ class FakeBackend {
                     ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
                 if (roles[email]?.let { it != "HIKER" } == true) return problem(HttpStatusCode.Conflict, "account-managed")
                 val created = email !in roles
+                if (!created) checkMfa(email, body)?.let { return problem(HttpStatusCode.Unauthorized, it) }
                 if (created) {
                     if (field(body, "birthDate").isEmpty()) return problem(HttpStatusCode.UnprocessableEntity, "birth-date-required")
                     roles[email] = "HIKER"
@@ -140,8 +152,69 @@ class FakeBackend {
                 revokeAll(email)
                 respond("", HttpStatusCode.NoContent)
             }
+            path.startsWith("/api/v1/users/me/mfa/") && request.method == HttpMethod.Post -> {
+                val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                val code = field(body, "code")
+                val totpOk = mfaTotp[email] == code
+                when (path.removePrefix("/api/v1/users/me/mfa/")) {
+                    "setup" -> if (email in mfaTotp) {
+                        problem(HttpStatusCode.Conflict, "mfa-already-enabled")
+                    } else {
+                        respond("""{"secret":"$MFA_SECRET","otpauthUri":"otpauth://totp/GeoSentinel:x?secret=$MFA_SECRET"}""", HttpStatusCode.OK, json)
+                    }
+                    "enable" -> if (code != MFA_SETUP_CODE) {
+                        problem(HttpStatusCode.UnprocessableEntity, "invalid-mfa-code")
+                    } else {
+                        mfaTotp[email] = MFA_SETUP_CODE
+                        respond(recoveryJson(email), HttpStatusCode.OK, json)
+                    }
+                    "disable" -> if (totpOk || mfaRecovery[email]?.contains(code) == true) {
+                        mfaTotp.remove(email)
+                        mfaRecovery.remove(email)
+                        respond("", HttpStatusCode.NoContent)
+                    } else {
+                        problem(HttpStatusCode.UnprocessableEntity, "invalid-mfa-code")
+                    }
+                    "recovery-codes" -> if (totpOk) respond(recoveryJson(email), HttpStatusCode.OK, json) else problem(HttpStatusCode.UnprocessableEntity, "invalid-mfa-code")
+                    else -> problem(HttpStatusCode.NotFound, "not-found")
+                }
+            }
+            // Come il backend: solo ADMIN, 404 senza 2FA, 422 su sé stesso; chiude le sessioni dell'utente
+            request.method == HttpMethod.Post && path == "/api/v1/admin/mfa-resets" -> {
+                val admin = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
+                if (roles[admin] != "ADMIN") return problem(HttpStatusCode.Forbidden, "forbidden")
+                val email = field(body, "email")
+                when {
+                    email !in mfaTotp -> problem(HttpStatusCode.NotFound, "not-found")
+                    email == admin -> problem(HttpStatusCode.UnprocessableEntity, "business-rule")
+                    else -> {
+                        mfaTotp.remove(email)
+                        mfaRecovery.remove(email)
+                        revokeAll(email)
+                        respond("", HttpStatusCode.NoContent)
+                    }
+                }
+            }
             else -> extraRoutes?.invoke(this, request, owners[bearer?.removePrefix("Bearer ")]) ?: problem(HttpStatusCode.NotFound, "not-found")
         }
+    }
+
+    // null: si entra. Senza codice mfa-required; TOTP già usato o codice sconosciuto invalid-mfa-code
+    private fun checkMfa(email: String, body: String): String? {
+        val totp = mfaTotp[email] ?: return null
+        val code = field(body, "mfaCode")
+        return when {
+            code.isEmpty() -> "mfa-required"
+            code == totp && usedTotp.add("$email:$code") -> null
+            mfaRecovery[email]?.remove(code) == true -> null
+            else -> "invalid-mfa-code"
+        }
+    }
+
+    private fun recoveryJson(email: String): String {
+        val codes = (1..10).map { "REC0-$it" }
+        mfaRecovery[email] = codes.toMutableSet()
+        return """{"codes":[${codes.joinToString(",") { "\"$it\"" }}]}"""
     }
 
     private fun revokeAll(email: String) {
@@ -150,7 +223,8 @@ class FakeBackend {
     }
 
     private fun profileJson(email: String) =
-        """{"id":"id-$email","email":"$email","displayName":"${names[email] ?: "Nome"}","role":"${roles.getValue(email)}","hasPassword":${email !in googleOnly},"createdAt":"2026-10-02T10:00:00Z"}"""
+        """{"id":"id-$email","email":"$email","displayName":"${names[email] ?: "Nome"}","role":"${roles.getValue(email)}","hasPassword":${email !in googleOnly},""" +
+            """"mfaEnabled":${email in mfaTotp},${avatars[email]?.let { "\"avatarMediaId\":\"$it\"," }.orEmpty()}"createdAt":"2026-10-02T10:00:00Z"}"""
 
     private fun MockRequestHandleScope.tokens(tokens: AuthTokens) = respond(tokenJson(tokens), HttpStatusCode.OK, json)
 

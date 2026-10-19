@@ -537,4 +537,60 @@
     <string name="ticket_create_body">Il ticket resta legato al sentiero. Lo vedono tutti i gestori del parco nella scheda Gestione.</string>
     <string name="ticket_create_save">Apri il ticket</string>
 
+    <!-- Verifica in due passaggi (M10) -->
+    <string name="mfa_login_title">Codice di verifica</string>
+    <string name="mfa_login_body">Apri l'app di autenticazione e scrivi il codice a 6 cifre di GeoSentinel.</string>
+    <string name="mfa_login_body_recovery">Scrivi uno dei codici di recupero che hai salvato quando hai attivato la verifica. Ognuno vale una volta sola.</string>
+    <string name="mfa_login_button">Verifica</string>
+    <string name="mfa_code_label">Codice a 6 cifre</string>
+    <string name="mfa_recovery_label">Codice di recupero</string>
+    <string name="mfa_use_recovery">Usa un codice di recupero</string>
+    <string name="mfa_use_totp">Usa l'app di autenticazione</string>
+    <string name="mfa_lost_access">Hai perso l'accesso? Contatta l'amministratore del parco.</string>
+    <string name="error_mfa_code_wrong">Codice non valido. Controlla che l'ora del telefono sia giusta, o usa un codice di recupero.</string>
+    <string name="error_mfa_no_app">Nessuna app di autenticazione trovata: aggiungi la chiave a mano.</string>
+    <string name="mfa_title">Verifica in due passaggi</string>
+    <string name="mfa_off_body">Oltre alla password, all'accesso ti chiederemo un codice dall'app di autenticazione del telefono (Google Authenticator, Aegis, Password di iOS…). Chi scopre la tua password non può entrare lo stesso.</string>
+    <string name="mfa_on_body">È attiva: all'accesso ti chiediamo anche il codice dell'app di autenticazione.</string>
+    <string name="mfa_enable">Attiva</string>
+    <string name="mfa_setup_title">Collega l'app</string>
+    <string name="mfa_setup_body">Aggiungi GeoSentinel alla tua app di autenticazione con il pulsante, oppure scrivi la chiave a mano. Poi inserisci qui il codice a 6 cifre che ti mostra.</string>
+    <string name="mfa_setup_open_app">Apri l'app di autenticazione</string>
+    <string name="mfa_setup_key">Chiave</string>
+    <string name="mfa_setup_copy_key">Copia la chiave</string>
+    <string name="mfa_setup_button">Attiva la verifica</string>
+    <string name="mfa_codes_title">Codici di recupero</string>
+    <string name="mfa_codes_body">Se perdi il telefono entri con uno di questi codici, una volta ciascuno. Salvali in un posto sicuro: non li mostreremo più.</string>
+    <string name="mfa_codes_copy">Copia tutti</string>
+    <string name="mfa_codes_saved">Li ho salvati</string>
+    <string name="mfa_codes_done">Fine</string>
+    <string name="mfa_codes_leave_title">Hai salvato i codici?</string>
+    <string name="mfa_codes_leave_body">Uscendo non potrai più vederli. Potrai solo generarne di nuovi.</string>
+    <string name="mfa_codes_leave">Esci</string>
+    <string name="mfa_regenerate">Nuovi codici di recupero</string>
+    <string name="mfa_regenerate_body">Scrivi il codice dell'app di autenticazione: i codici di recupero di prima smetteranno di valere.</string>
+    <string name="mfa_regenerate_button">Genera i codici</string>
+    <string name="mfa_disable">Disattiva la verifica</string>
+    <string name="mfa_disable_title">Disattiva la verifica</string>
+    <string name="mfa_disable_body">Scrivi il codice dell'app di autenticazione o un codice di recupero.</string>
+    <string name="mfa_disable_label">Codice</string>
+    <string name="profile_mfa">Verifica in due passaggi</string>
+    <string name="profile_mfa_on">Attiva</string>
+    <string name="profile_mfa_off">Non attiva</string>
+    <string name="staff_mfa_reset_title">Azzera verifica in due passaggi</string>
+    <string name="staff_mfa_reset_body">Per chi ha perso il telefono e i codici di recupero. Prima verifica la sua identità di persona o per telefono: l'utente verrà disconnesso da tutti i dispositivi e riceverà un'email.</string>
+    <string name="staff_mfa_reset_button">Azzera</string>
+    <string name="staff_mfa_reset_confirm_title">Azzerare la verifica?</string>
+    <string name="staff_mfa_reset_confirm_body">L'utente verrà disconnesso da tutti i dispositivi. Hai verificato la sua identità?</string>
+    <string name="staff_mfa_reset_confirm">Sì, azzera</string>
+    <string name="staff_mfa_reset_not_found">Nessun account con la verifica attiva per questa email.</string>
+    <string name="staff_mfa_reset_self">Non puoi azzerare la tua: chiedilo a un altro amministratore.</string>
+    <string name="staff_mfa_reset_done_title">Verifica azzerata</string>
+    <string name="staff_mfa_reset_done_body">L'utente ora entra con la sola password e può riattivare la verifica dal suo Profilo.</string>
+    <string name="staff_mfa_reset_done_button">Fine</string>
+
+    <!-- Foto profilo (M11) -->
+    <string name="profile_photo">Foto profilo</string>
+    <string name="profile_photo_choose">Scegli una foto</string>
+    <string name="profile_photo_remove">Rimuovi foto</string>
 </resources>

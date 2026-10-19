@@ -24,16 +24,20 @@ actual class PickedImage(val data: NSData)
 actual class ImageEncoder actual constructor() {
 
     @OptIn(ExperimentalForeignApi::class)
-    actual suspend fun toJpeg(source: PickedImage, maxSidePx: Int, quality: Int): ByteArray = withContext(Dispatchers.Default) {
+    actual suspend fun toJpeg(source: PickedImage, maxSidePx: Int, quality: Int, squareCrop: Boolean): ByteArray = withContext(Dispatchers.Default) {
         val original = UIImage.imageWithData(source.data) ?: error("foto non leggibile")
         val (width, height) = original.size.useContents { width to height }
         if (width <= 0.0 || height <= 0.0) error("foto non leggibile")
-        val ratio = min(1.0, maxSidePx / max(width, height))
+        val side = if (squareCrop) min(width, height) else max(width, height)
+        val ratio = min(1.0, maxSidePx / side)
+        // quadrato: la tela è il lato corto e l'immagine intera ci si disegna centrata, il resto resta fuori
+        val canvasW = if (squareCrop) side * ratio else width * ratio
+        val canvasH = if (squareCrop) side * ratio else height * ratio
 
         // Si ridisegna sempre: applica l'orientamento ai pixel e lascia fuori tutti i metadati dell'originale
-        UIGraphicsBeginImageContextWithOptions(CGSizeMake(width * ratio, height * ratio), true, 1.0)
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(canvasW, canvasH), true, 1.0)
         val redrawn = try {
-            original.drawInRect(CGRectMake(0.0, 0.0, width * ratio, height * ratio))
+            original.drawInRect(CGRectMake((canvasW - width * ratio) / 2, (canvasH - height * ratio) / 2, width * ratio, height * ratio))
             UIGraphicsGetImageFromCurrentImageContext()
         } finally {
             UIGraphicsEndImageContext()

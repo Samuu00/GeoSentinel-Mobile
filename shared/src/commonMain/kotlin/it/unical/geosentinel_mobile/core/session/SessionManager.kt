@@ -51,8 +51,17 @@ sealed interface SessionState {
 val SessionState.role: UserRole
     get() = if (this is SessionState.LoggedIn) profile?.role ?: UserRole.HIKER else UserRole.GUEST
 
-// hasPassword false: account aperto con Google (ADR-0024), la password si imposta dal reset via codice
-data class UserProfile(val id: String, val email: String, val displayName: String, val role: UserRole, val hasPassword: Boolean = true)
+// hasPassword false: account aperto con Google (ADR-0024), la password si imposta dal reset via codice.
+// avatarMediaId: la foto profilo (M11), null senza foto
+data class UserProfile(
+    val id: String,
+    val email: String,
+    val displayName: String,
+    val role: UserRole,
+    val hasPassword: Boolean = true,
+    val mfaEnabled: Boolean = false,
+    val avatarMediaId: String? = null,
+)
 
 class RegisterForm(val email: String, val password: String, val displayName: String, val birthDate: LocalDate) {
     override fun toString() = "RegisterForm(…)" // contiene password ed email
@@ -98,8 +107,10 @@ class SessionManager(
         loadProfile()
     }
 
-    suspend fun login(email: String, password: String): Result<Unit> =
-        apiCall { authApi.login(LoginRequest(email.trim(), password)) }.andThen { startSession(it) }
+    // Con la verifica in due passaggi attiva il server risponde 401 mfa-required senza creare nulla: la UI chiede il
+    // codice e ripete la stessa richiesta con mfaCode (TOTP o codice di recupero, il server li distingue)
+    suspend fun login(email: String, password: String, mfaCode: String? = null): Result<Unit> =
+        apiCall { authApi.login(LoginRequest(email.trim(), password, mfaCode?.trim())) }.andThen { startSession(it) }
 
     // La soglia di età la controlla il server (422 age-requirement-not-met)
     suspend fun register(form: RegisterForm): Result<Unit> =
@@ -110,8 +121,9 @@ class SessionManager(
     // ID token dal SDK Google della piattaforma. Primo accesso senza data di nascita: 422 birth-date-required, la UI
     // la chiede e ripete con lo stesso token (vale circa un'ora). Un account esistente collegato a Google perde la
     // password e le altre sessioni (lo fa il server).
-    suspend fun loginWithGoogle(idToken: String, birthDate: LocalDate? = null): Result<Unit> =
-        apiCall { authApi.loginWithGoogle(GoogleLoginRequest(idToken, birthDate)) }.andThen { startSession(it) }
+    // Anche qui 401 mfa-required se l'account ha la verifica in due passaggi.
+    suspend fun loginWithGoogle(idToken: String, birthDate: LocalDate? = null, mfaCode: String? = null): Result<Unit> =
+        apiCall { authApi.loginWithGoogle(GoogleLoginRequest(idToken, birthDate, mfaCode?.trim())) }.andThen { startSession(it) }
 
     // Sempre 204, anche per un'email non registrata: la risposta non dice se l'account esiste
     suspend fun requestPasswordReset(email: String): Result<Unit> =
@@ -184,6 +196,9 @@ class SessionManager(
     suspend fun deleteAccount(): Result<Unit> = withContext(NonCancellable) {
         apiCall { usersApi.deleteMyAccount() }.map { endSession(SessionState.Anonymous, SessionEnd.ACCOUNT_DELETED) }
     }
+
+    // Dopo un cambio che il server tiene nel profilo (verifica in due passaggi, foto): /users/me di nuovo
+    suspend fun reloadProfile() = loadProfile()
 
     override suspend fun getTokens(): AuthTokens? = readTokens()
 
@@ -329,4 +344,6 @@ private fun UserProfileResponse.toUserProfile() = UserProfile(
         UserProfileResponse.Role.unknown_default_open_api -> UserRole.HIKER
     },
     hasPassword = hasPassword,
+    mfaEnabled = mfaEnabled,
+    avatarMediaId = avatarMediaId,
 )

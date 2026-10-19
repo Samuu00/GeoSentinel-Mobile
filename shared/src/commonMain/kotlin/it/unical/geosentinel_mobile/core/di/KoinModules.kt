@@ -22,6 +22,8 @@ import it.unical.geosentinel_mobile.core.session.createSecureTokenStore
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeSettings
 import it.unical.geosentinel_mobile.profile.ui.ChangePasswordViewModel
 import it.unical.geosentinel_mobile.profile.ui.EditNameViewModel
+import it.unical.geosentinel_mobile.profile.ui.MfaViewModel
+import it.unical.geosentinel_mobile.profile.data.MfaRepository
 import it.unical.geosentinel_mobile.profile.ui.ProfileViewModel
 import it.unical.geosentinel_mobile.hazard.data.HazardRepository
 import it.unical.geosentinel_mobile.hazard.ui.HazardMapViewModel
@@ -44,6 +46,7 @@ import it.unical.geosentinel_mobile.rescue.ui.RescueMapViewModel
 import it.unical.geosentinel_mobile.staff.data.StaffRepository
 import it.unical.geosentinel_mobile.staff.data.TicketRepository
 import it.unical.geosentinel_mobile.staff.ui.HazardQueueViewModel
+import it.unical.geosentinel_mobile.staff.ui.MfaResetViewModel
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityViewModel
 import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateViewModel
@@ -129,6 +132,7 @@ fun coreModule(
     single { RescueRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { StaffRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
     single { TicketRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
+    single { MfaRepository(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl) }
 
     // ---- Servizi con stato, uno per processo ----
     // Upload delle foto (M4.2): l'API sul client autenticato, lo storage su un client suo, senza Auth
@@ -155,7 +159,8 @@ fun coreModule(
     viewModel { LoginViewModel(get()) }
     viewModel { RegisterViewModel(get()) }
     viewModel { (email: String) -> PasswordResetViewModel(get(), email) }
-    viewModel { ProfileViewModel(get()) }
+    viewModel { ProfileViewModel(get(), get(), get()) }
+    viewModel { MfaViewModel(get(), get()) }
     viewModel { EditNameViewModel(get()) }
     viewModel { ChangePasswordViewModel(get()) }
     // mappa e sentieri; l'id del sentiero arriva dalla rotta (koinViewModel { parametersOf(id) })
@@ -194,6 +199,7 @@ fun coreModule(
     // rifugi e squadre (M8.3); id e posti del rifugio dalla rotta
     viewModel { (refugeId: String, capacity: Int) -> RefugeCapacityViewModel(refugeId, capacity, get()) }
     viewModel { RescueTeamCreateViewModel(get()) }
+    viewModel { MfaResetViewModel(get()) }
 }
 
 // Una sola volta per processo: initKoin(context, config) da Application.onCreate su Android, MainViewController su

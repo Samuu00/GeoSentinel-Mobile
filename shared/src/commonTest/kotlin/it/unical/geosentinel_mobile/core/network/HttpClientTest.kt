@@ -258,7 +258,7 @@ class HttpClientTest {
     fun `un valore di enum sconosciuto non fa fallire la deserializzazione`() = runTest {
         val client = client {
             respond(
-                """{"id":"u1","email":"a@b.c","displayName":"A","role":"SUPER_ADMIN","hasPassword":true,"createdAt":"2026-10-02T10:00:00Z","nuovoCampo":1}""",
+                """{"id":"u1","email":"a@b.c","displayName":"A","role":"SUPER_ADMIN","hasPassword":true,"mfaEnabled":false,"createdAt":"2026-10-02T10:00:00Z","nuovoCampo":1}""",
                 HttpStatusCode.OK,
                 headersOf(HttpHeaders.ContentType, "application/json"),
             )

@@ -6,6 +6,7 @@ import geosentinel_mobile.shared.generated.resources.error_field_email
 import geosentinel_mobile.shared.generated.resources.error_field_password_long
 import geosentinel_mobile.shared.generated.resources.error_field_password_short
 import geosentinel_mobile.shared.generated.resources.error_login_failed
+import geosentinel_mobile.shared.generated.resources.error_mfa_code_wrong
 import geosentinel_mobile.shared.generated.resources.error_invalid_reset_code
 import geosentinel_mobile.shared.generated.resources.error_google_staff
 import geosentinel_mobile.shared.generated.resources.error_rate_limited_seconds
@@ -14,6 +15,7 @@ import io.ktor.http.HttpStatusCode
 import it.unical.geosentinel_mobile.core.session.FakeBackend
 import it.unical.geosentinel_mobile.core.session.FakeSecureTokenStore
 import it.unical.geosentinel_mobile.core.session.SessionManager
+import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.session.sessionWith
@@ -30,6 +32,7 @@ import kotlinx.datetime.LocalDate
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -255,5 +258,115 @@ class AuthViewModelsTest {
         viewModel.requestCode()
         assertEquals(UiMessage(Res.string.error_field_email), viewModel.state.value.fieldErrors[ResetField.EMAIL])
         assertTrue(backend.requests.isEmpty())
+    }
+
+    // ---- verifica in due passaggi (M10.1) -------------------------------------------------------------------
+
+    private fun TestScope.loginWithMfa(session: SessionManager): LoginViewModel {
+        backend.mfaTotp["hiker@test.dev"] = "654321"
+        val viewModel = LoginViewModel(session)
+        viewModel.onEmailChange("hiker@test.dev")
+        viewModel.onPasswordChange("password-giusta-1")
+        viewModel.submit()
+        advanceUntilIdle()
+        return viewModel
+    }
+
+    @Test
+    fun `2FA - mfa-required apre il passo del codice e la seconda richiesta lo manda`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = loginWithMfa(session)
+
+        assertTrue(viewModel.state.value.mfaStep)
+        assertEquals("", viewModel.state.value.password) // la password resta solo nel ViewModel
+        assertNull(viewModel.state.value.error)
+        assertEquals(SessionState.Anonymous, session.state.value)
+
+        viewModel.onMfaCodeChange("65a43 21") // solo cifre, al massimo 6
+        assertEquals("654321", viewModel.state.value.mfaCode)
+        viewModel.submitCode()
+        advanceUntilIdle()
+
+        assertTrue(viewModel.state.value.loggedIn)
+        assertEquals(UserRole.HIKER, session.state.value.role)
+        // nessun refresh partito dal 401 mfa-required: login e google sono fuori dal bearer
+        assertTrue(backend.requests.none { it.startsWith("POST /api/v1/auth/refresh") })
+    }
+
+    @Test
+    fun `2FA - codice sbagliato sul campo e stesso codice due volte rifiutato`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = loginWithMfa(session)
+
+        viewModel.onMfaCodeChange("000000")
+        viewModel.submitCode()
+        advanceUntilIdle()
+        assertEquals(UiMessage(Res.string.error_mfa_code_wrong), viewModel.state.value.mfaCodeError)
+        assertTrue(viewModel.state.value.mfaStep)
+
+        // usato una volta da un altro login: non vale più (replay)
+        assertTrue(session.login("hiker@test.dev", "password-giusta-1", "654321").isSuccess)
+        session.logout()
+        viewModel.onMfaCodeChange("654321")
+        viewModel.submitCode()
+        advanceUntilIdle()
+        assertEquals(UiMessage(Res.string.error_mfa_code_wrong), viewModel.state.value.mfaCodeError)
+        assertFalse(viewModel.state.value.loggedIn)
+    }
+
+    @Test
+    fun `2FA - codice di recupero e Indietro che dimentica la password`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = loginWithMfa(session)
+        backend.mfaRecovery["hiker@test.dev"] = mutableSetOf("ABCD-EFGH")
+
+        viewModel.onToggleRecoveryCode()
+        viewModel.onMfaCodeChange("ABCD-EFGH")
+        assertEquals("ABCD-EFGH", viewModel.state.value.mfaCode) // testo libero
+        viewModel.submitCode()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.loggedIn)
+
+        // Indietro dal passo del codice: si torna alla password e la richiesta non parte più
+        session.logout()
+        val again = loginWithMfa(session)
+        again.onMfaCancelled()
+        assertFalse(again.state.value.mfaStep)
+        val sent = backend.requests.size
+        again.onMfaCodeChange("654321")
+        again.submitCode()
+        advanceUntilIdle()
+        assertEquals(sent, backend.requests.size)
+    }
+
+    @Test
+    fun `2FA - con Google lo stesso ID token e il codice`() = runTest {
+        backend.mfaTotp["hiker@test.dev"] = "111222"
+        val viewModel = LoginViewModel(session())
+
+        viewModel.onGoogleResult(GoogleSignInResult.Token("google:hiker@test.dev"))
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.mfaStep)
+
+        viewModel.onMfaCodeChange("111222")
+        viewModel.submitCode()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.loggedIn)
+        assertEquals(2, backend.requests.count { it.startsWith("POST /api/v1/auth/google") })
+    }
+
+    @Test
+    fun `2FA - password e codice non finiscono nel toString dello stato`() = runTest {
+        val session = session()
+        session.restore()
+        val viewModel = loginWithMfa(session)
+        viewModel.onMfaCodeChange("654321")
+        val printed = viewModel.state.value.toString()
+        assertFalse("654321" in printed)
+        assertFalse("password-giusta-1" in printed)
+        assertFalse("hiker@test.dev" in printed)
     }
 }

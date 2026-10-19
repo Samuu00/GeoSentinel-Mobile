@@ -3,7 +3,7 @@
 App per chi va in montagna: mappa dei sentieri, segnalazione dei pericoli, rifugi e **SOS**, più le schermate per
 gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unico client del backend in
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
-[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9.
+[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 (verifica in due passaggi) → M11 (foto profilo), pianificate il 18/10 sul contratto di M8 e M9 del backend.
 
 **Stato (12/10/2026, in ordine di data):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, simulatore iPhone; job `ios` verde dal 12/10).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
@@ -72,9 +72,15 @@ rifugi da Wikimedia Commons con autore e licenza in `MediaResponse.credit`, most
 mappa più leggibile (linee in base allo zoom, POI e rifugi a bollino con le collisioni, dissolvenze, soglie 7 e 9,
 fino a 500 sentieri per richiesta). 325 test host. Build `4b92074` sull'iPhone; CI verde su `4b92074`, job `ios`
 compreso (la prima volta). Da lanciare: la review di M9. Poi (18/10, "Dopo M9" del piano): password dimenticata con
-codice via email e login con Google (Credential Manager su Android, pulsante solo con `google.webClientId` in
-`local.properties`; iOS da fare con il Mac), riga "Imposta una password" per gli account Google, 334 test host,
-reset verificato sull'emulatore con Mailpit; Google dal vivo aspetta i client OAuth.
+codice via email e login con Google (Credential Manager su Android con `google.webClientId` in `local.properties`;
+SDK GoogleSignIn su iOS con la variabile del repository `GOOGLE_IOS_CLIENT_ID`), "Accedi con email" e "Continua con
+Google" insieme nel Profilo da ospite, riga "Imposta una password" per gli account Google, 334 test host. Reset
+verificato sull'emulatore con Mailpit e con email vere da Gmail; build `e1e3c3b` sull'iPhone. Da provare: il login
+Google riuscito (account Google sull'emulatore, bundle id di xtool sull'iPhone). M10 e M11 scritte (19/10, da Claude su
+richiesta, sul contratto di M8 e M9 del backend): login con il codice (`ApiError.Unauthorized.slug`, passo del codice
+nel login e dialogo per Google), `MfaScreen` nel Profilo (chiave, codici di recupero una volta sola, `SecureScreen` e
+`sensitiveClipEntry` in `core/ui`), azzeramento da `ADMIN` nella scheda Gestione, foto profilo (`ImageEncoder`
+con `squareCrop`, upload con target `USER`, niente cache su disco), 348 test host, verificate sull'emulatore.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -177,7 +183,7 @@ shared/src/
 ./gradlew :shared:clean                    # se dopo aver tolto stringhe la build dà "Unresolved reference _collect..."
 ./gradlew :apiClient:checkApiContract      # il contratto in api/ è ancora uguale a quello del backend?
 ./gradlew :apiClient:openApiGenerate       # rigenera il client a mano (di solito parte da solo con la build)
-gh workflow run ios-device.yml -f api_base_url=http://192.168.1.188:8080   # .ipa per l'iPhone (runner macOS)
+gh workflow run ios-device.yml -f api_base_url=http://192.168.1.188:8080   # .ipa per l'iPhone (runner macOS; Google dalla variabile GOOGLE_IOS_CLIENT_ID)
 .\tools\ios-device\install.ps1             # da PowerShell: scarica l'ultima .ipa e la installa (xtool in WSL)
 ```
 Le versioni delle librerie stanno solo in `gradle/libs.versions.toml`. Il PC è Windows: iOS non si compila qui. I checkpoint iOS si chiudono con un Mac o con un runner macOS in CI.

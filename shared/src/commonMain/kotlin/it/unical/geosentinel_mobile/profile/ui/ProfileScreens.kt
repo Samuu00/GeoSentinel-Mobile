@@ -32,7 +32,11 @@ import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -45,6 +49,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -60,6 +66,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -74,6 +82,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil3.compose.AsyncImage
+import coil3.compose.LocalPlatformContext
+import coil3.request.CachePolicy
+import coil3.request.ImageRequest
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.my_hazards_title
 import geosentinel_mobile.shared.generated.resources.auth_cancel
@@ -103,6 +115,12 @@ import geosentinel_mobile.shared.generated.resources.profile_guest_body
 import geosentinel_mobile.shared.generated.resources.profile_guest_title
 import geosentinel_mobile.shared.generated.resources.profile_login_email
 import geosentinel_mobile.shared.generated.resources.profile_logout
+import geosentinel_mobile.shared.generated.resources.profile_mfa
+import geosentinel_mobile.shared.generated.resources.profile_mfa_off
+import geosentinel_mobile.shared.generated.resources.profile_mfa_on
+import geosentinel_mobile.shared.generated.resources.profile_photo
+import geosentinel_mobile.shared.generated.resources.profile_photo_choose
+import geosentinel_mobile.shared.generated.resources.profile_photo_remove
 import geosentinel_mobile.shared.generated.resources.profile_logout_anyway
 import geosentinel_mobile.shared.generated.resources.profile_logout_sos_raised
 import geosentinel_mobile.shared.generated.resources.profile_logout_sos_sending
@@ -123,6 +141,12 @@ import geosentinel_mobile.shared.generated.resources.theme_system
 import geosentinel_mobile.shared.generated.resources.theme_title
 import it.unical.geosentinel_mobile.auth.ui.ContinueWithGoogle
 import it.unical.geosentinel_mobile.core.session.SessionState
+import it.unical.geosentinel_mobile.core.session.UserProfile
+import it.unical.geosentinel_mobile.media.data.ImageEncoder
+import it.unical.geosentinel_mobile.media.data.MediaRepository
+import it.unical.geosentinel_mobile.media.ui.rememberPhotoPicker
+import it.unical.geosentinel_mobile.media.ui.rememberSignedUrl
+import kotlinx.coroutines.launch
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.FooterLink
@@ -165,6 +189,7 @@ fun ProfileScreen(
     onEditName: () -> Unit,
     onChangePassword: () -> Unit,
     onSetPassword: (email: String) -> Unit,
+    onMfa: () -> Unit,
     onMyHazards: () -> Unit,
     themeMode: ThemeMode,
     onThemeModeSelected: (ThemeMode) -> Unit,
@@ -193,7 +218,12 @@ fun ProfileScreen(
             if (session is SessionState.LoggedIn) {
                 // Chi sei: iniziale e nome, sotto ruolo ed email
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Monogram(profile?.displayName)
+                    val encoder = koinInject<ImageEncoder>()
+                    // quadrata da 512 px: il cerchio la mostra a 56 dp, anche sugli schermi più densi
+                    val pickPhoto = rememberPhotoPicker { picked ->
+                        viewModel.uploadAvatar { encoder.toJpeg(picked, maxSidePx = AvatarSidePx, squareCrop = true) }
+                    }
+                    ProfileAvatar(profile, busy = ui.avatarBusy, onPick = pickPhoto, onRemove = viewModel::removeAvatar)
                     Spacer(Modifier.size(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(
@@ -233,6 +263,15 @@ fun ProfileScreen(
                     } else {
                         GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = Icons.Filled.Lock)
                     }
+                    GroupDivider(GroupIconIndent)
+                    // senza profilo non si sa se è attiva: la riga aspetta
+                    GroupRow(
+                        title = stringResource(Res.string.profile_mfa),
+                        value = profile?.let { stringResource(if (it.mfaEnabled) Res.string.profile_mfa_on else Res.string.profile_mfa_off) },
+                        onClick = onMfa,
+                        enabled = profile != null,
+                        icon = Icons.Filled.CheckCircle,
+                    )
                 }
             } else {
                 // Ospite (o sessione scaduta): un solo blocco con le due strade per entrare, una sopra l'altra, e la
@@ -431,6 +470,70 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
 }
 
 // ---- Mattoncini ----
+
+private const val AvatarSidePx = 512
+
+/**
+ * La foto profilo (M11), o l'iniziale se non c'è. Un tocco apre il menu: scegli una foto, e rimuovila se c'è. Durante
+ * il caricamento un anello attorno. L'URL firmato vale 5 minuti; la foto resta solo nella cache in memoria (chiave =
+ * id, che cambia a ogni foto nuova): su disco no, è un dato personale che al logout resterebbe lì.
+ */
+@Composable
+private fun ProfileAvatar(profile: UserProfile?, busy: Boolean, onPick: () -> Unit, onRemove: () -> Unit) {
+    var menu by remember { mutableStateOf(false) }
+    val label = stringResource(Res.string.profile_photo)
+    Box {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier
+                .size(56.dp)
+                .clip(CircleShape)
+                .clickable(enabled = profile != null && !busy, role = Role.Button) { menu = true }
+                .semantics { contentDescription = label },
+        ) {
+            Monogram(profile?.displayName)
+            profile?.avatarMediaId?.let { AvatarPhoto(it) }
+            if (busy) CircularProgressIndicator(Modifier.size(56.dp), strokeWidth = 3.dp)
+        }
+        DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+            DropdownMenuItem(text = { Text(stringResource(Res.string.profile_photo_choose)) }, onClick = {
+                menu = false
+                onPick()
+            })
+            if (profile?.avatarMediaId != null) {
+                DropdownMenuItem(text = { Text(stringResource(Res.string.profile_photo_remove)) }, onClick = {
+                    menu = false
+                    onRemove()
+                })
+            }
+        }
+    }
+}
+
+// Sopra l'iniziale, che si vede finché la foto non arriva (o se non arriva)
+@Composable
+private fun AvatarPhoto(mediaId: String) {
+    val signed = rememberSignedUrl(koinInject<MediaRepository>(), mediaId)
+    val scope = rememberCoroutineScope()
+    val context = LocalPlatformContext.current
+    val sidePx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val url = signed.url ?: return
+    val request = remember(url) {
+        ImageRequest.Builder(context)
+            .data(url)
+            .size(sidePx)
+            .memoryCacheKey(mediaId)
+            .diskCachePolicy(CachePolicy.DISABLED)
+            .build()
+    }
+    AsyncImage(
+        model = request,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        onError = { scope.launch { signed.onDownloadFailed() } },
+        modifier = Modifier.size(56.dp).clip(CircleShape),
+    )
+}
 
 // Iniziale del nome su un tondo color muschio; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
 @Composable

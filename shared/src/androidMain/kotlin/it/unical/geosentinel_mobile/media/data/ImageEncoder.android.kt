@@ -13,6 +13,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import kotlin.math.max
+import kotlin.math.min
 
 // Il ContentResolver è quello dell'applicazione (non tiene in vita l'Activity).
 // tempFile: la foto scattata con la fotocamera (originale con gli EXIF, anche il GPS), da cancellare dopo la ricodifica
@@ -20,16 +21,16 @@ actual class PickedImage(val uri: Uri, val resolver: ContentResolver, val tempFi
 
 actual class ImageEncoder actual constructor() {
 
-    actual suspend fun toJpeg(source: PickedImage, maxSidePx: Int, quality: Int): ByteArray = withContext(Dispatchers.IO) {
+    actual suspend fun toJpeg(source: PickedImage, maxSidePx: Int, quality: Int, squareCrop: Boolean): ByteArray = withContext(Dispatchers.IO) {
         try {
-            encode(source, maxSidePx, quality)
+            encode(source, maxSidePx, quality, squareCrop)
         } finally {
             // l'originale della fotocamera non resta in cache: il JPEG ricodificato (senza EXIF) è l'unica copia
             source.tempFile?.delete()
         }
     }
 
-    private fun encode(source: PickedImage, maxSidePx: Int, quality: Int): ByteArray {
+    private fun encode(source: PickedImage, maxSidePx: Int, quality: Int, squareCrop: Boolean): ByteArray {
         fun <T> read(block: (InputStream) -> T): T =
             (source.resolver.openInputStream(source.uri) ?: throw IOException("foto non leggibile")).use(block)
 
@@ -41,9 +42,11 @@ actual class ImageEncoder actual constructor() {
         // android.media.ExifInterface legge da uno stream da API 24 (minSdk): niente dipendenza in più
         val orientation = read { ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL) }
 
-        // Campionamento a potenze di 2 finché il lato lungo resta almeno maxSidePx: meno memoria, poi la scala fine
+        // Campionamento a potenze di 2 finché il lato che conta (il lungo, o il corto se si ritaglia il quadrato) resta
+        // almeno maxSidePx: meno memoria, poi la scala fine
+        val side = { w: Int, h: Int -> if (squareCrop) min(w, h) else max(w, h) }
         var sampleSize = 1
-        while (max(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= maxSidePx) sampleSize *= 2
+        while (side(bounds.outWidth, bounds.outHeight) / (sampleSize * 2) >= maxSidePx) sampleSize *= 2
         val decoded = read { BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sampleSize }) }
             ?: throw IOException("foto non decodificabile")
 
@@ -55,13 +58,16 @@ actual class ImageEncoder actual constructor() {
             ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
             ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
         }
-        val longSide = max(decoded.width, decoded.height)
-        if (longSide > maxSidePx) {
-            val scale = maxSidePx.toFloat() / longSide
+        val outSide = side(decoded.width, decoded.height)
+        if (outSide > maxSidePx) {
+            val scale = maxSidePx.toFloat() / outSide
             matrix.postScale(scale, scale)
         }
-        // Con la matrice identità createBitmap restituisce lo stesso bitmap
-        val output = Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, matrix, true)
+        // Il quadrato al centro: con la rotazione resta lo stesso. Con la matrice identità e senza ritaglio
+        // createBitmap restituisce lo stesso bitmap
+        val cropW = if (squareCrop) outSide else decoded.width
+        val cropH = if (squareCrop) outSide else decoded.height
+        val output = Bitmap.createBitmap(decoded, (decoded.width - cropW) / 2, (decoded.height - cropH) / 2, cropW, cropH, matrix, true)
         return try {
             ByteArrayOutputStream().use { stream ->
                 output.compress(Bitmap.CompressFormat.JPEG, quality.coerceIn(0, 100), stream)

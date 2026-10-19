@@ -96,6 +96,7 @@ import it.unical.geosentinel_mobile.core.ui.theme.GeoSentinelTheme
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeSettings
 import it.unical.geosentinel_mobile.profile.ui.ChangePasswordScreen
 import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
+import it.unical.geosentinel_mobile.profile.ui.MfaScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
 import it.unical.geosentinel_mobile.refuge.data.BookingRepository
@@ -110,6 +111,7 @@ import it.unical.geosentinel_mobile.hazard.ui.MyHazardsScreen
 import it.unical.geosentinel_mobile.hazard.ui.ReportHazardScreen
 import it.unical.geosentinel_mobile.staff.ui.HazardQueueScreen
 import it.unical.geosentinel_mobile.staff.ui.ManagementScreen
+import it.unical.geosentinel_mobile.staff.ui.MfaResetScreen
 import it.unical.geosentinel_mobile.staff.ui.TicketCreateScreen
 import it.unical.geosentinel_mobile.staff.ui.TicketDetailScreen
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateScreen
@@ -500,7 +502,19 @@ fun App() {
                     ManagementScreen(
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
                         onOpenTicket = { id -> navController.navigate(Route.TicketDetail(id)) { launchSingleTop = true } },
+                        // il server risponde comunque 403 agli altri ruoli
+                        onResetMfa = if (role == UserRole.ADMIN) {
+                            { navController.navigate(Route.MfaReset) { launchSingleTop = true } }
+                        } else {
+                            null
+                        },
                     )
+                }
+                composable<Route.MfaReset>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    MfaResetScreen(onBack = { navController.popBackStack() })
                 }
                 composable<Route.Profile> {
                     ProfileScreen(
@@ -511,6 +525,7 @@ fun App() {
                         onChangePassword = { navController.navigate(Route.ChangePassword) },
                         // account aperto con Google: la password si imposta con il codice via email
                         onSetPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
+                        onMfa = { navController.navigate(Route.Mfa) { launchSingleTop = true } },
                         onMyHazards = { navController.navigate(Route.MyHazards) { launchSingleTop = true } },
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
@@ -582,6 +597,12 @@ fun App() {
                     popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
                 ) {
                     ChangePasswordScreen(onBack = { navController.popBackStack() }, onChanged = { navController.popBackStack() })
+                }
+                composable<Route.Mfa>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    MfaScreen(onBack = { navController.popBackStack() })
                 }
                 // Schermata "spinta" sopra la mappa: entra da destra e copre tutto (ha uno sfondo pieno)
                 composable<Route.SosEmergency>(

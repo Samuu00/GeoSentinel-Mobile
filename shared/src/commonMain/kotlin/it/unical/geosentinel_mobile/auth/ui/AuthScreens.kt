@@ -1,5 +1,6 @@
 package it.unical.geosentinel_mobile.auth.ui
 
+import androidx.compose.ui.backhandler.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -37,6 +38,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
@@ -58,6 +60,15 @@ import geosentinel_mobile.shared.generated.resources.auth_confirm
 import geosentinel_mobile.shared.generated.resources.auth_display_name
 import geosentinel_mobile.shared.generated.resources.auth_email
 import geosentinel_mobile.shared.generated.resources.auth_forgot_password
+import geosentinel_mobile.shared.generated.resources.mfa_code_label
+import geosentinel_mobile.shared.generated.resources.mfa_login_body
+import geosentinel_mobile.shared.generated.resources.mfa_login_body_recovery
+import geosentinel_mobile.shared.generated.resources.mfa_login_button
+import geosentinel_mobile.shared.generated.resources.mfa_login_title
+import geosentinel_mobile.shared.generated.resources.mfa_lost_access
+import geosentinel_mobile.shared.generated.resources.mfa_recovery_label
+import geosentinel_mobile.shared.generated.resources.mfa_use_recovery
+import geosentinel_mobile.shared.generated.resources.mfa_use_totp
 import geosentinel_mobile.shared.generated.resources.reset_change_email
 import geosentinel_mobile.shared.generated.resources.reset_code
 import geosentinel_mobile.shared.generated.resources.reset_code_body
@@ -112,6 +123,29 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (e
     val state by viewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(state.loggedIn) { if (state.loggedIn) onLoggedIn() }
 
+    if (state.mfaStep) {
+        // Indietro (anche quello di sistema) torna alla password, non al Profilo
+        @Suppress("DEPRECATION")
+        @OptIn(ExperimentalComposeUiApi::class)
+        BackHandler(onBack = viewModel::onMfaCancelled)
+        FormScaffold(
+            onBack = viewModel::onMfaCancelled,
+            title = Res.string.mfa_login_title,
+            body = if (state.recoveryCode) Res.string.mfa_login_body_recovery else Res.string.mfa_login_body,
+            error = state.error?.resolve(),
+            actions = {
+                PrimaryPillButton(
+                    text = stringResource(Res.string.mfa_login_button),
+                    onClick = viewModel::submitCode,
+                    enabled = state.canSubmitCode,
+                    loading = state.submitting,
+                )
+                Spacer(Modifier.size(12.dp))
+            },
+        ) { MfaCodeFields(state, viewModel) }
+        return
+    }
+
     FormScaffold(
         onBack = onBack,
         title = Res.string.auth_login_title,
@@ -139,6 +173,30 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (e
             modifier = Modifier.align(Alignment.End).heightIn(min = 48.dp),
         ) { Text(stringResource(Res.string.auth_forgot_password), fontWeight = FontWeight.SemiBold) }
     }
+}
+
+/**
+ * Il campo del codice (M10.1), per il login con email e per quello con Google: 6 cifre dall'app di autenticazione, o un
+ * codice di recupero. Il numero di tentativi rimasti non si mostra; chi ha perso tutto lo chiede all'amministratore.
+ */
+@Composable
+internal fun MfaCodeFields(state: LoginUiState, viewModel: LoginViewModel) {
+    FormTextField(
+        value = state.mfaCode,
+        onValueChange = viewModel::onMfaCodeChange,
+        label = stringResource(if (state.recoveryCode) Res.string.mfa_recovery_label else Res.string.mfa_code_label),
+        error = state.mfaCodeError?.resolve(),
+        keyboardOptions = if (state.recoveryCode) {
+            KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done)
+        } else {
+            KeyboardOptions(keyboardType = KeyboardType.NumberPassword, imeAction = ImeAction.Done)
+        },
+        keyboardActions = KeyboardActions(onDone = { viewModel.submitCode() }),
+    )
+    TextButton(onClick = viewModel::onToggleRecoveryCode, modifier = Modifier.heightIn(min = 48.dp)) {
+        Text(stringResource(if (state.recoveryCode) Res.string.mfa_use_totp else Res.string.mfa_use_recovery), fontWeight = FontWeight.SemiBold)
+    }
+    Text(stringResource(Res.string.mfa_lost_access), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
 // Password dimenticata: un form per passo, con lo stesso scheletro degli altri

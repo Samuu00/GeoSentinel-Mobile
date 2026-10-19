@@ -40,7 +40,7 @@ class ApiErrorTest {
     // Tabella della guida all'API (../GeoSentinel-Backend/docs/api-guide.md, "Errori"): slug, status, ramo atteso
     private val guide: List<Triple<String, Int, ApiError>> = listOf(
         Triple("validation-error", 400, ApiError.Validation(emptyMap(), "trace-validation-error")),
-        Triple("unauthorized", 401, ApiError.Unauthorized("trace-unauthorized")),
+        Triple("unauthorized", 401, ApiError.Unauthorized("trace-unauthorized", "unauthorized")),
         Triple("forbidden", 403, ApiError.Forbidden("trace-forbidden")),
         Triple("not-found", 404, ApiError.NotFound("trace-not-found")),
         Triple("conflict", 409, ApiError.Conflict("conflict", "trace-conflict")),
@@ -126,7 +126,7 @@ class ApiErrorTest {
     fun `una risposta 2xx diventa un successo`() = runTest {
         val api = usersApi(respondingWith(
             HttpStatusCode.OK,
-            """{"id":"u1","email":"a@b.c","displayName":"A","role":"HIKER","hasPassword":true,"createdAt":"2026-10-02T10:00:00Z"}""",
+            """{"id":"u1","email":"a@b.c","displayName":"A","role":"HIKER","hasPassword":true,"mfaEnabled":false,"createdAt":"2026-10-02T10:00:00Z"}""",
             contentType = "application/json",
         ))
 

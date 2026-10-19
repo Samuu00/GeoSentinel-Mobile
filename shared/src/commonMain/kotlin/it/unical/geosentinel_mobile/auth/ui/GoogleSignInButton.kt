@@ -10,11 +10,15 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
@@ -31,7 +35,12 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
+import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.auth_google_birth_date_title
+import geosentinel_mobile.shared.generated.resources.mfa_login_body
+import geosentinel_mobile.shared.generated.resources.mfa_login_body_recovery
+import geosentinel_mobile.shared.generated.resources.mfa_login_button
+import geosentinel_mobile.shared.generated.resources.mfa_login_title
 import geosentinel_mobile.shared.generated.resources.auth_google_button
 import it.unical.geosentinel_mobile.core.config.AppConfig
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
@@ -62,6 +71,25 @@ fun ContinueWithGoogle(modifier: Modifier = Modifier) {
             loading = state.submitting,
         )
         FormErrorBanner(state.error?.resolve())
+    }
+
+    // Account con la verifica in due passaggi: il codice in un dialogo, il Profilo resta sotto
+    if (state.mfaStep) {
+        AlertDialog(
+            onDismissRequest = viewModel::onMfaCancelled,
+            title = { Text(stringResource(Res.string.mfa_login_title)) },
+            text = {
+                Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(stringResource(if (state.recoveryCode) Res.string.mfa_login_body_recovery else Res.string.mfa_login_body))
+                    FormErrorBanner(state.error?.resolve())
+                    MfaCodeFields(state, viewModel)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = viewModel::submitCode, enabled = state.canSubmitCode) { Text(stringResource(Res.string.mfa_login_button)) }
+            },
+            dismissButton = { TextButton(onClick = viewModel::onMfaCancelled) { Text(stringResource(Res.string.auth_cancel)) } },
+        )
     }
 
     if (state.askBirthDate) {

@@ -9,15 +9,24 @@ import geosentinel_mobile.shared.generated.resources.error_field_display_name
 import geosentinel_mobile.shared.generated.resources.error_field_password_long
 import geosentinel_mobile.shared.generated.resources.error_field_password_short
 import geosentinel_mobile.shared.generated.resources.error_generic
+import geosentinel_mobile.shared.generated.resources.error_media_unsupported_type
+import geosentinel_mobile.shared.generated.resources.report_photo_unreadable
 import geosentinel_mobile.shared.generated.resources.error_validation
 import it.unical.geosentinel_mobile.auth.data.PasswordProblem
 import it.unical.geosentinel_mobile.auth.data.passwordProblem
+import it.unical.geosentinel_mobile.api.model.InitUploadRequest
+import it.unical.geosentinel_mobile.api.model.MediaResponse
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
+import it.unical.geosentinel_mobile.core.network.safely
 import it.unical.geosentinel_mobile.core.session.SessionManager
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.core.ui.uiMessage
+import it.unical.geosentinel_mobile.media.data.MediaRepository
+import it.unical.geosentinel_mobile.media.data.MediaTarget
+import it.unical.geosentinel_mobile.media.data.MediaUploader
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -27,11 +36,15 @@ import kotlinx.coroutines.launch
 // Messaggio per un errore che il form non sa attribuire a un campo
 private fun Throwable.toUiMessage(): UiMessage = (this as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic)
 
-// ---- Profilo: uscita e cancellazione dell'account ------------------------------------------------------------
+// ---- Profilo: uscita, cancellazione dell'account e foto profilo -----------------------------------------------
 
-data class ProfileUiState(val deleting: Boolean = false, val error: UiMessage? = null)
+data class ProfileUiState(val deleting: Boolean = false, val error: UiMessage? = null, val avatarBusy: Boolean = false)
 
-class ProfileViewModel(private val session: SessionManager) : ViewModel() {
+class ProfileViewModel(
+    private val session: SessionManager,
+    private val uploader: MediaUploader,
+    private val media: MediaRepository,
+) : ViewModel() {
 
     private val _state = MutableStateFlow(ProfileUiState())
     val state: StateFlow<ProfileUiState> = _state.asStateFlow()
@@ -49,6 +62,53 @@ class ProfileViewModel(private val session: SessionManager) : ViewModel() {
         viewModelScope.launch {
             val result = session.deleteAccount()
             _state.update { it.copy(deleting = false, error = result.exceptionOrNull()?.toUiMessage()) }
+        }
+    }
+
+    /**
+     * Foto profilo (M11): [encode] ricodifica la foto scelta (JPEG quadrato da 512 px, senza EXIF), poi lo stesso upload
+     * delle segnalazioni con target USER. Il server cancella da solo la foto precedente al confirm; il profilo si
+     * rilegge per avere il nuovo avatarMediaId.
+     */
+    fun uploadAvatar(encode: suspend () -> ByteArray) {
+        val userId = (session.state.value as? SessionState.LoggedIn)?.profile?.id ?: return
+        if (_state.value.avatarBusy) return
+        _state.update { it.copy(avatarBusy = true, error = null) }
+        viewModelScope.launch {
+            val jpeg = try {
+                encode()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                _state.update { it.copy(avatarBusy = false, error = UiMessage(Res.string.report_photo_unreadable)) }
+                return@launch
+            }
+            val result = safely { uploader.upload(jpeg, MediaTarget(InitUploadRequest.EntityType.USER, userId)) }
+            if (result.isSuccess) session.reloadProfile()
+            _state.update { state ->
+                state.copy(
+                    avatarBusy = false,
+                    error = result.fold(
+                        // in quarantena (non un'immagine): la foto di prima resta
+                        onSuccess = { if (it.status == MediaResponse.Status.READY) null else UiMessage(Res.string.error_media_unsupported_type) },
+                        onFailure = { it.toUiMessage() },
+                    ),
+                )
+            }
+        }
+    }
+
+    // DELETE /media/{id} della foto corrente, poi il profilo si rilegge (torna l'iniziale)
+    fun removeAvatar() {
+        val mediaId = (session.state.value as? SessionState.LoggedIn)?.profile?.avatarMediaId ?: return
+        if (_state.value.avatarBusy) return
+        _state.update { it.copy(avatarBusy = true, error = null) }
+        viewModelScope.launch {
+            val result = safely { media.delete(mediaId) }
+            // 404: già tolta (da un altro dispositivo); il profilo riletto lo dice
+            val notFound = (result.exceptionOrNull() as? ApiException)?.error is ApiError.NotFound
+            if (result.isSuccess || notFound) session.reloadProfile()
+            _state.update { it.copy(avatarBusy = false, error = result.exceptionOrNull()?.takeUnless { notFound }?.toUiMessage()) }
         }
     }
 }

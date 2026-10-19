@@ -52,6 +52,8 @@ sealed interface Route {
     // rifugi e squadre (M8.3): i posti dal dettaglio del rifugio, la squadra (solo ADMIN) dalla scheda Allerte
     @Serializable data class RefugeCapacity(val refugeId: String, val capacity: Int) : Route
     @Serializable data class RescueTeamCreate(val lat: Double, val lon: Double, val zoom: Double) : Route
+    // azzeramento della verifica in due passaggi di un utente (M10.3), solo ADMIN, dalla scheda Gestione
+    @Serializable data object MfaReset : Route
 
     // ---- account: "spinte" sopra il Profilo ----
     @Serializable data object Login : Route
@@ -60,6 +62,8 @@ sealed interface Route {
     @Serializable data class PasswordReset(val email: String = "") : Route
     @Serializable data object EditName : Route
     @Serializable data object ChangePassword : Route
+    // verifica in due passaggi (M10.2)
+    @Serializable data object Mfa : Route
     @Serializable data object MyHazards : Route
 }
 
@@ -67,7 +71,7 @@ sealed interface Route {
 val FormRoutes = setOf(
     Route.Login::class, Route.Register::class, Route.PasswordReset::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
     Route.BookRefuge::class, Route.PoiCreate::class, Route.TicketCreate::class,
-    Route.RefugeCapacity::class, Route.RescueTeamCreate::class,
+    Route.RefugeCapacity::class, Route.RescueTeamCreate::class, Route.Mfa::class, Route.MfaReset::class,
 )
 
 // Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta e le liste "mie" (con il loro Indietro)

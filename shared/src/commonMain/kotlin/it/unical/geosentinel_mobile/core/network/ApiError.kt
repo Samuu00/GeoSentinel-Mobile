@@ -10,7 +10,8 @@ sealed interface ApiError {
         override val traceId: String?
     ) : ApiError
 
-    data class Unauthorized(override val traceId: String?) : ApiError
+    // slug: mfa-required e invalid-mfa-code distinguono la verifica in due passaggi (M10) da credenziali o token sbagliati
+    data class Unauthorized(override val traceId: String?, val slug: String? = null) : ApiError
     data class Forbidden(override val traceId: String?) : ApiError
     data class NotFound(override val traceId: String?) : ApiError
 

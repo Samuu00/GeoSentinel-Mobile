@@ -6,8 +6,9 @@ expect class PickedImage
 /**
  * Ricodifica in JPEG (A13): lato lungo al massimo [maxSidePx], orientamento applicato ai pixel. Il JPEG nuovo non
  * porta gli EXIF dell'originale, quindi nemmeno la posizione GPS; l'HEIC dell'iPhone diventa JPEG.
+ * Con [squareCrop] (foto profilo, M11) prima si ritaglia il quadrato al centro, e [maxSidePx] vale per il suo lato.
  * Lancia un'eccezione se l'immagine non si legge.
  */
 expect class ImageEncoder() {
-    suspend fun toJpeg(source: PickedImage, maxSidePx: Int = 2560, quality: Int = 85): ByteArray
+    suspend fun toJpeg(source: PickedImage, maxSidePx: Int = 2560, quality: Int = 85, squareCrop: Boolean = false): ByteArray
 }

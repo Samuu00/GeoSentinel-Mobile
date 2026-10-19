@@ -15,6 +15,7 @@
 > Da decidere: i controlli della mappa in orizzontale (fine di M8.3); da lanciare: la review di M9 (§6).
 > Il dettaglio giorno per giorno è nei singoli task e in `CLAUDE.md`. Aperti: prove a mano sul simulatore (Mac), push
 > su iOS (APNs, serve un account Apple a pagamento), satellite nero su iPhone.
+> **Pianificate (18/10):** M10, verifica in due passaggi (su M8 del backend), e M11, foto profilo (su M9 del backend).
 
 ---
 
@@ -1612,7 +1613,16 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
   `BuildConfig.GOOGLE_WEB_CLIENT_ID` → `AppConfig.googleWebClientId`); senza client ID il pulsante "Continua con
   Google" non compare. Primo accesso: 422 `birth-date-required` → calendario → stessa richiesta con lo stesso token
   (tenuto nel ViewModel, fuori dallo stato della UI). Messaggi propri per 401, 409 `account-managed` (personale) e 422
-  `business-rule`. iOS: niente pulsante finché non c'è l'SDK GoogleSignIn (serve il Mac).
+  `business-rule`.
+- **Login con Google su iOS** (18/10): SDK GoogleSignIn-iOS 9 via SPM nel progetto Xcode, ponte come per le push:
+  `GoogleSignInBridge` / `GoogleSignInCallback` in `GoogleSignIn.ios.kt`, launcher impostato da `AppDelegate` solo se
+  `GIDClientID` è nell'Info.plist (`GIDSignIn.signIn(withPresenting:)` sul view controller in cima), `onOpenURL` in
+  `iOSApp.swift`. Client iOS e schema URL al contrario da `Config.xcconfig` (vuoti di default: niente pulsante); il
+  workflow "iOS device build" li prende dalla variabile del repository `GOOGLE_IOS_CLIENT_ID`. Su iOS l'audience
+  dell'ID token è il client iOS, che il backend ha in `GOOGLE_CLIENT_IDS` insieme al Web.
+- **Client OAuth** (Google Cloud Console, progetto `geo-sentinel-6a4e1`): Web `…0eib` (in `local.properties` come
+  `google.webClientId`, audience su Android), iOS `…ablk` (variabile del repository), Android con il package
+  `it.unical.geosentinel_mobile` e lo SHA-1 della chiave di debug del PC. Il backend li accetta tutti e due.
 - **Dove si entra (18/10, su richiesta):** il Profilo da ospite è una card sola, come l'accesso all'account nelle
   Impostazioni di iOS: sagoma, "Accedi a GeoSentinel", "Accedi con email" e sotto "Continua con Google" con il design
   di Google (logo a colori, bianco in chiaro e quasi nero in scuro, `ContinueWithGoogle` in
@@ -1622,24 +1632,133 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
 - **Sicurezza:** `/auth/google` e `/auth/password-reset/*` nelle rotte senza bearer di `AuthScope` (un 401 lì non fa
   partire il refresh); ID token, codice e password mai nei log né nel `toString` degli stati.
 - **Bug trovati e corretti:** nel backend i tre 422 del login Google avevano lo stesso slug (vedi M7.2.3 del suo piano:
-  ora `birth-date-required`); nelle stringhe nuove `'` restava visibile (Compose resources non lo toglie: apostrofo
+  ora `birth-date-required`); nelle stringhe nuove `\'` restava visibile (Compose resources non lo toglie: apostrofo
   semplice).
 - Checkpoint:
   - [x] 334 test host (325 + 9: sessione, ViewModel, login con il link al reset).
   - [x] sull'emulatore con Mailpit: codice sbagliato → errore sul campo, codice in minuscolo accettato, accesso con la
     password nuova; "Imposta una password" su un account senza password → sessione chiusa, Indietro torna al Profilo;
     nel log del backend e in logcat né email né codice né password.
-  - [ ] Google dal vivo: client OAuth Android (SHA-1 del debug), Web e iOS nella Google Cloud Console,
-    `google.webClientId` in `local.properties`, `GOOGLE_CLIENT_IDS` nel `.env` del backend.
-  - [ ] iOS: SDK GoogleSignIn e ponte Swift (Mac).
+  - [x] client OAuth creati e configurati (app, workflow, `.env` del backend); sull'emulatore il pulsante apre il
+    selettore di Google.
+  - [ ] login Google riuscito su Android: serve un account Google sull'emulatore.
+  - [x] iOS: build `e1e3c3b` dal workflow (GoogleSignIn senza conflitti con Firebase) installata sull'iPhone.
+  - [ ] login Google riuscito su iPhone. Se Google rifiuta: xtool riscrive il bundle id con il team, e il client iOS
+    nella console va allineato a quello vero.
+  - [x] reset con email vere: il backend manda il codice da Gmail (SMTP con STARTTLS obbligatorio, vedi M7.2.2 del
+    suo piano), arrivato nella casella.
+
+### Milestone 10: verifica in due passaggi
+
+> **Scritta il 19/10 da Claude su richiesta** (contratto copiato dal backend, client rigenerato), 348 test host,
+> verificata sull'emulatore con `hiker2@` e `admin@`. Restano: job `ios` (copertura in background e appunti scritti senza
+> compilarli qui), app di autenticazione vera sull'emulatore, `otpauthUri` su iOS.
+
+> Pianificata il 18/10, sul contratto di **M8 del backend** (TOTP, ADR-0025). Si parte quando il backend ha rigenerato
+> `openapi.json`: `./gradlew :apiClient:checkApiContract` lo segnala. Il codice lo scrivi tu.
+
+**M10.1 Login con il codice**
+- Il backend risponde 401 `mfa-required` quando la password (o l'ID token di Google) è giusta ma manca il codice, e 401
+  `invalid-mfa-code` quando il codice è sbagliato. Oggi `ApiError.Unauthorized` non ha lo slug: aggiungilo
+  (`Unauthorized(val slug: String?, …)`), così il login distingue "password sbagliata" da "serve il codice". Tutti gli
+  altri 401 restano come sono.
+- `SessionManager.login(email, password, mfaCode: String? = null)` e `loginWithGoogle(idToken, birthDate, mfaCode)`:
+  stessa richiesta con il campo in più, nessuna sessione a metà (il backend non ne crea).
+- `LoginViewModel`: su `mfa-required` passa a un passo "Codice di verifica" (un campo numerico a 6 cifre, tastiera
+  numerica, `autofill` del codice monouso dove la piattaforma lo offre) e rimanda la richiesta con email e password
+  tenute **nel ViewModel, fuori dallo `UiState`** (come l'ID token di Google oggi). Link "Usa un codice di recupero": stesso
+  campo, testo libero (il backend riconosce il formato da solo).
+- Errori: `invalid-mfa-code` sul campo del codice; 429 con il tempo d'attesa (limite di 5 codici sbagliati all'ora
+  nel backend); Indietro torna alla password e dimentica la password tenuta in memoria.
+- Login Google: stesso passo dopo il selettore di Google, con lo stesso ID token (scade dopo circa un'ora: se il
+  backend risponde 401 senza slug, si riparte dal selettore).
+- `/auth/login` e `/auth/google` sono già fuori dal bearer in `AuthScope`: un 401 `mfa-required` non fa partire il
+  refresh. Da verificare con un test, non da dare per scontato.
+- Checkpoint:
+  - [x] `commonTest` con `MockEngine`: 401 `mfa-required` → passo del codice, seconda richiesta con `mfaCode`; 401 senza
+    slug → "password sbagliata"; `invalid-mfa-code` sul campo; nessun refresh partito; password e codice mai nel
+    `toString` degli stati.
+  - [ ] sull'emulatore con un account che ha la 2FA: login con il codice dell'app di autenticazione, login con un
+    codice di recupero, stesso codice due volte → errore.
+
+**M10.2 Attivazione e disattivazione dal Profilo**
+- Gruppo "Account" del Profilo: riga "Verifica in due passaggi" con lo stato (`UserProfile.mfaEnabled`, da
+  `GET /users/me`). Apre una schermata spinta (`MfaScreen` + `MfaViewModel` in `profile/ui`).
+- **Attivazione**, tre passi:
+  1. `startMfaSetup` → pulsante "Apri l'app di autenticazione" che apre l'`otpauthUri` (su Android lo gestiscono
+     Google Authenticator, Aegis e simili; su iOS l'app Password, da iOS 15) e, sotto, la chiave in gruppi di 4
+     caratteri con "Copia" per chi la inserisce a mano o usa un altro dispositivo. **Niente QR code**: sul telefono che
+     ha l'app non serve, e generarlo vorrebbe una libreria in più. Da aggiungere solo se si vuole configurare un secondo
+     dispositivo inquadrando lo schermo;
+  2. campo per il primo codice → `enableMfa`; `invalid-mfa-code` sul campo;
+  3. i 10 codici di recupero, **mostrati una volta sola**: "Copia tutti" (appunti segnati come sensibili; "Condividi" rimandato: un expect/actual in più per poco), e un
+     controllo "Li ho salvati" prima di "Fine". Indietro su questo passo chiede conferma.
+- **Disattivazione:** chiede un codice (TOTP o di recupero) → `disableMfa`. **Nuovi codici di recupero:** chiede un TOTP
+  → `regenerateRecoveryCodes` → stesso passo 3.
+- **Mai su disco né nei log:** chiave, URI e codici di recupero restano solo nello stato della schermata; niente
+  Room, niente DataStore. Su Android la schermata dei codici con `FLAG_SECURE` (niente screenshot né anteprima
+  nell'elenco delle app), su iOS una copertura quando l'app va in background (expect/actual minimo in `core/ui`).
+- Appunti copiati: su Android 13+ `ClipDescription.EXTRA_IS_SENSITIVE`, così il sistema non mostra il contenuto
+  nell'anteprima.
+- Checkpoint:
+  - [x] `MfaViewModelTest` (MockEngine): i tre passi; Indietro sul passo dei codici chiede conferma; disattivazione con
+    un codice sbagliato → errore sul campo.
+  - [ ] sull'emulatore: attivazione con Google Authenticator (o Aegis), uscita, login con il codice, disattivazione;
+    screenshot della schermata dei codici bloccato.
+  - [ ] (con il Mac o sull'iPhone) l'`otpauthUri` apre l'app Password di iOS.
+
+**M10.3 Azzeramento da `ADMIN` e testi per l'utente**
+- Chi ha perso telefono e codici di recupero non ha una strada nell'app: lo dice il passo del codice ("Hai perso
+  l'accesso? Contatta l'amministratore del parco"), senza link né contatti inventati.
+- Scheda Gestione, solo `ADMIN`: riga "Azzera verifica in due passaggi" → form con l'email → `resetUserMfa` con una
+  conferma prima dell'invio ("L'utente verrà disconnesso da tutti i dispositivi. Hai verificato la sua identità?").
+  404 → "Nessun account con la verifica attiva per questa email"; 422 `business-rule` (non 409, corretto il 19/10
+  sul contratto del backend) → "Non puoi azzerare la tua: chiedilo a un altro amministratore".
+- Il backend manda un'email all'utente al terzo codice sbagliato: l'app non fa nulla, ma la schermata del codice non
+  deve dire quanti tentativi restano.
+- Checkpoint:
+  - [x] `commonTest`: la riga compare solo per `ADMIN`; 404 e 409 con i messaggi giusti; 403 gestito comunque.
+  - [x] sull'emulatore con `admin@`: azzeramento di un account di prova → quell'account entra senza codice.
+
+### Milestone 11: foto profilo
+
+> **Scritta il 19/10 da Claude su richiesta**, verificata sull'emulatore (JPEG 512×512 senza EXIF, seconda foto → la
+> prima 404, rimozione → iniziale). Resta la prova HEIC sull'iPhone.
+
+> Pianificata il 18/10, sul contratto di **M9 del backend** (media con target `USER`). Il codice lo scrivi tu.
+
+- Al posto del `Monogram` del Profilo (`profile/ui/ProfileScreens.kt`) la foto, se c'è: `UserProfile.avatarMediaId`
+  (nullable, da `GET /users/me`). Senza foto resta l'iniziale. Toccando l'avatar si apre un menu: "Scegli una foto",
+  e se c'è "Rimuovi foto".
+- **Scelta:** `rememberPhotoPicker` (già usato dalle segnalazioni) → `ImageEncoder.toJpeg` con un ritaglio quadrato al
+  centro e lato di 512 px: aggiungi un parametro `squareCrop: Boolean = false` all'expect/actual invece di una seconda
+  funzione. Niente editor di ritaglio: se servirà scegliere la porzione, si aggiunge dopo.
+- **Upload:** `MediaUploader.upload(jpeg, MediaTarget(USER, idUtente))`, lo stesso flusso delle foto delle
+  segnalazioni (presigned POST, confirm, nuova richiesta dopo `expiresAt`). Il backend cancella da solo la foto
+  precedente al confirm. Dopo il `READY` si rilegge il profilo.
+- **Rimozione:** `DELETE /media/{id}` con l'`avatarMediaId`, poi si rilegge il profilo.
+- **Visualizzazione:** URL firmato da `/media/{id}/download-url` (valido 5 minuti) con Coil, come le altre foto
+  (`HazardPhotoStrip`); chiave della cache in memoria = `mediaId`, non l'URL firmato. **Niente cache su disco** per
+  l'avatar (`CachePolicy.DISABLED`, deciso il 19/10): così al logout non resta nulla da pulire.
+  Cerchio da 56 dp, `contentDescription` null (accanto c'è il nome).
+- Errori: quelli di `MediaUploader` (415, 413, quota, `storage-unavailable`) con i messaggi che esistono già; durante il
+  caricamento un anello di avanzamento sull'avatar.
+- Logout e cancellazione dell'account: nessuna pulizia, perché la foto non arriva mai sul disco.
+- Checkpoint:
+  - [x] `commonTest`: target `USER` con l'id dell'utente; profilo riletto dopo il confirm e dopo la rimozione.
+  - [x] sull'emulatore: foto scelta → avatar aggiornato; seconda foto → nel bucket di MinIO resta un solo oggetto;
+    rimozione → di nuovo l'iniziale; dopo il logout la foto non è nella cache su disco.
+  - [ ] foto HEIC dall'iPhone → JPEG quadrato senza EXIF.
 
 ---
 
 ## 6. Ordine e review
 
 ```
-M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9
+M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 → M11
 ```
+M10 e M11 (18/10) seguono M8 e M9 del backend, che vengono prima del calcolo delle frane (M10 del backend). Lo strato
+di rischio frane nell'app sarà una milestone successiva, quando le sue rotte sono stabili.
 L'SOS (M6) viene subito dopo la mappa: è la funzione per cui l'app esiste, e i suoi problemi conviene scoprirli presto.
 Eccezione decisa il 04/10: la segnalazione (M4.1, già fatta) e "Le mie segnalazioni" (M4.3) vengono prima; le foto
 (M4.2) e i pericoli vicini (M4.4) restano dopo M6.
@@ -1660,6 +1779,8 @@ perché scriverebbero il codice al posto tuo.
 | 7 | Push e soccorso | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita l'08–09/10) |
 | 8 | Personale | `ecc:kotlin-reviewer,ecc:code-reviewer` + `security-reviewer` (eseguita il 12/10: nessun CRITICAL/HIGH; correzioni in fondo a M8.3) |
 | 9 | Qualità e rilascio | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 10 | Verifica in due passaggi | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 11 | Foto profilo | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 
 ```bash
 /ecc:orchestrate custom "ecc:kotlin-build-resolver,ecc:kotlin-reviewer" "[Plan: docs/MASTER_PLAN.md#step-0] Review only, do not write feature code: KMP Gradle setup (libs.versions.toml with Ktor 3, Koin, Room KMP + KSP, Navigation Compose, MapLibre Compose, stable Material 3), AppConfig per platform, debug-only cleartext (network_security_config, NSAllowsLocalNetworking), theme and role-based bottom bar, CI android+ios jobs; Acceptance: assembleDebug and host tests green; release manifest has no cleartext; local.properties untracked"
@@ -1672,6 +1793,8 @@ perché scriverebbero il codice al posto tuo.
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-7] Review only: FCM integration (Android FirebaseMessagingService, iOS Firebase via SPM forwarding token to shared), device registration on start and onNewToken, notification permission flow, deep link by alertId tolerant of duplicates and unknown types, rescue operator list/map/detail, dispatch with alert-already-taken handling, resolve; Acceptance: push opens the right alert; concurrent dispatch shows the conflict message; Firebase config files not committed"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:code-reviewer" "[Plan: docs/MASTER_PLAN.md#step-8] Review only: park manager screens (hazard verification, trail status, POI creation), maintenance tickets with If-Match from ETag and concurrent-modification reload, assign-to-me, refuge capacity 409 handling, admin team creation; Acceptance: stale If-Match shows reload instead of overwriting; role-gated UI still handles 403"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-9] Review only: commonTest coverage of network, outbox and SOS logic, Compose UI tests, accessibility (TalkBack/VoiceOver, 200% font), R8 rules for serialization and Ktor, permission rationale strings, privacy disclosures; Acceptance: tests green on Android and iOS in CI; release build works against HTTPS backend; no debug logging in release"
+/ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-10] Review only: login second step on 401 mfa-required (slug added to ApiError.Unauthorized), password and Google ID token kept in the ViewModel outside UiState, recovery code path, no refresh triggered by auth 401s, MFA setup via otpauth URI and copyable key, recovery codes shown once with FLAG_SECURE and iOS background cover, sensitive clipboard, nothing persisted or logged; Acceptance: wrong password and missing code are distinguished; secrets never reach disk or logs"
+/ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-11] Review only: profile photo picked with the system picker, square crop and 512 px JPEG re-encode without EXIF, upload through MediaUploader with USER target, profile reload after confirm and removal, Coil cache keyed by mediaId and cleared on logout; Acceptance: avatar updates without app restart; no GPS EXIF; no avatar left in cache after logout"
 ```
 
 ---

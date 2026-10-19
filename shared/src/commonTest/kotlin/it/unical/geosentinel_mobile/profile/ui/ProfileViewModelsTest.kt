@@ -6,6 +6,11 @@ import geosentinel_mobile.shared.generated.resources.error_current_password_wron
 import geosentinel_mobile.shared.generated.resources.error_field_current_password
 import geosentinel_mobile.shared.generated.resources.error_field_display_name
 import geosentinel_mobile.shared.generated.resources.error_field_password_short
+import geosentinel_mobile.shared.generated.resources.report_photo_unreadable
+import io.ktor.client.HttpClient
+import it.unical.geosentinel_mobile.core.session.TEST_BASE_URL
+import it.unical.geosentinel_mobile.media.data.FakeMedia
+import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.core.session.FakeBackend
 import it.unical.geosentinel_mobile.core.session.FakeSecureTokenStore
 import it.unical.geosentinel_mobile.core.session.SessionManager
@@ -32,15 +37,21 @@ import kotlin.test.assertTrue
 class ProfileViewModelsTest {
 
     private val backend = FakeBackend()
+    private val media = FakeMedia(backend)
+    private lateinit var client: HttpClient
 
     // viewModelScope usa Dispatchers.Main: lo si sostituisce con quello del test (tempo virtuale)
     private suspend fun TestScope.loggedIn(email: String = "hiker@test.dev", password: String = "password-giusta-1"): SessionManager {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
-        val session = sessionWith(backend, FakeSecureTokenStore()).first
+        val (session, http) = sessionWith(backend, FakeSecureTokenStore())
+        client = http
         session.restore()
         assertTrue(session.login(email, password).isSuccess)
         return session
     }
+
+    private fun TestScope.profileViewModel(session: SessionManager) =
+        ProfileViewModel(session, with(media) { uploader(client) }, MediaRepository({ client }, TEST_BASE_URL))
 
     private fun requests(method: String) = backend.requests.count { it.startsWith("$method /api/v1/users/me") }
 
@@ -134,7 +145,7 @@ class ProfileViewModelsTest {
     @Test
     fun `cancellazione riuscita - si torna ospiti`() = runTest {
         val session = loggedIn()
-        val viewModel = ProfileViewModel(session)
+        val viewModel = profileViewModel(session)
 
         viewModel.deleteAccount()
         advanceUntilIdle()
@@ -147,12 +158,61 @@ class ProfileViewModelsTest {
     @Test
     fun `cancellazione del personale - messaggio account-managed e sessione intatta`() = runTest {
         val session = loggedIn("rescuer@test.dev", "password-giusta-2")
-        val viewModel = ProfileViewModel(session)
+        val viewModel = profileViewModel(session)
 
         viewModel.deleteAccount()
         advanceUntilIdle()
 
         assertEquals(UiMessage(Res.string.error_account_managed), viewModel.state.value.error)
         assertIs<SessionState.LoggedIn>(session.state.value)
+    }
+
+    // ---- foto profilo (M11) ---------------------------------------------------------------------------------
+
+    @Test
+    fun `foto profilo - upload con target USER e l'id dell'utente poi profilo riletto`() = runTest {
+        val session = loggedIn()
+        val viewModel = profileViewModel(session)
+        val profileReads = requests("GET")
+
+        viewModel.uploadAvatar { byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()) }
+        assertTrue(viewModel.state.value.avatarBusy)
+        backend.avatars["hiker@test.dev"] = "m1" // il server la collega al confirm
+        advanceUntilIdle()
+
+        assertTrue(media.uploadRequests.single().contains("\"entityType\":\"USER\""))
+        assertTrue(media.uploadRequests.single().contains("\"entityId\":\"id-hiker@test.dev\""))
+        assertEquals(1, media.confirms)
+        assertEquals(profileReads + 1, requests("GET"))
+        assertEquals("m1", (session.state.value as SessionState.LoggedIn).profile?.avatarMediaId)
+        assertFalse(viewModel.state.value.avatarBusy)
+        assertNull(viewModel.state.value.error)
+    }
+
+    @Test
+    fun `foto profilo - rimozione con DELETE del media corrente e profilo riletto`() = runTest {
+        backend.avatars["hiker@test.dev"] = "m7"
+        val session = loggedIn()
+        val viewModel = profileViewModel(session)
+
+        viewModel.removeAvatar()
+        backend.avatars.remove("hiker@test.dev")
+        advanceUntilIdle()
+
+        assertEquals(listOf("m7"), media.deleted)
+        assertNull((session.state.value as SessionState.LoggedIn).profile?.avatarMediaId)
+        assertNull(viewModel.state.value.error)
+    }
+
+    @Test
+    fun `foto profilo illeggibile - messaggio e nessun upload`() = runTest {
+        val viewModel = profileViewModel(loggedIn())
+
+        viewModel.uploadAvatar { error("formato non supportato") }
+        advanceUntilIdle()
+
+        assertEquals(UiMessage(Res.string.report_photo_unreadable), viewModel.state.value.error)
+        assertTrue(media.uploadRequests.isEmpty())
+        assertFalse(viewModel.state.value.avatarBusy)
     }
 }

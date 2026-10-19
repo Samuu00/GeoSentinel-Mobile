@@ -68,7 +68,7 @@ internal fun apiErrorOf(status: Int, problem: ProblemDetail?, retryAfter: String
     val slug = problem?.type?.substringAfterLast('/')?.takeIf { it.isNotBlank() } ?: "unknown"
     return when {
         status == 400 -> ApiError.Validation(problem?.errors.orEmpty().associate { it.field to it.message }, traceId)
-        status == 401 -> ApiError.Unauthorized(traceId)
+        status == 401 -> ApiError.Unauthorized(traceId, slug.takeIf { problem != null })
         status == 403 -> ApiError.Forbidden(traceId)
         status == 404 -> ApiError.NotFound(traceId)
         status == 409 -> ApiError.Conflict(slug, traceId)

@@ -1,9 +1,11 @@
 package it.unical.geosentinel_mobile.staff.data
 
 import io.ktor.client.HttpClient
+import it.unical.geosentinel_mobile.api.AdministrationApi
 import it.unical.geosentinel_mobile.api.HazardReportsApi
 import it.unical.geosentinel_mobile.api.PointsOfInterestApi
 import it.unical.geosentinel_mobile.api.TrailsApi
+import it.unical.geosentinel_mobile.api.model.AdminMfaResetRequest
 import it.unical.geosentinel_mobile.api.model.CreatePoiRequest
 import it.unical.geosentinel_mobile.api.model.GeoPointDto
 import it.unical.geosentinel_mobile.api.model.HazardResponse
@@ -32,6 +34,7 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
     private val poisApi by lazy { PointsOfInterestApi(apiBaseUrl, client) }
     private val refugesApi by lazy { RefugesApi(apiBaseUrl, client) }
     private val teamsApi by lazy { RescueTeamsApi(apiBaseUrl, client) }
+    private val adminApi by lazy { AdministrationApi(apiBaseUrl, client) }
 
     suspend fun changeHazardStatus(hazardId: String, status: UpdateHazardStatusRequest.Status): Result<HazardResponse> =
         apiCall { hazardsApi.changeHazardStatus(hazardId, UpdateHazardStatusRequest(status = status)) }
@@ -69,4 +72,8 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
             ),
         )
     }
+
+    // Solo ADMIN, dopo aver verificato l'identità fuori dall'app (M10.3). Il server chiude tutte le sessioni
+    // dell'utente e gli manda un'email. 404: email sconosciuta o senza 2FA; 422 business-rule: la propria.
+    suspend fun resetUserMfa(email: String): Result<Unit> = apiCall { adminApi.resetUserMfa(AdminMfaResetRequest(email.trim())) }
 }

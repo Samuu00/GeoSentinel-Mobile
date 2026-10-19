@@ -61,6 +61,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import geosentinel_mobile.shared.generated.resources.Res
+import geosentinel_mobile.shared.generated.resources.staff_mfa_reset_title
 import geosentinel_mobile.shared.generated.resources.poi_open_trail
 import geosentinel_mobile.shared.generated.resources.staff_tab_hazards
 import geosentinel_mobile.shared.generated.resources.staff_tab_tickets
@@ -136,9 +137,15 @@ import org.koin.core.parameter.parametersOf
  * la testata. La voce scelta resta anche tornando da un dettaglio.
  */
 @Composable
-fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Unit) {
+fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Unit, onResetMfa: (() -> Unit)? = null) {
     var tickets by rememberSaveable { mutableStateOf(false) }
-    val tabs = @Composable { ManagementTabs(tickets) { tickets = it } }
+    val tabs = @Composable {
+        Column {
+            ManagementTabs(tickets) { tickets = it }
+            // solo ADMIN (M10.3): chi ha perso telefono e codici di recupero
+            onResetMfa?.let { ManageLink(stringResource(Res.string.staff_mfa_reset_title), onClick = it) }
+        }
+    }
     if (tickets) {
         TicketListScreen(onOpenTicket = onOpenTicket, tabs = tabs)
     } else {
