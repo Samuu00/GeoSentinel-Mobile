@@ -80,7 +80,8 @@ Google riuscito (account Google sull'emulatore, bundle id di xtool sull'iPhone).
 richiesta, sul contratto di M8 e M9 del backend): login con il codice (`ApiError.Unauthorized.slug`, passo del codice
 nel login e dialogo per Google), `MfaScreen` nel Profilo (chiave, codici di recupero una volta sola, `SecureScreen` e
 `sensitiveClipEntry` in `core/ui`), azzeramento da `ADMIN` nella scheda Gestione, foto profilo (`ImageEncoder`
-con `squareCrop`, upload con target `USER`, niente cache su disco), 348 test host, verificate sull'emulatore.
+con `squareCrop`, upload con target `USER`, niente cache su disco), 348 test host, verificate sull'emulatore e
+sull'iPhone (build `d793210`, CI verde).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

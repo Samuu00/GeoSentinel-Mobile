@@ -22,6 +22,8 @@ import kotlinx.io.IOException
 const val TEST_BASE_URL = "http://api.test"
 const val MFA_SECRET = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"
 const val MFA_SETUP_CODE = "123456"
+// ADR-0026: codice mandato per email dallo setup, come lo mostra il server
+const val MFA_EMAIL_CODE = "ABCDEFGH-23456789"
 
 class FakeSecureTokenStore(var tokens: AuthTokens? = null) : SecureTokenStore {
     override suspend fun read() = tokens
@@ -42,7 +44,7 @@ class FakeBackend {
     val googleOnly = mutableSetOf<String>()
     val resetCodes = mutableMapOf<String, String>()
     // Verifica in due passaggi (M10): email -> il TOTP valido adesso (un codice vale una volta sola, come sul server) e
-    // i codici di recupero. Il setup dà sempre MFA_SECRET; enable accetta MFA_SETUP_CODE.
+    // i codici di recupero. Il setup dà sempre MFA_SECRET; enable accetta MFA_SETUP_CODE con MFA_EMAIL_CODE.
     val mfaTotp = mutableMapOf<String, String>()
     val mfaRecovery = mutableMapOf<String, MutableSet<String>>()
     private val usedTotp = mutableSetOf<String>()
@@ -140,6 +142,8 @@ class FakeBackend {
                 delay(200) // così un refresh può accavallarsi
                 val email = owners[bearer?.removePrefix("Bearer ")] ?: return problem(HttpStatusCode.Unauthorized, "unauthorized")
                 if (users[email] != field(body, "currentPassword")) return problem(HttpStatusCode.UnprocessableEntity, "business-rule")
+                // ADR-0026: con la 2FA attiva serve anche il codice; assente o sbagliato -> 422 invalid-mfa-code
+                checkMfa(email, body)?.let { return problem(HttpStatusCode.UnprocessableEntity, "invalid-mfa-code") }
                 users[email] = field(body, "newPassword")
                 revokeAll(email)
                 tokens(issueFor(email))
@@ -162,7 +166,7 @@ class FakeBackend {
                     } else {
                         respond("""{"secret":"$MFA_SECRET","otpauthUri":"otpauth://totp/GeoSentinel:x?secret=$MFA_SECRET"}""", HttpStatusCode.OK, json)
                     }
-                    "enable" -> if (code != MFA_SETUP_CODE) {
+                    "enable" -> if (code != MFA_SETUP_CODE || field(body, "emailCode").filter(Char::isLetterOrDigit) != MFA_EMAIL_CODE.filter(Char::isLetterOrDigit)) {
                         problem(HttpStatusCode.UnprocessableEntity, "invalid-mfa-code")
                     } else {
                         mfaTotp[email] = MFA_SETUP_CODE

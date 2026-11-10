@@ -6,6 +6,8 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_current_password_wrong
 import geosentinel_mobile.shared.generated.resources.error_field_current_password
 import geosentinel_mobile.shared.generated.resources.error_field_display_name
+import geosentinel_mobile.shared.generated.resources.error_field_mfa_code
+import geosentinel_mobile.shared.generated.resources.error_mfa_code_wrong
 import geosentinel_mobile.shared.generated.resources.error_field_password_long
 import geosentinel_mobile.shared.generated.resources.error_field_password_short
 import geosentinel_mobile.shared.generated.resources.error_generic
@@ -167,11 +169,14 @@ class EditNameViewModel(private val session: SessionManager) : ViewModel() {
 
 // ---- Cambio password -----------------------------------------------------------------------------------------
 
-enum class PasswordField { CURRENT, NEW }
+enum class PasswordField { CURRENT, NEW, MFA }
 
 data class ChangePasswordUiState(
     val currentPassword: String = "",
     val newPassword: String = "",
+    // con la verifica in due passaggi attiva il server chiede anche il codice (ADR-0026 del backend)
+    val mfaRequired: Boolean = false,
+    val mfaCode: String = "",
     val fieldErrors: Map<PasswordField, UiMessage> = emptyMap(),
     val error: UiMessage? = null,
     val submitting: Boolean = false,
@@ -183,11 +188,15 @@ data class ChangePasswordUiState(
 
 class ChangePasswordViewModel(private val session: SessionManager) : ViewModel() {
 
-    private val _state = MutableStateFlow(ChangePasswordUiState())
+    private val _state = MutableStateFlow(
+        ChangePasswordUiState(mfaRequired = (session.state.value as? SessionState.LoggedIn)?.profile?.mfaEnabled == true),
+    )
     val state: StateFlow<ChangePasswordUiState> = _state.asStateFlow()
 
     fun onCurrentChange(value: String) = edit(PasswordField.CURRENT) { copy(currentPassword = value) }
     fun onNewChange(value: String) = edit(PasswordField.NEW) { copy(newPassword = value) }
+    // TOTP o codice di recupero: testo libero, come nella disattivazione
+    fun onMfaCodeChange(value: String) = edit(PasswordField.MFA) { copy(mfaCode = value.take(32)) }
 
     // Modificare un campo toglie il suo errore
     private fun edit(field: PasswordField, change: ChangePasswordUiState.() -> ChangePasswordUiState) =
@@ -203,6 +212,7 @@ class ChangePasswordViewModel(private val session: SessionManager) : ViewModel()
                 PasswordProblem.TOO_LONG -> put(PasswordField.NEW, UiMessage(Res.string.error_field_password_long))
                 null -> Unit
             }
+            if (current.mfaRequired && current.mfaCode.isBlank()) put(PasswordField.MFA, UiMessage(Res.string.error_field_mfa_code))
         }
         if (localErrors.isNotEmpty()) {
             _state.update { it.copy(fieldErrors = localErrors) }
@@ -210,11 +220,11 @@ class ChangePasswordViewModel(private val session: SessionManager) : ViewModel()
         }
         _state.update { it.copy(submitting = true, error = null, fieldErrors = emptyMap()) }
         viewModelScope.launch {
-            val result = session.changePassword(current.currentPassword, current.newPassword)
+            val result = session.changePassword(current.currentPassword, current.newPassword, current.mfaCode.takeIf { current.mfaRequired })
             _state.update { state ->
                 result.fold(
                     // le password non restano in memoria più del necessario
-                    onSuccess = { state.copy(submitting = false, currentPassword = "", newPassword = "", changed = true) },
+                    onSuccess = { state.copy(submitting = false, currentPassword = "", newPassword = "", mfaCode = "", changed = true) },
                     onFailure = { state.withServerError(it).copy(submitting = false) },
                 )
             }
@@ -227,6 +237,9 @@ private fun ChangePasswordUiState.withServerError(failure: Throwable): ChangePas
         // 422 business-rule: la password attuale è sbagliata (guida all'API)
         is ApiError.BusinessRule if error.slug == "business-rule" ->
             copy(fieldErrors = mapOf(PasswordField.CURRENT to UiMessage(Res.string.error_current_password_wrong)))
+        // codice della verifica in due passaggi assente, sbagliato o già usato (anche se l'ha attivata un altro dispositivo)
+        is ApiError.BusinessRule if error.slug == "invalid-mfa-code" ->
+            copy(mfaRequired = true, fieldErrors = mapOf(PasswordField.MFA to UiMessage(Res.string.error_mfa_code_wrong)))
         is ApiError.Validation -> {
             val fields = buildMap {
                 if ("currentPassword" in error.fieldErrors) put(PasswordField.CURRENT, UiMessage(Res.string.error_field_current_password))

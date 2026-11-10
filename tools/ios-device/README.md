@@ -47,3 +47,8 @@ Se xtool dice `Operation now in progress`, WSL non raggiunge la porta 27015: la 
 alla scheda `vEthernet (WSL …)` per GUID, che Windows può ricreare dopo un riavvio. Da PowerShell come
 amministratore: `Set-NetFirewallRule -DisplayName "WSL usbmuxd 27015" -InterfaceAlias "vEthernet (WSL (Hyper-V firewall))"`
 (provato il 12/10).
+
+Se lo script resta su `Waiting for device to be connected...` con il telefono sbloccato e visibile in Dispositivi
+Apple, controlla `netstat -an | Select-String 27015`: se manca `172.17.x.1:27015 LISTENING`, l'inoltro è configurato
+ma il servizio IP Helper non lo applica (la scheda di WSL è nata dopo di lui). Da PowerShell come amministratore:
+`Restart-Service iphlpsvc -Force` (provato il 19/10).

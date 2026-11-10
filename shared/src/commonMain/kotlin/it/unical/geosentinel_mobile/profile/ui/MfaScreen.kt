@@ -53,6 +53,8 @@ import geosentinel_mobile.shared.generated.resources.mfa_disable
 import geosentinel_mobile.shared.generated.resources.mfa_disable_body
 import geosentinel_mobile.shared.generated.resources.mfa_disable_label
 import geosentinel_mobile.shared.generated.resources.mfa_disable_title
+import geosentinel_mobile.shared.generated.resources.mfa_email_code_hint
+import geosentinel_mobile.shared.generated.resources.mfa_email_code_label
 import geosentinel_mobile.shared.generated.resources.mfa_enable
 import geosentinel_mobile.shared.generated.resources.mfa_off_body
 import geosentinel_mobile.shared.generated.resources.mfa_on_body
@@ -120,7 +122,10 @@ fun MfaScreen(onBack: () -> Unit) {
         MfaStep.SETUP -> CodeStep(
             state = state, viewModel = viewModel, onBack = stepBack,
             title = Res.string.mfa_setup_title, body = Res.string.mfa_setup_body, button = Res.string.mfa_setup_button,
-        ) { SetupKey(state, onOpenFailed = viewModel::onOpenAppFailed) }
+        ) {
+            SetupKey(state, onOpenFailed = viewModel::onOpenAppFailed)
+            EmailCode(state, viewModel)
+        }
         MfaStep.DISABLE -> CodeStep(
             state = state, viewModel = viewModel, onBack = stepBack,
             title = Res.string.mfa_disable_title, body = Res.string.mfa_disable_body, button = Res.string.mfa_disable,
@@ -213,6 +218,19 @@ private fun SetupKey(state: MfaUiState, onOpenFailed: (UiMessage) -> Unit) {
             modifier = Modifier.heightIn(min = 48.dp),
         ) { Text(stringResource(Res.string.mfa_setup_copy_key), fontWeight = FontWeight.SemiBold) }
     }
+}
+
+// Il codice che il server ha mandato all'email dell'account con lo setup (ADR-0026 del backend): prova che chi attiva
+// la verifica possiede l'email
+@Composable
+private fun EmailCode(state: MfaUiState, viewModel: MfaViewModel) {
+    FormTextField(
+        value = state.emailCode,
+        onValueChange = viewModel::onEmailCodeChange,
+        label = stringResource(Res.string.mfa_email_code_label),
+        supporting = stringResource(Res.string.mfa_email_code_hint),
+        keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Next),
+    )
 }
 
 // I codici di recupero, mostrati una volta sola: niente screenshot, copia segnata come sensibile, "Fine" solo dopo

@@ -77,6 +77,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -95,6 +96,8 @@ import geosentinel_mobile.shared.generated.resources.auth_register_link
 import geosentinel_mobile.shared.generated.resources.change_password_body
 import geosentinel_mobile.shared.generated.resources.change_password_button
 import geosentinel_mobile.shared.generated.resources.change_password_current
+import geosentinel_mobile.shared.generated.resources.change_password_mfa
+import geosentinel_mobile.shared.generated.resources.change_password_mfa_hint
 import geosentinel_mobile.shared.generated.resources.change_password_new
 import geosentinel_mobile.shared.generated.resources.change_password_title
 import geosentinel_mobile.shared.generated.resources.delete_confirm_body
@@ -464,8 +467,20 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
             label = stringResource(Res.string.change_password_new),
             error = state.fieldErrors[PasswordField.NEW]?.resolve(),
             hint = stringResource(Res.string.auth_password_rules),
-            onDone = viewModel::submit,
+            imeAction = if (state.mfaRequired) ImeAction.Next else ImeAction.Done,
+            onDone = { if (state.mfaRequired) focus.moveFocus(FocusDirection.Down) else viewModel.submit() },
         )
+        if (state.mfaRequired) {
+            FormTextField(
+                value = state.mfaCode,
+                onValueChange = viewModel::onMfaCodeChange,
+                label = stringResource(Res.string.change_password_mfa),
+                error = state.fieldErrors[PasswordField.MFA]?.resolve(),
+                supporting = stringResource(Res.string.change_password_mfa_hint),
+                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters, autoCorrectEnabled = false, keyboardType = KeyboardType.Ascii, imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = { viewModel.submit() }),
+            )
+        }
     }
 }
 

@@ -5,6 +5,8 @@ import geosentinel_mobile.shared.generated.resources.error_account_managed
 import geosentinel_mobile.shared.generated.resources.error_current_password_wrong
 import geosentinel_mobile.shared.generated.resources.error_field_current_password
 import geosentinel_mobile.shared.generated.resources.error_field_display_name
+import geosentinel_mobile.shared.generated.resources.error_field_mfa_code
+import geosentinel_mobile.shared.generated.resources.error_mfa_code_wrong
 import geosentinel_mobile.shared.generated.resources.error_field_password_short
 import geosentinel_mobile.shared.generated.resources.report_photo_unreadable
 import io.ktor.client.HttpClient
@@ -41,12 +43,16 @@ class ProfileViewModelsTest {
     private lateinit var client: HttpClient
 
     // viewModelScope usa Dispatchers.Main: lo si sostituisce con quello del test (tempo virtuale)
-    private suspend fun TestScope.loggedIn(email: String = "hiker@test.dev", password: String = "password-giusta-1"): SessionManager {
+    private suspend fun TestScope.loggedIn(
+        email: String = "hiker@test.dev",
+        password: String = "password-giusta-1",
+        mfaCode: String? = null,
+    ): SessionManager {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val (session, http) = sessionWith(backend, FakeSecureTokenStore())
         client = http
         session.restore()
-        assertTrue(session.login(email, password).isSuccess)
+        assertTrue(session.login(email, password, mfaCode).isSuccess)
         return session
     }
 
@@ -137,6 +143,36 @@ class ProfileViewModelsTest {
         assertTrue(state.changed)
         assertEquals("", state.currentPassword)
         assertEquals("", state.newPassword)
+        assertEquals("nuova-password-123", backend.users["hiker@test.dev"])
+    }
+
+    // ADR-0026 del backend: con la verifica in due passaggi attiva il cambio password chiede anche il codice
+    @Test
+    fun `con la 2FA attiva serve il codice - assente sul campo poi sbagliato poi giusto`() = runTest {
+        backend.mfaTotp["hiker@test.dev"] = "777888"
+        val session = loggedIn(mfaCode = "777888")
+        backend.mfaTotp["hiker@test.dev"] = "111222" // il codice del login è consumato: ne vale uno nuovo
+        val viewModel = ChangePasswordViewModel(session)
+        assertTrue(viewModel.state.value.mfaRequired)
+
+        viewModel.onCurrentChange("password-giusta-1")
+        viewModel.onNewChange("nuova-password-123")
+        viewModel.submit()
+        advanceUntilIdle()
+        assertEquals(UiMessage(Res.string.error_field_mfa_code), viewModel.state.value.fieldErrors[PasswordField.MFA])
+        assertEquals(0, backend.requests.count { it.startsWith("POST /api/v1/users/me/password") })
+
+        viewModel.onMfaCodeChange("000000")
+        viewModel.submit()
+        advanceUntilIdle()
+        assertEquals(UiMessage(Res.string.error_mfa_code_wrong), viewModel.state.value.fieldErrors[PasswordField.MFA])
+        assertFalse(viewModel.state.value.changed)
+
+        viewModel.onMfaCodeChange("111222")
+        viewModel.submit()
+        advanceUntilIdle()
+        assertTrue(viewModel.state.value.changed)
+        assertEquals("", viewModel.state.value.mfaCode)
         assertEquals("nuova-password-123", backend.users["hiker@test.dev"])
     }
 

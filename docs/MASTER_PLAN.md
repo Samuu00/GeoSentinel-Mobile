@@ -1651,8 +1651,9 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
 ### Milestone 10: verifica in due passaggi
 
 > **Scritta il 19/10 da Claude su richiesta** (contratto copiato dal backend, client rigenerato), 348 test host,
-> verificata sull'emulatore con `hiker2@` e `admin@`. Restano: job `ios` (copertura in background e appunti scritti senza
-> compilarli qui), app di autenticazione vera sull'emulatore, `otpauthUri` su iOS.
+> verificata sull'emulatore con `hiker2@` e `admin@` e sull'iPhone (build di `d793210`, CI verde con il job `ios`):
+> l'`otpauthUri` apre l'app Password, copertura nera nel selettore delle app, login con il suo codice. Due correzioni
+> per Kotlin/Native: `UIColor.blackColor` (non `systemBackgroundColor`) e nomi dei test senza virgole.
 
 > Pianificata il 18/10, sul contratto di **M8 del backend** (TOTP, ADR-0025). Si parte quando il backend ha rigenerato
 > `openapi.json`: `./gradlew :apiClient:checkApiContract` lo segnala. Il codice lo scrivi tu.
@@ -1678,8 +1679,9 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
   - [x] `commonTest` con `MockEngine`: 401 `mfa-required` → passo del codice, seconda richiesta con `mfaCode`; 401 senza
     slug → "password sbagliata"; `invalid-mfa-code` sul campo; nessun refresh partito; password e codice mai nel
     `toString` degli stati.
-  - [ ] sull'emulatore con un account che ha la 2FA: login con il codice dell'app di autenticazione, login con un
-    codice di recupero, stesso codice due volte → errore.
+  - [x] sull'emulatore con un account che ha la 2FA: login con il codice dell'app di autenticazione, login con un
+    codice di recupero, stesso codice due volte → errore (19/10, TOTP calcolato da uno script; il riuso nello stesso
+    passo lo coprono `MfaIT` del backend e il test host).
 
 **M10.2 Attivazione e disattivazione dal Profilo**
 - Gruppo "Account" del Profilo: riga "Verifica in due passaggi" con lo stato (`UserProfile.mfaEnabled`, da
@@ -1703,9 +1705,9 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
 - Checkpoint:
   - [x] `MfaViewModelTest` (MockEngine): i tre passi; Indietro sul passo dei codici chiede conferma; disattivazione con
     un codice sbagliato → errore sul campo.
-  - [ ] sull'emulatore: attivazione con Google Authenticator (o Aegis), uscita, login con il codice, disattivazione;
-    screenshot della schermata dei codici bloccato.
-  - [ ] (con il Mac o sull'iPhone) l'`otpauthUri` apre l'app Password di iOS.
+  - [x] sull'emulatore: attivazione, uscita, login con il codice, disattivazione; finestra con `FLAG_SECURE` sulla
+    chiave e sui codici (19/10; senza app di autenticazione installata compare "aggiungi la chiave a mano").
+  - [x] sull'iPhone l'`otpauthUri` apre l'app Password di iOS (19/10).
 
 **M10.3 Azzeramento da `ADMIN` e testi per l'utente**
 - Chi ha perso telefono e codici di recupero non ha una strada nell'app: lo dice il passo del codice ("Hai perso
@@ -1723,7 +1725,7 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
 ### Milestone 11: foto profilo
 
 > **Scritta il 19/10 da Claude su richiesta**, verificata sull'emulatore (JPEG 512×512 senza EXIF, seconda foto → la
-> prima 404, rimozione → iniziale). Resta la prova HEIC sull'iPhone.
+> prima 404, rimozione → iniziale) e sull'iPhone con una foto HEIC (19/10).
 
 > Pianificata il 18/10, sul contratto di **M9 del backend** (media con target `USER`). Il codice lo scrivi tu.
 
@@ -1748,7 +1750,7 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
   - [x] `commonTest`: target `USER` con l'id dell'utente; profilo riletto dopo il confirm e dopo la rimozione.
   - [x] sull'emulatore: foto scelta → avatar aggiornato; seconda foto → nel bucket di MinIO resta un solo oggetto;
     rimozione → di nuovo l'iniziale; dopo il logout la foto non è nella cache su disco.
-  - [ ] foto HEIC dall'iPhone → JPEG quadrato senza EXIF.
+  - [x] foto HEIC dall'iPhone → JPEG quadrato senza EXIF (19/10).
 
 ---
 

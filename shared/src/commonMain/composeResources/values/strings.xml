@@ -151,6 +151,9 @@
     <string name="change_password_button">Cambia password</string>
     <string name="error_field_current_password">Inserisci la password attuale.</string>
     <string name="error_current_password_wrong">La password attuale non è corretta.</string>
+    <string name="change_password_mfa">Codice di verifica</string>
+    <string name="change_password_mfa_hint">Il codice a 6 cifre dell'app di autenticazione, o un codice di recupero.</string>
+    <string name="error_field_mfa_code">Scrivi il codice dell'app di autenticazione o un codice di recupero.</string>
     <string name="delete_dialog_title">Eliminare l'account?</string>
     <string name="delete_dialog_body">Le prenotazioni future e un eventuale SOS attivo verranno annullati e le tue foto cancellate. Non potrai più accedere con questo account.</string>
     <string name="delete_dialog_continue">Continua</string>
@@ -554,7 +557,10 @@
     <string name="mfa_on_body">È attiva: all'accesso ti chiediamo anche il codice dell'app di autenticazione.</string>
     <string name="mfa_enable">Attiva</string>
     <string name="mfa_setup_title">Collega l'app</string>
-    <string name="mfa_setup_body">Aggiungi GeoSentinel alla tua app di autenticazione con il pulsante, oppure scrivi la chiave a mano. Poi inserisci qui il codice a 6 cifre che ti mostra.</string>
+    <string name="mfa_setup_body">Aggiungi GeoSentinel alla tua app di autenticazione con il pulsante, oppure scrivi la chiave a mano. Poi inserisci il codice che ti abbiamo mandato per email e il codice a 6 cifre dell'app.</string>
+    <string name="mfa_email_code_label">Codice ricevuto per email</string>
+    <string name="mfa_email_code_hint">Vale 15 minuti. Se non arriva, torna indietro e premi di nuovo Attiva.</string>
+    <string name="error_mfa_setup_codes_wrong">Uno dei due codici non è valido. Controlla il codice dell'email (vale 15 minuti) e che l'ora del telefono sia giusta.</string>
     <string name="mfa_setup_open_app">Apri l'app di autenticazione</string>
     <string name="mfa_setup_key">Chiave</string>
     <string name="mfa_setup_copy_key">Copia la chiave</string>

@@ -3,11 +3,13 @@ package it.unical.geosentinel_mobile.profile.ui
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_forbidden
 import geosentinel_mobile.shared.generated.resources.error_mfa_code_wrong
+import geosentinel_mobile.shared.generated.resources.error_mfa_setup_codes_wrong
 import geosentinel_mobile.shared.generated.resources.staff_mfa_reset_not_found
 import geosentinel_mobile.shared.generated.resources.staff_mfa_reset_self
 import io.ktor.client.HttpClient
 import it.unical.geosentinel_mobile.core.session.FakeBackend
 import it.unical.geosentinel_mobile.core.session.FakeSecureTokenStore
+import it.unical.geosentinel_mobile.core.session.MFA_EMAIL_CODE
 import it.unical.geosentinel_mobile.core.session.MFA_SECRET
 import it.unical.geosentinel_mobile.core.session.MFA_SETUP_CODE
 import it.unical.geosentinel_mobile.core.session.SessionManager
@@ -64,7 +66,7 @@ class MfaViewModelTest {
     fun tearDown() = Dispatchers.resetMain()
 
     @Test
-    fun `attivazione in tre passi - chiave poi primo codice poi codici di recupero una volta sola`() = runTest {
+    fun `attivazione in tre passi - chiave poi codice email e primo codice poi codici di recupero una volta sola`() = runTest {
         val session = loggedIn()
         val viewModel = mfaViewModel(session)
         assertFalse(viewModel.state.value.enabled)
@@ -74,18 +76,24 @@ class MfaViewModelTest {
         assertEquals(MfaStep.SETUP, viewModel.state.value.step)
         assertEquals(MFA_SECRET, viewModel.state.value.secret)
 
-        viewModel.onCodeChange("000000")
+        // senza il codice dell'email non si invia
+        viewModel.onCodeChange(MFA_SETUP_CODE)
+        assertFalse(viewModel.state.value.canSubmitCode)
+
+        viewModel.onEmailCodeChange("ZZZZZZZZ-ZZZZZZZZ")
         viewModel.submitCode()
         advanceUntilIdle()
-        assertEquals(UiMessage(Res.string.error_mfa_code_wrong), viewModel.state.value.codeError)
+        assertEquals(UiMessage(Res.string.error_mfa_setup_codes_wrong), viewModel.state.value.codeError)
 
-        viewModel.onCodeChange(MFA_SETUP_CODE)
+        // come lo scriverebbe l'utente: minuscole, senza trattino
+        viewModel.onEmailCodeChange(MFA_EMAIL_CODE.lowercase().replace("-", ""))
         viewModel.submitCode()
         advanceUntilIdle()
         val state = viewModel.state.value
         assertEquals(MfaStep.CODES, state.step)
         assertEquals(10, state.recoveryCodes.size)
         assertNull(state.secret) // la chiave non serve più e non resta in memoria
+        assertEquals("", state.emailCode)
         assertTrue(state.enabled)
         assertEquals(true, session.mfaEnabled())
 
@@ -102,10 +110,12 @@ class MfaViewModelTest {
         viewModel.startSetup()
         advanceUntilIdle()
         viewModel.onCodeChange(MFA_SETUP_CODE)
+        viewModel.onEmailCodeChange(MFA_EMAIL_CODE)
         val printed = viewModel.state.value.toString()
         assertFalse(MFA_SECRET in printed)
         assertFalse("otpauth" in printed)
         assertFalse(MFA_SETUP_CODE in printed)
+        assertFalse(MFA_EMAIL_CODE in printed)
     }
 
     @Test

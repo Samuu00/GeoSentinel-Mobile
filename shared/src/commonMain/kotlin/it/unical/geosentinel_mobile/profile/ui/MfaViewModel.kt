@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_generic
 import geosentinel_mobile.shared.generated.resources.error_mfa_code_wrong
+import geosentinel_mobile.shared.generated.resources.error_mfa_setup_codes_wrong
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.network.safely
@@ -19,7 +20,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// OVERVIEW: stato e azioni. SETUP: chiave e primo codice. CODES: i codici di recupero, una volta sola.
+// OVERVIEW: stato e azioni. SETUP: chiave, codice arrivato per email e primo codice. CODES: i codici di recupero, una volta sola.
 // DISABLE e REGENERATE: un codice per confermare.
 enum class MfaStep { OVERVIEW, SETUP, CODES, DISABLE, REGENERATE }
 
@@ -29,6 +30,7 @@ data class MfaUiState(
     val secret: String? = null,
     val otpauthUri: String? = null,
     val code: String = "",
+    val emailCode: String = "",
     val recoveryCodes: List<String> = emptyList(),
     val savedConfirmed: Boolean = false,
     val busy: Boolean = false,
@@ -36,11 +38,18 @@ data class MfaUiState(
     val error: UiMessage? = null,
 ) {
     // DISABLE accetta anche un codice di recupero (testo libero); gli altri passi solo un TOTP
-    val canSubmitCode: Boolean get() = !busy && (if (step == MfaStep.DISABLE) code.isNotBlank() else code.length == 6)
+    // SETUP chiede anche il codice dell'email: 16 caratteri, trattini e spazi a piacere
+    val canSubmitCode: Boolean get() = !busy && when (step) {
+        MfaStep.DISABLE -> code.isNotBlank()
+        MfaStep.SETUP -> code.length == 6 && emailCode.count(Char::isLetterOrDigit) == EMAIL_CODE_LENGTH
+        else -> code.length == 6
+    }
 
-    // chiave, URI, codice e codici di recupero non finiscono nei log
+    // chiave, URI, codici e codici di recupero non finiscono nei log
     override fun toString() = "MfaUiState(enabled=$enabled, step=$step, busy=$busy, error=$error, codeError=$codeError)"
 }
+
+private const val EMAIL_CODE_LENGTH = 16
 
 /** Attivazione e disattivazione della verifica in due passaggi dal Profilo (M10.2). Niente su disco. */
 class MfaViewModel(private val mfa: MfaRepository, private val session: SessionManager) : ViewModel() {
@@ -55,10 +64,15 @@ class MfaViewModel(private val mfa: MfaRepository, private val session: SessionM
         it.copy(code = code, codeError = null, error = null)
     }
 
+    // Come lo scrive l'utente: maiuscole, trattini e spazi ammessi (il server li ignora)
+    fun onEmailCodeChange(value: String) = _state.update {
+        it.copy(emailCode = value.filter { c -> c.isLetterOrDigit() || c == '-' || c == ' ' }.uppercase().take(24), codeError = null, error = null)
+    }
+
     fun onSavedChange(saved: Boolean) = _state.update { it.copy(savedConfirmed = saved) }
 
     fun startSetup() = request({ mfa.startSetup() }) { setup ->
-        _state.update { it.copy(step = MfaStep.SETUP, secret = setup.secret, otpauthUri = setup.otpauthUri, code = "") }
+        _state.update { it.copy(step = MfaStep.SETUP, secret = setup.secret, otpauthUri = setup.otpauthUri, code = "", emailCode = "") }
     }
 
     fun openDisable() = _state.update { it.copy(step = MfaStep.DISABLE, code = "", codeError = null, error = null) }
@@ -69,8 +83,10 @@ class MfaViewModel(private val mfa: MfaRepository, private val session: SessionM
         val current = _state.value
         if (!current.canSubmitCode) return
         when (current.step) {
-            MfaStep.SETUP -> request({ mfa.enable(current.code) }) { codes ->
-                _state.update { it.copy(enabled = true, step = MfaStep.CODES, recoveryCodes = codes, secret = null, otpauthUri = null, code = "") }
+            MfaStep.SETUP -> request({ mfa.enable(current.code, current.emailCode) }) { codes ->
+                _state.update {
+                    it.copy(enabled = true, step = MfaStep.CODES, recoveryCodes = codes, secret = null, otpauthUri = null, code = "", emailCode = "")
+                }
                 session.reloadProfile()
             }
             MfaStep.REGENERATE -> request({ mfa.regenerateRecoveryCodes(current.code) }) { codes ->
@@ -88,7 +104,7 @@ class MfaViewModel(private val mfa: MfaRepository, private val session: SessionM
     // codici la schermata chiede prima conferma (non si rivedranno più).
     fun back() = _state.update {
         it.copy(
-            step = MfaStep.OVERVIEW, secret = null, otpauthUri = null, code = "", recoveryCodes = emptyList(),
+            step = MfaStep.OVERVIEW, secret = null, otpauthUri = null, code = "", emailCode = "", recoveryCodes = emptyList(),
             savedConfirmed = false, codeError = null, error = null,
         )
     }
@@ -110,8 +126,10 @@ class MfaViewModel(private val mfa: MfaRepository, private val session: SessionM
     private suspend fun onFailure(failure: Throwable) {
         val error = (failure as? ApiException)?.error
         when {
-            error is ApiError.BusinessRule && error.slug == "invalid-mfa-code" ->
-                _state.update { it.copy(codeError = UiMessage(Res.string.error_mfa_code_wrong)) }
+            // nello setup il server non dice quale dei due codici è sbagliato
+            error is ApiError.BusinessRule && error.slug == "invalid-mfa-code" -> _state.update {
+                it.copy(codeError = UiMessage(if (it.step == MfaStep.SETUP) Res.string.error_mfa_setup_codes_wrong else Res.string.error_mfa_code_wrong))
+            }
             // già attiva (da un altro dispositivo): si mostra com'è davvero
             error is ApiError.Conflict && error.slug == "mfa-already-enabled" -> {
                 _state.update { it.copy(enabled = true, step = MfaStep.OVERVIEW) }

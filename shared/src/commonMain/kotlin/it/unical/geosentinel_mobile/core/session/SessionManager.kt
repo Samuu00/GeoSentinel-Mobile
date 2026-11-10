@@ -173,10 +173,12 @@ class SessionManager(
     // Il mutex non può avvolgere la richiesta (il plugin vi chiama refreshTokens: deadlock). Un refresh partito con il
     // token vecchio mentre la richiesta è in volo prende 401 perché il server li ha appena revocati: finché il cambio è
     // in corso quel 401 non chiude la sessione (vedi refreshTokens), e i token nuovi arrivano con la risposta.
-    suspend fun changePassword(currentPassword: String, newPassword: String): Result<Unit> = withContext(NonCancellable) {
+    // mfaCode: TOTP o codice di recupero, obbligatorio se la verifica in due passaggi è attiva (ADR-0026 del backend:
+    // la sessione nuova non nasce senza il secondo fattore); senza o sbagliato -> 422 invalid-mfa-code
+    suspend fun changePassword(currentPassword: String, newPassword: String, mfaCode: String? = null): Result<Unit> = withContext(NonCancellable) {
         refreshMutex.withLock { passwordChanges++ }
         try {
-            apiCall { usersApi.changeMyPassword(ChangePasswordRequest(currentPassword, newPassword)) }.andThen { response ->
+            apiCall { usersApi.changeMyPassword(ChangePasswordRequest(currentPassword, newPassword, mfaCode?.trim()?.ifEmpty { null })) }.andThen { response ->
                 refreshMutex.withLock {
                     when {
                         _state.value !is SessionState.LoggedIn -> Result.failure(SessionEndedException())
