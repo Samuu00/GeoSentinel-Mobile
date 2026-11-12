@@ -5,7 +5,9 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import it.unical.geosentinel_mobile.core.ui.theme.dawnColor
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
@@ -63,6 +65,50 @@ fun ForestHeader(modifier: Modifier = Modifier) {
                 }
             },
     )
+}
+
+/**
+ * Il fondo della testata delle schede (redesign 11/2026, terza passata): il cielo d'alba che sfuma nella nebbia del
+ * fondo, due creste lontane e una fila di abeti, tutto in toni appena più scuri del fondo. Il titolo grande ci sta
+ * sopra e resta leggibile (le creste sono velature). In basso il disegno finisce nel colore del fondo: il contenuto
+ * ci poggia sopra senza bordo. Decorativo e deterministico.
+ */
+// [height]: il paesaggio occupa solo questa fascia in alto (sopra il titolo); sotto resta il fondo. null = tutto.
+@Composable
+internal fun Modifier.alpineBackdrop(height: androidx.compose.ui.unit.Dp? = null): Modifier {
+    val scheme = MaterialTheme.colorScheme
+    val ground = scheme.background
+    val dawn = dawnColor()
+    val dark = ground.luminance() < 0.5f
+    // di notte le creste scuriscono verso il nero, di giorno si velano di abete
+    val ink = if (dark) lerp(ground, Color.Black, 0.6f) else scheme.primary
+    return this
+        .clearAndSetSemantics { }
+        .drawWithCache {
+            val w = size.width
+            val h = height?.toPx()?.coerceAtMost(size.height) ?: size.height
+            val step = 3.dp.toPx()
+            val (minor, _) = contourPaths(w, h, 8.dp.toPx())
+            val far = ridge(w, h, step) { t -> 0.50f - 0.30f * peaks(t, 2.6f, 0.9f) }
+            val near = ridge(w, h, step) { t -> 0.70f - 0.16f * peaks(t, 1.8f, 2.1f) }
+            val forest = forest(w, h, 0.8f.dp.toPx())
+            val land = ridge(w, h, step) { t -> 0.93f - 0.02f * sin(2 * PI.toFloat() * (t * 1.1f + 0.4f)) }
+            val sky = Brush.verticalGradient(
+                0f to lerp(ground, dawn, if (dark) 0.85f else 0.60f),
+                0.55f to lerp(ground, dawn, if (dark) 0.35f else 0.40f),
+                1f to ground,
+                endY = h,
+            )
+            val thin = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round)
+            onDrawBehind {
+                drawRect(sky, size = androidx.compose.ui.geometry.Size(w, h))
+                drawPath(minor, lerp(ground, ink, 0.05f), style = thin)
+                drawPath(far, lerp(ground, ink, if (dark) 0.30f else 0.07f))
+                drawPath(near, lerp(ground, ink, if (dark) 0.50f else 0.12f))
+                drawPath(forest, lerp(ground, ink, if (dark) 0.70f else 0.17f))
+                drawPath(land, ground)
+            }
+        }
 }
 
 // Profilo chiuso in basso: [top] dà l'altezza (frazione del riquadro, 0 = in alto) per ogni t tra 0 e 1.

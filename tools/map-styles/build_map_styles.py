@@ -2,7 +2,8 @@
 Genera gli stili della mappa in shared/src/commonMain/composeResources/files/map/.
 
 Parte dallo stile "liberty" di OpenFreeMap (tile vettoriali OpenMapTiles, licenza BSD dello stile, dati ODbL)
-e lo ricolora con una palette simile a Google Maps, in chiaro e in scuro. Produce anche:
+e lo ricolora con una palette tipo Apple Maps, in chiaro e in scuro, con il rilievo ombreggiato (Mapzen Terrain Tiles) e
+le cime con la quota; toglie i POI generici di OpenStreetMap. Produce anche:
 - satellite.json: immagini Sentinel-2 cloudless di EOX (2016, CC BY 4.0, gratuite e senza chiave; 10 m, nitide
   fino allo zoom 15) con sopra strade, sentieri ed etichette (vista "ibrida");
 
@@ -23,30 +24,40 @@ EOX_ATTRIBUTION = (
     '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX IT Services GmbH '
     '(contiene dati Copernicus Sentinel 2016 modificati)'
 )
-# Palette simile a Google Maps. Chiave = gruppo di livelli (vedi group()).
+# Rilievo ombreggiato (11/2026): Terrain Tiles di Mapzen su AWS Open Data, gratuite e senza chiave (formato terrarium).
+# È quello che fa sembrare montagna la montagna: senza, la Sila era una macchia verde piatta.
+TERRAIN_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
+TERRAIN_ATTRIBUTION = '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md">Mapzen Terrain Tiles</a>'
+
+# Palette tipo Apple Maps (11/2026): terra calda e chiara, boschi verde salvia, acqua azzurra, strade bianche con un filo
+# di bordo, statali gialle. Di notte grafite con i boschi appena verdi. Chiave = gruppo di livelli (vedi group()).
 LIGHT = {
-    "land": "#f2f2ef", "park": "#cdebc5", "wood": "#d3ebcb", "grass": "#d9efd2", "residential": "#ebebe8",
-    "ice": "#ffffff", "sand": "#f4efdc", "pitch": "#d8edd1", "cemetery": "#d4e8cc", "hospital": "#fbe3e3",
-    "school": "#f0ebdf", "water": "#aadaff", "aeroway": "#e8eaed", "runway": "#ffffff",
-    "motorway": "#fde293", "motorway_casing": "#f2c45a",
-    "major": "#ffffff", "major_casing": "#d4d4d4",
-    "minor": "#ffffff", "minor_casing": "#e0e0e0",
-    "path": "#a8a39a", "rail": "#c4c7c5", "building": "#e8e8e8", "building_outline": "#d9d9d9",
-    "boundary": "#9aa0a6",
-    "text": "#5f6368", "text_place": "#3c4043", "text_city": "#202124", "text_water": "#3f6ea2",
-    "text_transit": "#1967d2", "halo": "#ffffff",
+    "land": "#f6f3ec", "park": "#d3e7c1", "wood": "#c8e0b2", "grass": "#dcecc9", "residential": "#efebe3",
+    "ice": "#ffffff", "sand": "#f2ead3", "pitch": "#d3e7c1", "cemetery": "#d7e6cb", "hospital": "#f6e1df",
+    "school": "#f0eadb", "water": "#a2d1f2", "aeroway": "#ebe8e1", "runway": "#ffffff",
+    "motorway": "#f8d37a", "motorway_casing": "#e2b250",
+    "major": "#ffffff", "major_casing": "#dcd6c9",
+    "minor": "#ffffff", "minor_casing": "#e6e1d6",
+    "path": "#b09e85", "rail": "#cfcac0", "building": "#e9e4da", "building_outline": "#dcd6ca",
+    "boundary": "#a49d93",
+    "text": "#6f6a61", "text_place": "#48443e", "text_city": "#1d1c1a", "text_water": "#3f78a8",
+    "text_transit": "#3a6fb0", "halo": "#ffffff",
+    "peak": "#7a5a3a",
+    "hill_shadow": "#5f6e57", "hill_highlight": "#ffffff", "hill_accent": "#7f8a73",
 }
 DARK = {
-    "land": "#212327", "park": "#1f3a2c", "wood": "#1c3328", "grass": "#203a2c", "residential": "#26282c",
-    "ice": "#2f3134", "sand": "#2e2b24", "pitch": "#1f3a2c", "cemetery": "#22332a", "hospital": "#3a2a2e",
-    "school": "#2c2a26", "water": "#163049", "aeroway": "#2a2c30", "runway": "#3a3d42",
-    "motorway": "#7a6a3a", "motorway_casing": "#4d4224",
-    "major": "#4a4d52", "major_casing": "#2c2e31",
-    "minor": "#3a3c40", "minor_casing": "#2a2c2f",
-    "path": "#6b6f75", "rail": "#4d5056", "building": "#2b2d31", "building_outline": "#33363a",
-    "boundary": "#6b7078",
-    "text": "#9aa0a6", "text_place": "#c4c7c5", "text_city": "#e8eaed", "text_water": "#7ba7d8",
-    "text_transit": "#8ab4f8", "halo": "#212327",
+    "land": "#1c1e1d", "park": "#1e2e22", "wood": "#1b2c1f", "grass": "#203124", "residential": "#232524",
+    "ice": "#2e3133", "sand": "#2c2a23", "pitch": "#1e2e22", "cemetery": "#212e24", "hospital": "#33282a",
+    "school": "#2a2824", "water": "#172a3d", "aeroway": "#262826", "runway": "#3a3c3b",
+    "motorway": "#8a7134", "motorway_casing": "#4d4022",
+    "major": "#46494a", "major_casing": "#2a2b2b",
+    "minor": "#393c3c", "minor_casing": "#282a29",
+    "path": "#80776a", "rail": "#44474a", "building": "#2a2c2b", "building_outline": "#323534",
+    "boundary": "#6f706d",
+    "text": "#a19e97", "text_place": "#c9c6bf", "text_city": "#ecebe7", "text_water": "#7fa9d1",
+    "text_transit": "#8cb0e0", "halo": "#1c1e1d",
+    "peak": "#cdb08c",
+    "hill_shadow": "#000000", "hill_highlight": "#3b403c", "hill_accent": "#0d0f0e",
 }
 
 
@@ -88,16 +99,57 @@ def text_group(layer):
     return "text"
 
 
+def hillshade(pal, dark):
+    """Il rilievo ombreggiato sopra boschi e prati, sotto acqua e strade: luce da nord-ovest come sulle carte."""
+    return {
+        "id": "hillshade", "type": "hillshade", "source": "terrain",
+        "paint": {
+            "hillshade-shadow-color": pal["hill_shadow"],
+            "hillshade-highlight-color": pal["hill_highlight"],
+            "hillshade-accent-color": pal["hill_accent"],
+            "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 6, 0.45, 12, 0.3, 15, 0.2] if not dark else 0.5,
+        },
+    }
+
+
+def peaks(pal):
+    """Le cime (OpenMapTiles "mountain_peak") con nome e quota, in corsivo marrone come sulle carte escursionistiche."""
+    name = ["coalesce", ["get", "name:it"], ["get", "name"]]
+    return {
+        "id": "mountain_peak", "type": "symbol", "source": "openmaptiles", "source-layer": "mountain_peak",
+        "minzoom": 10, "filter": ["==", ["geometry-type"], "Point"],
+        "layout": {
+            "text-field": ["case", ["has", "ele"], ["concat", name, "\n", ["to-string", ["get", "ele"]], " m"], name],
+            "text-font": ["Noto Sans Italic"], "text-size": 11, "text-line-height": 1.15,
+            "text-anchor": "top", "text-max-width": 8,
+        },
+        "paint": {"text-color": pal["peak"], "text-halo-color": pal["halo"], "text-halo-width": 1.4},
+    }
+
+
 def recolor(style, pal, dark):
     s = copy.deepcopy(style)
     s["name"] = "GeoSentinel " + ("scura" if dark else "chiara")
+    # rilievo vero al posto di quello di Natural Earth (solo zoom bassi)
+    s["sources"].pop("ne2_shaded", None)
+    s["sources"]["terrain"] = {
+        "type": "raster-dem", "tiles": [TERRAIN_TILES], "encoding": "terrarium",
+        "tileSize": 256, "maxzoom": 15, "attribution": TERRAIN_ATTRIBUTION,
+    }
     layers = []
     for layer in s["layers"]:
         paint = layer.setdefault("paint", {})
         if layer["type"] == "raster":
-            if dark: continue  # rilievo di Natural Earth: chiaro, stonerebbe di notte
-            layers.append(layer)
             continue
+        # i punti d'interesse generici di OpenStreetMap: sulla mappa ci sono i POI del parco, gli altri erano rumore
+        if layer.get("source-layer") == "poi":
+            continue
+        # il rilievo prima dei fiumi: ombreggia terra e boschi, non l'acqua né le strade
+        if layer["id"] == "waterway_tunnel":
+            layers.append(hillshade(pal, dark))
+        # le cime prima delle località: a parità di posto vince il nome del paese
+        if layer["id"] == "label_other":
+            layers.append(peaks(pal))
         if layer["type"] == "symbol":
             if "text-color" in paint or layer.get("layout", {}).get("text-field"):
                 paint["text-color"] = pal[text_group(layer)]

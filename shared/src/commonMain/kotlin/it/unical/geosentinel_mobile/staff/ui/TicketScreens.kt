@@ -114,16 +114,16 @@ import it.unical.geosentinel_mobile.api.model.TicketResponse
 import it.unical.geosentinel_mobile.api.model.UpdateTicketRequest
 import it.unical.geosentinel_mobile.api.model.UpdateTicketStatusRequest
 import it.unical.geosentinel_mobile.core.ui.BackButton
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import it.unical.geosentinel_mobile.core.ui.GroupDivider
 import it.unical.geosentinel_mobile.core.ui.groupedItem
 import it.unical.geosentinel_mobile.core.ui.PageHeader
 import it.unical.geosentinel_mobile.core.ui.pageBottomInset
-import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
+import it.unical.geosentinel_mobile.core.ui.SegmentedControl
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.hazard.ui.Choices
 import it.unical.geosentinel_mobile.hazard.ui.Field
@@ -155,21 +155,11 @@ fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Un
 
 @Composable
 private fun ManagementTabs(tickets: Boolean, onSelect: (Boolean) -> Unit) {
-    val labels = listOf(Res.string.staff_tab_hazards, Res.string.staff_tab_tickets)
-    SingleChoiceSegmentedButtonRow(
-        Modifier.fillMaxWidth(),
-    ) {
-        labels.forEachIndexed { index, label ->
-            SegmentedButton(
-                selected = tickets == (index == 1),
-                onClick = { onSelect(index == 1) },
-                shape = SegmentedButtonDefaults.itemShape(index, labels.size),
-                modifier = Modifier.heightIn(min = 48.dp),
-            ) {
-                Text(stringResource(label))
-            }
-        }
-    }
+    SegmentedControl(
+        options = listOf(stringResource(Res.string.staff_tab_hazards), stringResource(Res.string.staff_tab_tickets)),
+        selected = if (tickets) 1 else 0,
+        onSelect = { onSelect(it == 1) },
+    )
 }
 
 // ---------------------------------------------------------------------------------------------------------------------
@@ -324,7 +314,9 @@ fun TicketDetailScreen(ticketId: String, onBack: () -> Unit, onOpenTrail: (Strin
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight))
+            // posto per il tondo Indietro sotto la barra di stato (niente più paesaggio in testata, redesign 11/2026)
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
+            Spacer(Modifier.height(56.dp))
             when {
                 ticket == null && loadError != null -> Message(text = loadError.resolve(), isError = true) {
                     PrimaryPillButton(stringResource(Res.string.trail_retry), onClick = viewModel::reload)

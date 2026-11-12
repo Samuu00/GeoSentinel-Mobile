@@ -82,7 +82,6 @@ import it.unical.geosentinel_mobile.core.ui.groupedItem
 import it.unical.geosentinel_mobile.core.ui.HeaderLink
 import it.unical.geosentinel_mobile.core.ui.PageHeader
 import it.unical.geosentinel_mobile.core.ui.pageBottomInset
-import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed

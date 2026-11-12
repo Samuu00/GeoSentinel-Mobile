@@ -70,7 +70,6 @@ import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.PageHeader
 import it.unical.geosentinel_mobile.core.ui.pageBottomInset
-import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.hazard.ui.label
@@ -123,6 +122,7 @@ fun HazardQueueScreen(
                     intro = stringResource(if (pending) Res.string.staff_pending_intro else Res.string.staff_queue_intro),
                     // nella scheda Gestione: Segnalazioni | Ticket sotto il titolo
                     below = tabs,
+                    hasBack = onBack != null,
                 )
             }
             if (actionError != null) {

@@ -100,7 +100,6 @@ import geosentinel_mobile.shared.generated.resources.location_rationale_allow
 import geosentinel_mobile.shared.generated.resources.location_rationale_body
 import geosentinel_mobile.shared.generated.resources.location_rationale_title
 import geosentinel_mobile.shared.generated.resources.map_my_location
-import geosentinel_mobile.shared.generated.resources.near_me_button
 import geosentinel_mobile.shared.generated.resources.near_me_hazards
 import geosentinel_mobile.shared.generated.resources.near_me_title
 import geosentinel_mobile.shared.generated.resources.near_me_trails
@@ -110,8 +109,6 @@ import geosentinel_mobile.shared.generated.resources.map_type_button
 import geosentinel_mobile.shared.generated.resources.map_type_satellite
 import geosentinel_mobile.shared.generated.resources.map_type_streets
 import geosentinel_mobile.shared.generated.resources.map_type_title
-import geosentinel_mobile.shared.generated.resources.map_zoom_in
-import geosentinel_mobile.shared.generated.resources.map_zoom_out
 import geosentinel_mobile.shared.generated.resources.poi_close
 import geosentinel_mobile.shared.generated.resources.poi_open_trail
 import geosentinel_mobile.shared.generated.resources.trail_length_km
@@ -129,6 +126,10 @@ import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
+import it.unical.geosentinel_mobile.core.ui.SegmentedControl
+import it.unical.geosentinel_mobile.core.ui.TonalPillButton
+import it.unical.geosentinel_mobile.core.ui.islandShadow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
 import it.unical.geosentinel_mobile.core.push.PushEvent
 import it.unical.geosentinel_mobile.core.push.PushManager
@@ -168,6 +169,9 @@ import org.maplibre.compose.camera.CameraMoveReason
 import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.camera.CameraUpdate
 import org.maplibre.compose.layers.LocationIndicatorLayer
+import org.maplibre.compose.expressions.dsl.const
+import org.maplibre.compose.expressions.dsl.image
+import androidx.compose.ui.unit.DpSize
 import org.maplibre.compose.location.LocationPermission
 import org.maplibre.compose.location.LocationState
 import org.maplibre.compose.location.rememberLocationState
@@ -334,16 +338,15 @@ fun MapScreen(
         TrailLines(ui.trails, casing = casing, unknownColor = colors.onSurfaceVariant, onTrailClick = onOpenTrail)
         PoiMarkers(
             ui.pois,
-            background = colors.surfaceContainerLowest,
-            outline = colors.outline,
-            symbol = colors.primary,
+            label = mapLabelInk(mapIsDark),
+            halo = mapLabelHalo(mapIsDark),
             onPoiClick = {
                 selectedPoiId = it
                 hazardViewModel.clearSelection()
             },
         )
         if (onOpenRefuge != null) {
-            RefugeMarkers(refuges, fill = colors.primary, outline = colors.surfaceContainerLowest, symbol = colors.onPrimary, onRefugeClick = onOpenRefuge)
+            RefugeMarkers(refuges, label = mapLabelInk(mapIsDark), halo = mapLabelHalo(mapIsDark), onRefugeClick = onOpenRefuge)
         }
         // sopra sentieri, POI e rifugi: un pericolo non deve restare nascosto
         HazardMarkers(hazardUi.shown, halo = casing, otherColor = colors.onSurfaceVariant) { id ->
@@ -355,7 +358,16 @@ fun MapScreen(
             SosAlertMarkers(alerts, light = colors.surfaceContainerLowest, onAlertClick = onOpenAlert)
         }
         // il pallino sopra tutto
-        LocationIndicatorLayer(id = "posizione", locationState = location)
+        // come su iPhone: pallino blu con l'anello bianco, cerchio della precisione azzurro tenue, cono della direzione
+        LocationIndicatorLayer(
+            id = "posizione",
+            locationState = location,
+            topImage = image(rememberLocationDot(), DpSize(24.dp, 24.dp)),
+            shadowImage = null,
+            bearingAccuracyColor = const(LocationBlue.copy(alpha = 0.25f)),
+            accuracyRadiusColor = LocationBlue.copy(alpha = 0.12f),
+            accuracyRadiusBorderColor = LocationBlue.copy(alpha = 0.35f),
+        )
     }
     val settings = rememberSystemSettingsLauncher()
     val scope = rememberCoroutineScope()
@@ -470,7 +482,8 @@ fun MapScreen(
                         zoom = { mapState.cameraPosition.zoom },
                         modifier = Modifier.align(Alignment.TopStart),
                     )
-                    DisappearingCompassButton(modifier = Modifier.align(Alignment.TopEnd))
+                    // a sinistra sotto la scala: in alto a destra ora ci sono i comandi della vista
+                    DisappearingCompassButton(modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp))
                     // In basso a sinistra, lontano dall'SOS, e nei colori del tema: leggibile su ogni mappa
                     AttributionButton(mapState, Modifier.align(Alignment.BottomStart))
                 }
@@ -512,42 +525,49 @@ fun MapScreen(
                 MapPill(status, onClick = onRetry)
             }
         }
-        // Controlli grandi a destra, a metà dello spazio libero: sopra l'SOS e la barra in basso, raggiungibili col pollice.
-        // Tre gruppi: la vista (tipo, zoom), la posizione (dove sono, vicino a te), le azioni (segnala, nuovo punto)
+        // Redesign 11/2026 (seconda passata), sullo schema di Apple Maps:
+        // - in alto a destra i comandi della vista in capsule raggruppate: tipo di mappa e posizione, poi lo zoom
+        //   (resta: con i guanti il pizzico non sempre riesce);
+        // - in basso a destra, sopra l'SOS, le azioni (segnala, nuovo punto): nella zona del pollice;
+        // - in basso a sinistra la barra "Vicino a te", larga come la ricerca di Mappe.
+        // In orizzontale (o con il testo grande) i gruppi scorrono invece di finire sotto l'SOS
+        // Terza passata (11/2026), come Apple Maps: un solo gruppo di comandi della vista in alto a destra (tipo di mappa,
+        // posizione e, per il gestore, il punto nuovo). Niente più +/−: si zooma con il pizzico o il doppio tocco, e la
+        // mappa resta libera. In orizzontale (o con il testo grande) il gruppo scorre invece di finire sotto l'SOS
         Column(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
+                .align(Alignment.TopEnd)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Top))
-                .padding(end = 16.dp, top = 56.dp, bottom = bottomBar + SosClearance)
-                // in orizzontale (o con il testo grande) i controlli non stanno tutti: scorrono invece di finire
-                // sotto l'SOS. Il margine laterale lascia spazio all'ombra
+                .padding(end = 16.dp, top = 8.dp, bottom = bottomBar + SosClearance)
                 .verticalScroll(rememberScrollState())
-                .padding(start = 8.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
+                .padding(start = 8.dp, bottom = 8.dp),
         ) {
-            MapButton(Res.string.map_type_button, Glyph.Layers) { choosingType = true }
-            MapZoomButtons(
-                onZoomIn = { scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom + 1)) } },
-                onZoomOut = { scope.launch { mapState.animateCamera(CameraUpdate(zoom = mapState.cameraPosition.zoom - 1)) } },
+            MapButtonGroup(
+                listOfNotNull(
+                    MapAction(Res.string.map_type_button, Glyph.Layers) { choosingType = true },
+                    MapAction(Res.string.map_my_location, Glyph.Locate) { withLocation(LocationGoal.Center) { centerOnFix = true } },
+                    // solo per il gestore del parco (M8.1): il form parte dal punto che si sta guardando
+                    onCreatePoi?.let { create ->
+                        MapAction(Res.string.poi_create_title, Glyph.AddPoint) {
+                            create(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
+                        }
+                    },
+                ),
             )
-            Spacer(Modifier.size(6.dp))
-            MapButton(Res.string.map_my_location, Glyph.Locate) {
-                withLocation(LocationGoal.Center) { centerOnFix = true }
-            }
-            // sentieri e pericoli intorno a te, in un foglio con due schede (prima due capsule in alto, ingombranti)
-            MapButton(Res.string.near_me_button, Glyph.NearMe) { withLocation(LocationGoal.NearMe, ::openNearMe) }
-            // solo da loggati (null per l'ospite): il form parte dal punto che si sta guardando
-            if (onReportHazard != null) {
-                Spacer(Modifier.size(6.dp))
-                MapButton(Res.string.report_open, Glyph.Hazard, emphasized = true) {
-                    onReportHazard(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
-                }
-            }
-            if (onCreatePoi != null) {
-                MapButton(Res.string.poi_create_title, Glyph.AddPoint) {
-                    onCreatePoi(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
-                }
-            }
+        }
+        // sentieri e pericoli intorno a te: la barra in basso a sinistra apre il foglio con due schede; dentro, a destra,
+        // "Segnala un pericolo" (solo da loggati). Nascosta quando c'è la card di un punto toccato, che sta nello stesso posto
+        if (selectedPoiId == null && hazardUi.selected == null) {
+            NearMeBar(
+                onClick = { withLocation(LocationGoal.NearMe, ::openNearMe) },
+                onReport = onReportHazard?.let { report ->
+                    { report(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom)) }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
+                    .padding(start = 16.dp, end = 136.dp, bottom = bottomBar + 16.dp),
+            )
         }
         // POI toccato: nome e tipo in una card in basso a sinistra (l'SOS sta a destra)
         ui.pois.firstOrNull { it.id == selectedPoiId }?.let { poi ->
@@ -657,6 +677,59 @@ internal fun LocationState.recentFix(): GeoPoint? {
     return if (age <= MaxFixAge) fix.position.toGeoPoint() else null
 }
 
+// "Vicino a te" come la barra di ricerca di Apple Maps: una capsula larga in basso con il simbolo del radar e una riga
+// che dice cosa trova. Isola come gli altri controlli
+// [onReport]: "Segnala un pericolo" in fondo alla barra, un tondo verde pieno (l'unica azione piena della mappa, oltre
+// all'SOS); null per l'ospite. Due bersagli separati: la barra apre il foglio, il tondo il form.
+@Composable
+private fun NearMeBar(onClick: () -> Unit, onReport: (() -> Unit)?, modifier: Modifier) {
+    val colors = MaterialTheme.colorScheme
+    Surface(
+        shape = CircleShape,
+        color = mapControlColor(),
+        border = mapControlBorder(),
+        modifier = modifier.fillMaxWidth().widthIn(max = 420.dp).islandShadow(CircleShape, MapControlElevation),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(
+                Modifier
+                    .weight(1f)
+                    .heightIn(min = 60.dp)
+                    .clip(CircleShape)
+                    .clickable(role = Role.Button, onClick = onClick)
+                    .padding(start = 10.dp, end = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.size(40.dp).background(colors.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
+                    GlyphIcon(Glyph.NearMe, colors.onPrimaryContainer)
+                }
+                Spacer(Modifier.width(12.dp))
+                // una riga sola, come la ricerca di Apple Maps
+                Text(
+                    stringResource(Res.string.near_me_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.padding(vertical = 8.dp),
+                )
+            }
+            if (onReport != null) {
+                val label = stringResource(Res.string.report_open)
+                Box(
+                    Modifier
+                        .padding(end = 8.dp)
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .background(colors.primary)
+                        .clickable(role = Role.Button, onClick = onReport)
+                        .semantics { contentDescription = label },
+                    contentAlignment = Alignment.Center,
+                ) { GlyphIcon(Glyph.Hazard, colors.onPrimary) }
+            }
+        }
+    }
+}
+
 // Capsula sopra la mappa, nei colori delle card: un'azione (emphasized, nel verde del tema) o un avviso
 @Composable
 private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> Unit)? = null) {
@@ -681,28 +754,40 @@ private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> U
 @Composable
 private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onClose: () -> Unit, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
+    // la scheda di un luogo come in Apple Maps (11/2026): bollino della categoria (lo stesso della mappa), nome grande,
+    // tipo, la X grigia in alto a destra e l'azione a capsula sotto. Isola con angoli da 28 e ombra tinta
     Surface(
-        shape = MaterialTheme.shapes.medium,
+        shape = MaterialTheme.shapes.large,
         color = colors.surfaceContainerLowest,
-        border = BorderStroke(1.dp, colors.outlineVariant),
-        shadowElevation = 3.dp,
-        modifier = modifier.widthIn(max = 420.dp).semantics { liveRegion = LiveRegionMode.Polite },
+        modifier = modifier.widthIn(max = 420.dp).islandShadow(MaterialTheme.shapes.large).semantics { liveRegion = LiveRegionMode.Polite },
     ) {
-        Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            // decorativa: il tipo è scritto accanto
-            Icon(poi.type.icon(), contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
-            Spacer(Modifier.width(12.dp))
-            Column(Modifier.weight(1f)) {
-                Text(poi.name, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(stringResource(poi.type.label()), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-                if (onOpenTrail != null) {
-                    TextButton(onClick = onOpenTrail, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
-                        Text(stringResource(Res.string.poi_open_trail), fontWeight = FontWeight.SemiBold)
+        Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 16.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // decorativa: il tipo è scritto accanto
+                Box(Modifier.size(40.dp).background(poi.type.markerColor(), CircleShape), contentAlignment = Alignment.Center) {
+                    Icon(poi.type.icon(), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
+                }
+                Spacer(Modifier.width(12.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(poi.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                    Text(stringResource(poi.type.label()), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
+                }
+                // la X di iOS: tondo grigio da 30 dentro un bersaglio da 48
+                Box(
+                    Modifier
+                        .size(48.dp)
+                        .clip(CircleShape)
+                        .clickable(role = Role.Button, onClick = onClose),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(30.dp).background(colors.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.poi_close), tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     }
                 }
             }
-            IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.poi_close))
+            if (onOpenTrail != null) {
+                Spacer(Modifier.size(12.dp))
+                TonalPillButton(stringResource(Res.string.poi_open_trail), onClick = onOpenTrail, modifier = Modifier.padding(end = 12.dp))
             }
         }
     }
@@ -721,7 +806,11 @@ private fun NearMeSheet(
     hazards: @Composable () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    ModalBottomSheet(onDismissRequest = onDismiss, containerColor = colors.surfaceContainerLowest) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp),
+        containerColor = colors.surfaceContainerLowest,
+    ) {
         Column(Modifier.padding(bottom = 24.dp)) {
             Text(
                 stringResource(Res.string.near_me_title),
@@ -729,21 +818,13 @@ private fun NearMeSheet(
                 modifier = Modifier.padding(horizontal = 20.dp).semantics { heading() },
             )
             if (showHazards) {
-                SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 12.dp)) {
-                    NearTab.entries.forEachIndexed { index, entry ->
-                        SegmentedButton(
-                            selected = tab == entry,
-                            onClick = { onTabChange(entry) },
-                            shape = SegmentedButtonDefaults.itemShape(index, NearTab.entries.size),
-                            colors = SegmentedButtonDefaults.colors(
-                                activeContainerColor = colors.primaryContainer,
-                                activeContentColor = colors.onPrimaryContainer,
-                            ),
-                        ) {
-                            Text(stringResource(entry.label))
-                        }
-                    }
-                }
+                // lo stesso selettore a capsula della scheda Rifugi e di Gestione (redesign 11/2026)
+                SegmentedControl(
+                    options = NearTab.entries.map { stringResource(it.label) },
+                    selected = NearTab.entries.indexOf(tab),
+                    onSelect = { onTabChange(NearTab.entries[it]) },
+                    modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                )
             } else {
                 Spacer(Modifier.size(12.dp))
             }

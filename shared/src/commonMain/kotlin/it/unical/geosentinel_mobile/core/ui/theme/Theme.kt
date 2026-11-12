@@ -19,9 +19,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import geosentinel_mobile.shared.generated.resources.Res
-import geosentinel_mobile.shared.generated.resources.atkinson_next_400
-import geosentinel_mobile.shared.generated.resources.atkinson_next_500
-import geosentinel_mobile.shared.generated.resources.atkinson_next_600
 import geosentinel_mobile.shared.generated.resources.barlow_semicondensed_bold
 import geosentinel_mobile.shared.generated.resources.barlow_semicondensed_medium
 import geosentinel_mobile.shared.generated.resources.barlow_semicondensed_semibold
@@ -103,11 +100,12 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerHighest = TrackDark,
 )
 
-// Due voci, come su una carta dei sentieri:
-// - titoli in Barlow Semi Condensed, il semi-condensato dei cartelli e dei segnavia;
-// - tutto il resto in Atkinson Hyperlegible Next, disegnato per leggersi bene in condizioni difficili (sole, fretta).
-// Stessi file su Android e iOS (composeResources/font, licenze OFL in composeResources/files).
-// Tutti i ruoli sono definiti: uno lasciato al default ricadrebbe su Roboto/SF con un'altra scala.
+// Due voci (redesign 11/2026, seconda passata):
+// - titoli grandi e numeri in evidenza in Barlow Semi Condensed, il semi-condensato dei cartelli e dei segnavia: la
+//   voce della montagna (composeResources/font, licenza OFL in composeResources/files);
+// - tutto il resto nel carattere di sistema (SF Pro su iPhone, Roboto su Android): l'app si legge come le app del
+//   telefono, e il testo segue le impostazioni di sistema. Prima era Atkinson Hyperlegible ovunque.
+// Tutti i ruoli sono definiti, con la scala di iOS (17 il testo, 34 il titolo grande).
 @Composable
 private fun appTypography(): Typography {
     val sign = FontFamily(
@@ -115,16 +113,13 @@ private fun appTypography(): Typography {
         Font(Res.font.barlow_semicondensed_semibold, FontWeight.SemiBold),
         Font(Res.font.barlow_semicondensed_bold, FontWeight.Bold),
     )
-    val text = FontFamily(
-        Font(Res.font.atkinson_next_400, FontWeight.Normal),
-        Font(Res.font.atkinson_next_500, FontWeight.Medium),
-        Font(Res.font.atkinson_next_600, FontWeight.SemiBold),
-    )
+    val text = FontFamily.Default
     return Typography(
         displaySmall = TextStyle(fontFamily = sign, fontSize = 40.sp, lineHeight = 44.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.5).sp),
         headlineLarge = TextStyle(fontFamily = sign, fontSize = 34.sp, lineHeight = 38.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.3).sp),
-        headlineMedium = TextStyle(fontFamily = sign, fontSize = 30.sp, lineHeight = 34.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
-        headlineSmall = TextStyle(fontFamily = sign, fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.SemiBold),
+        // scala come quella di iOS (redesign, 11/2026): titolo grande 34, titolo di pagina 28, numeri in evidenza 22
+        headlineMedium = TextStyle(fontFamily = sign, fontSize = 28.sp, lineHeight = 32.sp, fontWeight = FontWeight.SemiBold, letterSpacing = (-0.2).sp),
+        headlineSmall = TextStyle(fontFamily = sign, fontSize = 22.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
         titleLarge = TextStyle(fontFamily = text, fontSize = 20.sp, lineHeight = 26.sp, fontWeight = FontWeight.SemiBold),
         titleMedium = TextStyle(fontFamily = text, fontSize = 17.sp, lineHeight = 22.sp, fontWeight = FontWeight.SemiBold),
         titleSmall = TextStyle(fontFamily = text, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),

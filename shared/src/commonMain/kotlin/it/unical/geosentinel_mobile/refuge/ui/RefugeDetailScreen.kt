@@ -1,26 +1,18 @@
 package it.unical.geosentinel_mobile.refuge.ui
 
-import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.WindowInsetsSides
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
@@ -34,43 +26,43 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.disabled
 import androidx.compose.ui.semantics.heading
-import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.LifecycleResumeEffect
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil3.compose.AsyncImage
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.booking_open
+import geosentinel_mobile.shared.generated.resources.refuge_about_title
 import geosentinel_mobile.shared.generated.resources.refuge_altitude
 import geosentinel_mobile.shared.generated.resources.refuge_amenities_title
 import geosentinel_mobile.shared.generated.resources.refuge_amenity_dogs_allowed
@@ -83,17 +75,22 @@ import geosentinel_mobile.shared.generated.resources.refuge_amenity_sheets_provi
 import geosentinel_mobile.shared.generated.resources.refuge_amenity_shower
 import geosentinel_mobile.shared.generated.resources.refuge_beds
 import geosentinel_mobile.shared.generated.resources.refuge_call
+import geosentinel_mobile.shared.generated.resources.refuge_day_book
 import geosentinel_mobile.shared.generated.resources.refuge_directions
+import geosentinel_mobile.shared.generated.resources.refuge_few_beds
 import geosentinel_mobile.shared.generated.resources.refuge_free_beds
 import geosentinel_mobile.shared.generated.resources.refuge_full
-import geosentinel_mobile.shared.generated.resources.refuge_nights_hint
+import geosentinel_mobile.shared.generated.resources.refuge_full_tonight
+import geosentinel_mobile.shared.generated.resources.refuge_manage_title
+import geosentinel_mobile.shared.generated.resources.refuge_next_free
 import geosentinel_mobile.shared.generated.resources.refuge_nights_title
 import geosentinel_mobile.shared.generated.resources.refuge_photo_count
+import geosentinel_mobile.shared.generated.resources.refuge_read_less
+import geosentinel_mobile.shared.generated.resources.refuge_read_more
 import geosentinel_mobile.shared.generated.resources.refuge_tonight
-import geosentinel_mobile.shared.generated.resources.refuge_tonight_free
-import geosentinel_mobile.shared.generated.resources.refuge_tonight_full
+import geosentinel_mobile.shared.generated.resources.refuge_tonight_lower
 import geosentinel_mobile.shared.generated.resources.refuge_trails_title
-import geosentinel_mobile.shared.generated.resources.trail_retry
+import geosentinel_mobile.shared.generated.resources.staff_capacity_edit
 import geosentinel_mobile.shared.generated.resources.weekday_1
 import geosentinel_mobile.shared.generated.resources.weekday_2
 import geosentinel_mobile.shared.generated.resources.weekday_3
@@ -103,17 +100,29 @@ import geosentinel_mobile.shared.generated.resources.weekday_6
 import geosentinel_mobile.shared.generated.resources.weekday_7
 import it.unical.geosentinel_mobile.api.model.MediaResponse
 import it.unical.geosentinel_mobile.api.model.RefugeResponse
-import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.BackButton
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
-import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
+import it.unical.geosentinel_mobile.core.ui.CompactBar
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.runtime.derivedStateOf
+import it.unical.geosentinel_mobile.core.ui.ErrorState
+import it.unical.geosentinel_mobile.core.ui.GroupCard
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.GroupRow
+import it.unical.geosentinel_mobile.core.ui.LoadingMore
+import it.unical.geosentinel_mobile.core.ui.MetaLine
+import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
-import it.unical.geosentinel_mobile.core.ui.UiMessage
+import it.unical.geosentinel_mobile.core.ui.SectionHeader
+import it.unical.geosentinel_mobile.core.ui.StickyActionBar
+import it.unical.geosentinel_mobile.core.ui.TonalPillButton
 import it.unical.geosentinel_mobile.core.ui.directionsUri
 import it.unical.geosentinel_mobile.core.ui.rememberDialer
 import it.unical.geosentinel_mobile.core.ui.resolve
+import it.unical.geosentinel_mobile.core.ui.skeleton
+import it.unical.geosentinel_mobile.core.ui.theme.warningTextColor
 import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.media.ui.PhotoCredit
 import it.unical.geosentinel_mobile.media.ui.PhotoViewer
@@ -140,23 +149,29 @@ import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
 
-private val HeroHeight = 300.dp
+private val HeroHeight = 320.dp
+// Il pannello del contenuto sale sulla foto con gli angoli alti arrotondati
+private val PanelLip = 28.dp
 // Zoom della mappa in testata: il rifugio con paesi e strade intorno
 private const val HeroZoom = 12.5
+// Oltre questa scala del testo i servizi vanno in una colonna sola
+private const val LargeTextScale = 1.3f
 
 /**
- * Dettaglio di un rifugio (M5.1, rinnovato il 10/10): in testata le foto del rifugio (la mappa se non ce ne sono), poi
- * nome con quota e posti, la stagione, la descrizione, la disponibilità delle prossime 14 notti come striscia di giorni,
- * i servizi, i sentieri che passano vicino e i contatti (chiamata e indicazioni). "Prenota" (M5.2) sta in fondo, fisso.
- * [manage] sono le azioni del gestore (M8.3), sotto il titolo; App le passa solo a chi può gestire il rifugio.
+ * Pagina del rifugio (M5.1, rifatta con il redesign 11/2026, docs/UI_REDESIGN_PLAN.md §3.2): foto (o mappa) da bordo a
+ * bordo, poi un pannello con nome, quota · posti · stagione, Chiama e Indicazioni, subito la disponibilità delle
+ * prossime notti (ogni giorno apre "Prenota" da quella data), la descrizione, i servizi, i sentieri vicini e, per chi
+ * gestisce il rifugio, la gestione. In basso, fissa, com'è stanotte e "Prenota", che apre il foglio [BookingSheet].
  */
 @Composable
 fun RefugeDetailScreen(
     refugeId: String,
     onBack: () -> Unit,
-    onBook: (refugeId: String, name: String, capacity: Int) -> Unit,
     onOpenTrail: (String) -> Unit,
-    manage: @Composable (RefugeResponse) -> Unit = {},
+    onOpenBookings: () -> Unit,
+    // posti letto (M8.3): il gestore di questo rifugio o un ADMIN (il server risponde comunque 403 agli altri)
+    canManage: (RefugeResponse) -> Boolean = { false },
+    onEditCapacity: (RefugeResponse) -> Unit = {},
 ) {
     val viewModel = koinViewModel<RefugeDetailViewModel> { parametersOf(refugeId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -165,92 +180,145 @@ fun RefugeDetailScreen(
         viewModel.refresh()
         onPauseOrDispose { }
     }
-    val bottomInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Bottom).asPaddingValues().calculateBottomPadding()
-    val loaded = state.refuge as? Section.Loaded
+    val loaded = (state.refuge as? Section.Loaded)?.value
+    // il foglio "Prenota": null chiuso, "" aperto senza un giorno, altrimenti la data d'arrivo (ISO)
+    var sheetArrival by rememberSaveable { mutableStateOf<String?>(null) }
 
+    val listState = rememberLazyListState()
+    // la foto (primo item) è scorsa via: in alto compare la barra con il nome, come nelle pagine di iOS
+    val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
+            state = listState,
             horizontalAlignment = Alignment.CenterHorizontally,
-            // spazio per il pulsante "Prenota" fisso in basso
-            contentPadding = PaddingValues(bottom = bottomInset + if (loaded != null) 104.dp else 24.dp),
+            // spazio per la barra fissa in basso
+            contentPadding = PaddingValues(bottom = if (loaded != null) 112.dp else 24.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
             when (val refuge = state.refuge) {
-                Section.Loading, Section.Hidden -> {
-                    item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight)) }
-                    item(key = "loading") { CenteredProgress() }
-                }
-                is Section.Failed -> {
-                    item(key = "header") { ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight)) }
-                    item(key = "error") { RetryMessage(refuge.message, onRetry = viewModel::retry) }
+                Section.Loading, Section.Hidden -> item(key = "skeleton") { DetailSkeleton() }
+                is Section.Failed -> item(key = "error") {
+                    Spacer(Modifier.height(HeroHeight / 2))
+                    ErrorState(refuge.message.resolve(), onRetry = viewModel::retry)
                 }
                 is Section.Loaded -> {
                     val value = refuge.value
-                    item(key = "hero") { if (state.photos.isEmpty()) RefugeHero(value) else RefugeGallery(state.photos) }
-                    item(key = "title") { Title(value, state.nights) }
-                    // le azioni del luogo subito sotto il titolo, a metà schermo (prima in fondo alla pagina)
+                    item(key = "hero") { Hero(value, state.photos) }
+                    item(key = "title") { Title(value) }
                     item(key = "contacts") { Contacts(value) }
-                    item(key = "manage") {
-                        Box(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) { manage(value) }
-                    }
-                    value.description?.let { description ->
-                        item(key = "description") { Paragraph(description) }
-                    }
-                    item(key = "nights-title") { SectionTitle(Res.string.refuge_nights_title, hint = Res.string.refuge_nights_hint) }
+                    item(key = "nights-title") { SectionHeader(stringResource(Res.string.refuge_nights_title)) }
                     item(key = "nights") {
                         when (val nights = state.nights) {
-                            Section.Loading, Section.Hidden -> CenteredProgress(small = true)
-                            is Section.Failed -> RetryMessage(nights.message, onRetry = viewModel::retry)
-                            is Section.Loaded -> NightStrip(nights.value)
+                            Section.Loading, Section.Hidden -> LoadingMore()
+                            is Section.Failed -> ErrorState(nights.message.resolve(), onRetry = viewModel::retry, compact = true)
+                            is Section.Loaded -> NightStrip(nights.value) { date -> sheetArrival = date.toString() }
                         }
+                    }
+                    value.description?.takeIf { it.isNotBlank() }?.let { description ->
+                        item(key = "about-title") { SectionHeader(stringResource(Res.string.refuge_about_title)) }
+                        item(key = "about") { Description(description) }
                     }
                     val amenities = value.amenities.mapNotNull { it.label() }
                     if (amenities.isNotEmpty()) {
-                        item(key = "amenities-title") { SectionTitle(Res.string.refuge_amenities_title) }
+                        item(key = "amenities-title") { SectionHeader(stringResource(Res.string.refuge_amenities_title)) }
                         item(key = "amenities") { Amenities(amenities) }
                     }
                     if (state.nearbyTrails.isNotEmpty()) {
-                        item(key = "trails-title") { SectionTitle(Res.string.refuge_trails_title) }
-                        item(key = "trails") { NearbyTrails(state.nearbyTrails, onOpenTrail) }
+                        item(key = "trails-title") { SectionHeader(stringResource(Res.string.refuge_trails_title)) }
+                        item(key = "trails") {
+                            GroupCard(Modifier.widthIn(max = PageMaxWidth).padding(horizontal = 20.dp)) {
+                                state.nearbyTrails.forEachIndexed { index, trail ->
+                                    if (index > 0) GroupDivider()
+                                    TrailRow(trail, onClick = { onOpenTrail(trail.id) })
+                                }
+                            }
+                        }
+                    }
+                    // la gestione in fondo: è fuori dal percorso dell'escursionista
+                    if (canManage(value)) {
+                        item(key = "manage-title") { SectionHeader(stringResource(Res.string.refuge_manage_title)) }
+                        item(key = "manage") {
+                            GroupCard(Modifier.widthIn(max = PageMaxWidth).padding(horizontal = 20.dp)) {
+                                GroupRow(
+                                    title = stringResource(Res.string.staff_capacity_edit),
+                                    value = pluralStringResource(Res.plurals.refuge_beds, value.capacity, value.capacity),
+                                    onClick = { onEditCapacity(value) },
+                                )
+                            }
+                        }
                     }
                 }
             }
         }
-        BackButton(onBack)
-        // l'azione principale in fondo, nella zona del pollice (§2), sopra uno sfondo pieno
+        if (collapsed && loaded != null) CompactBar(loaded.name, collapsed = true, onBack = onBack, actions = null) else BackButton(onBack)
+        // l'azione principale in fondo, nella zona del pollice, con com'è stanotte accanto
         if (loaded != null) {
-            Box(
-                Modifier
-                    .align(Alignment.BottomCenter)
-                    .fillMaxWidth()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 16.dp + bottomInset),
-                contentAlignment = Alignment.Center,
-            ) {
-                PrimaryPillButton(
-                    stringResource(Res.string.booking_open),
-                    onClick = { onBook(loaded.value.id, loaded.value.name, loaded.value.capacity) },
-                    modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth(),
-                )
+            StickyActionBar(Modifier.align(Alignment.BottomCenter)) {
+                BookBar(state.nights) { sheetArrival = "" }
             }
+        }
+    }
+
+    if (loaded != null) {
+        sheetArrival?.let { arrival ->
+            BookingHost(
+                refuge = loaded,
+                arrival = arrival,
+                onClose = { sheetArrival = null },
+                onBooked = {
+                    sheetArrival = null
+                    viewModel.refresh()
+                },
+                onOpenBookings = {
+                    sheetArrival = null
+                    onOpenBookings()
+                },
+            )
         }
     }
 }
 
-// Le foto del rifugio a tutta larghezza, una alla volta scorrendo; "2/5" in basso a destra; un tocco la apre intera
+// Il ViewModel del foglio vive con questa pagina (la voce della pila), non con il foglio: chiuderlo non annulla un invio
 @Composable
-private fun RefugeGallery(photos: List<MediaResponse>) {
+private fun BookingHost(refuge: RefugeResponse, arrival: String, onClose: () -> Unit, onBooked: () -> Unit, onOpenBookings: () -> Unit) {
+    val viewModel = koinViewModel<BookRefugeViewModel>(key = "book-${refuge.id}") { parametersOf(refuge.id, refuge.capacity) }
+    LaunchedEffect(arrival) { viewModel.open(arrival.takeIf { it.isNotEmpty() }?.let(LocalDate::parse)) }
+    BookingSheet(refuge.name, viewModel, onDismiss = onClose, onBooked = onBooked, onOpenBookings = onOpenBookings)
+}
+
+// ---- Testata ----
+
+@Composable
+private fun Hero(refuge: RefugeResponse, photos: List<MediaResponse>) {
+    val background = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxWidth().height(HeroHeight)) {
+        if (photos.isEmpty()) MapHero(refuge) else Gallery(photos)
+        // il pannello che sale sulla foto: gli angoli alti, nel colore della pagina
+        Box(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .height(PanelLip)
+                .background(background, RoundedCornerShape(topStart = PanelLip, topEnd = PanelLip)),
+        )
+    }
+}
+
+// Le foto del rifugio, una alla volta scorrendo; puntini (fino a 5) o "2/7"; un tocco la apre intera
+@Composable
+private fun Gallery(photos: List<MediaResponse>) {
+    val colors = MaterialTheme.colorScheme
     val media = koinInject<MediaRepository>()
     val pager = rememberPagerState { photos.size }
     var opened by remember { mutableStateOf<MediaResponse?>(null) }
-    Box(Modifier.fillMaxWidth().height(HeroHeight)) {
+    Box(Modifier.fillMaxSize()) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
             val photo = photos[page]
             val signed = rememberSignedUrl(media, photo.id)
             val scope = rememberCoroutineScope()
             val url = signed.url
             Box(
-                Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHigh).clickable(role = Role.Button) { opened = photo },
+                Modifier.fillMaxSize().background(colors.surfaceContainerHigh).clickable(role = Role.Button) { opened = photo },
                 contentAlignment = Alignment.Center,
             ) {
                 if (url != null) {
@@ -266,265 +334,255 @@ private fun RefugeGallery(photos: List<MediaResponse>) {
                 }
             }
         }
-        // sfumatura verso la pagina, come per la mappa
-        Box(
-            Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(72.dp)
-                .background(Brush.verticalGradient(listOf(Color.Transparent, MaterialTheme.colorScheme.background))),
-        )
-        // autore e licenza della foto mostrata (solo per le foto importate)
-        PhotoCredit(photos[pager.currentPage].credit, Modifier.align(Alignment.BottomStart).padding(4.dp))
+        // autore e licenza della foto mostrata (solo per le foto importate), sopra il bordo del pannello
+        PhotoCredit(photos[pager.currentPage].credit, Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = PanelLip + 4.dp))
         if (photos.size > 1) {
-            Text(
-                stringResource(Res.string.refuge_photo_count, pager.currentPage + 1, photos.size),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier
-                    .align(Alignment.BottomEnd)
-                    .padding(12.dp)
-                    .clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-            )
+            val pill = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 16.dp, bottom = PanelLip + 8.dp)
+                .clip(CircleShape)
+                .background(colors.inverseSurface.copy(alpha = 0.6f))
+            if (photos.size <= 5) {
+                Row(pill.padding(horizontal = 10.dp, vertical = 8.dp).clearAndSetSemantics { }, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    repeat(photos.size) { index ->
+                        val current = index == pager.currentPage
+                        Box(Modifier.size(6.dp).background(colors.inverseOnSurface.copy(alpha = if (current) 1f else 0.5f), CircleShape))
+                    }
+                }
+            } else {
+                Text(
+                    stringResource(Res.string.refuge_photo_count, pager.currentPage + 1, photos.size),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = colors.inverseOnSurface,
+                    modifier = pill.padding(horizontal = 10.dp, vertical = 4.dp),
+                )
+            }
         }
     }
     opened?.let { PhotoViewer(it, media, onClose = { opened = null }) }
 }
 
-// Senza foto: la mappa ferma sul rifugio, con il suo segnaposto e una sfumatura che la fonde con la pagina. Decorativa
-// per gli screen reader: nome e posti sono scritti sotto
+// Senza foto: la mappa ferma sul rifugio con il suo segnaposto. Decorativa per gli screen reader: nome e posti sono sotto
 @Composable
-private fun RefugeHero(refuge: RefugeResponse) {
-    val colors = MaterialTheme.colorScheme
+private fun MapHero(refuge: RefugeResponse) {
     val style = rememberMapStyle(rememberSavedMapType())
     val mapState = rememberMapState(
         baseStyle = style,
         initialCameraPosition = CameraPosition(target = refuge.location.toGeoPoint().toPosition(), zoom = HeroZoom),
     ) {
-        RefugeMarkers(listOf(refuge), fill = colors.primary, outline = colors.surfaceContainerLowest, symbol = colors.onPrimary, onRefugeClick = {})
+        // senza nome sulla mappa: è scritto subito sotto, nel pannello
+        RefugeMarkers(listOf(refuge), label = Color.Transparent, halo = Color.Transparent, onRefugeClick = {})
     }
-    Box(Modifier.fillMaxWidth().height(HeroHeight).clearAndSetSemantics { }) {
+    Box(Modifier.fillMaxSize().clearAndSetSemantics { }) {
         MaplibreMap(
             state = mapState,
             interactions = MapInteractions.None,
             overlay = {
-                Box(
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(96.dp)
-                        .background(Brush.verticalGradient(listOf(Color.Transparent, colors.background))),
+                // sopra il bordo del pannello, in basso a destra: in alto coprirebbe Indietro, al centro il rifugio
+                AttributionButton(
+                    mapState,
+                    Modifier.align(Alignment.BottomEnd).padding(bottom = PanelLip + 4.dp, end = 8.dp),
+                    alignEnd = true,
+                    startExpanded = false,
                 )
-                // sopra la sfumatura, sul bordo in basso a destra (ha il suo fondo): in alto coprirebbe Indietro, al
-                // centro il rifugio
-                AttributionButton(mapState, Modifier.align(Alignment.BottomEnd).padding(bottom = 8.dp, end = 8.dp), alignEnd = true, startExpanded = false)
             },
         )
     }
 }
 
-// Nome, poi le capsule con quota e posti (e, appena arriva il calendario, com'è stanotte) e la stagione
+// Nome e, in una riga, quota · posti · stagione
 @Composable
-private fun Title(refuge: RefugeResponse, nights: Section<List<NightAvailability>>) {
-    val colors = MaterialTheme.colorScheme
-    val tonight = (nights as? Section.Loaded)?.value?.firstOrNull()
+private fun Title(refuge: RefugeResponse) {
     Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-        Text(refuge.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
-        FlowRow(
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-            modifier = Modifier.padding(top = 12.dp),
-        ) {
-            refuge.altitudeM?.let { InfoChip(stringResource(Res.string.refuge_altitude, it)) }
-            InfoChip(pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity))
-            when {
-                tonight == null -> Unit
-                tonight.isFull -> InfoChip(stringResource(Res.string.refuge_tonight_full))
-                else -> InfoChip(pluralStringResource(Res.plurals.refuge_tonight_free, tonight.freeBeds, tonight.freeBeds), highlighted = true)
-            }
-        }
-        refuge.season?.let { season ->
-            Row(Modifier.padding(top = 14.dp), verticalAlignment = Alignment.Top) {
-                // decorativa: la stagione è scritta accanto
-                Icon(Icons.Filled.DateRange, contentDescription = null, tint = colors.primary, modifier = Modifier.size(20.dp))
-                Spacer(Modifier.width(10.dp))
-                Text(season, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
-            }
-        }
+        Text(refuge.name, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+        MetaLine(
+            listOf(
+                refuge.altitudeM?.let { stringResource(Res.string.refuge_altitude, it) },
+                pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity),
+                refuge.season,
+            ),
+            modifier = Modifier.padding(top = 4.dp),
+        )
     }
 }
 
+// Chiamata (se c'è il numero) e indicazioni con le mappe del telefono, metà e metà; senza numero Indicazioni resta a metà
 @Composable
-private fun InfoChip(text: String, highlighted: Boolean = false) {
-    val colors = MaterialTheme.colorScheme
-    Text(
-        text,
-        style = MaterialTheme.typography.labelLarge,
-        color = if (highlighted) colors.onPrimaryContainer else colors.onSurface,
-        modifier = Modifier
-            .clip(CircleShape)
-            .background(if (highlighted) colors.primaryContainer else colors.surfaceContainerHighest)
-            .padding(horizontal = 12.dp, vertical = 6.dp),
-    )
-}
-
-@Composable
-private fun Paragraph(text: String) {
-    Text(
-        text,
-        style = MaterialTheme.typography.bodyLarge,
-        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 20.dp),
-    )
-}
-
-@Composable
-private fun SectionTitle(title: StringResource, hint: StringResource? = null) {
-    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 28.dp, bottom = 12.dp)) {
-        Text(stringResource(title), style = MaterialTheme.typography.titleMedium, modifier = Modifier.semantics { heading() })
-        if (hint != null) {
-            Text(
-                stringResource(hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(top = 4.dp),
-            )
+private fun Contacts(refuge: RefugeResponse) {
+    val dial = rememberDialer()
+    val uriHandler = LocalUriHandler.current
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
+    ) {
+        refuge.phone?.let { phone ->
+            TonalPillButton(stringResource(Res.string.refuge_call), onClick = { dial(phone) }, icon = Icons.Filled.Call, modifier = Modifier.weight(1f))
         }
+        TonalPillButton(
+            stringResource(Res.string.refuge_directions),
+            onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
+            icon = Icons.Filled.Place,
+            modifier = Modifier.weight(1f),
+        )
+        if (refuge.phone == null) Spacer(Modifier.weight(1f))
     }
 }
 
-// Le prossime notti come una striscia di giorni che scorre in orizzontale: si legge la settimana a colpo d'occhio
+// ---- Disponibilità ----
+
+// Le prossime notti come una striscia di giorni: ogni giorno con posti apre "Prenota" con quell'arrivo già scelto
 @Composable
-private fun NightStrip(nights: List<NightAvailability>) {
+private fun NightStrip(nights: List<NightAvailability>, onPick: (LocalDate) -> Unit) {
     LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
         contentPadding = PaddingValues(horizontal = 20.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        itemsIndexed(nights, key = { _, night -> night.date.toString() }) { index, night -> NightCard(night, tonight = index == 0) }
+        itemsIndexed(nights, key = { _, night -> night.date.toString() }) { index, night ->
+            NightCell(night, tonight = index == 0, onClick = { onPick(night.date) })
+        }
     }
 }
 
-// Una notte: giorno della settimana, numero del giorno e i posti liberi. Stanotte ha il fondo muschio. "Pieno" non è rosso
-// (il rosso resta all'emergenza, §2): si distingue dal testo e dal tono spento
+// Una notte: giorno della settimana, numero del giorno (Barlow) e i posti liberi. Stanotte ha il fondo muschio.
+// Pochi posti in ambra con "ultimi"; "Pieno" spento e non toccabile (mai rosso: il rosso resta all'emergenza)
 @Composable
-private fun NightCard(night: NightAvailability, tonight: Boolean) {
+private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(20.dp)
     val container = if (tonight) colors.primaryContainer else colors.surfaceContainerLowest
     val content = if (tonight) colors.onPrimaryContainer else colors.onSurface
-    val dayLabel = if (tonight) stringResource(Res.string.refuge_tonight) else night.date.shortLabel()
-    val bedsLabel = if (night.isFull) stringResource(Res.string.refuge_full) else pluralStringResource(Res.plurals.refuge_free_beds, night.freeBeds, night.freeBeds)
+    val few = !night.isFull && night.freeBeds <= FEW_BEDS
+    val dayLabel = if (tonight) stringResource(Res.string.refuge_tonight) else night.date.longLabel()
+    val bedsLabel = if (night.isFull) {
+        stringResource(Res.string.refuge_full)
+    } else {
+        pluralStringResource(Res.plurals.refuge_free_beds, night.freeBeds, night.freeBeds)
+    }
+    val action = stringResource(Res.string.refuge_day_book)
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier
-            .widthIn(min = 84.dp)
-            .clip(shape)
+            .widthIn(min = 64.dp)
+            .clip(MaterialTheme.shapes.small)
             .background(container)
-            .border(1.dp, if (tonight) Color.Transparent else colors.outlineVariant, shape)
-            .padding(horizontal = 12.dp, vertical = 12.dp)
-            .clearAndSetSemantics { contentDescription = "$dayLabel, $bedsLabel" },
+            .clickable(enabled = !night.isFull, onClick = onClick)
+            .clearAndSetSemantics {
+                contentDescription = if (night.isFull) "$dayLabel, $bedsLabel" else "$dayLabel, $bedsLabel, $action"
+                role = Role.Button
+                if (night.isFull) disabled()
+            }
+            .padding(horizontal = 12.dp, vertical = 12.dp),
     ) {
         Text(
             if (tonight) stringResource(Res.string.refuge_tonight) else stringResource(night.date.weekday()),
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.labelSmall,
             color = if (tonight) content else colors.onSurfaceVariant,
         )
         Text(
             night.date.day.toString(),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.SemiBold,
-            color = content,
+            style = MaterialTheme.typography.headlineSmall,
+            color = if (night.isFull) colors.onSurfaceVariant else content,
         )
-        Spacer(Modifier.height(6.dp))
-        if (night.isFull) {
-            Text(stringResource(Res.string.refuge_full), style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
-        } else {
-            Text(
-                night.freeBeds.toString(),
-                style = MaterialTheme.typography.titleLarge,
+        Spacer(Modifier.height(4.dp))
+        when {
+            night.isFull -> Text("—", style = MaterialTheme.typography.labelLarge, color = colors.onSurfaceVariant)
+            few -> Text(
+                "${night.freeBeds} ${stringResource(Res.string.refuge_few_beds)}",
+                style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
+                color = if (tonight) content else warningTextColor(),
+            )
+            else -> Text(
+                night.freeBeds.toString(),
+                style = MaterialTheme.typography.labelLarge,
                 color = if (tonight) content else colors.primary,
             )
         }
     }
 }
 
-// I servizi come capsule con la spunta: si leggono a colpo d'occhio e vanno a capo con il testo grande
+// La barra in basso: a sinistra com'è stanotte (il valore grande, l'etichetta piccola), a destra "Prenota".
+// Senza calendario (in caricamento o in errore) solo il pulsante, a tutta larghezza.
 @Composable
-private fun Amenities(labels: List<StringResource>) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
-        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp),
-    ) {
-        labels.forEach { label ->
-            val colors = MaterialTheme.colorScheme
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(CircleShape)
-                    .background(colors.surfaceContainerLowest)
-                    .border(1.dp, colors.outlineVariant, CircleShape)
-                    .padding(start = 10.dp, end = 14.dp, top = 8.dp, bottom = 8.dp),
+private fun BookBar(nights: Section<List<NightAvailability>>, onBook: () -> Unit) {
+    val colors = MaterialTheme.colorScheme
+    val list = (nights as? Section.Loaded)?.value
+    val tonight = list?.firstOrNull()
+    if (list == null || tonight == null) {
+        PrimaryPillButton(stringResource(Res.string.booking_open), onClick = onBook)
+        return
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f).padding(end = 12.dp).semantics(mergeDescendants = true) { }) {
+            if (tonight.isFull) {
+                Text(stringResource(Res.string.refuge_full_tonight), style = MaterialTheme.typography.titleMedium)
+                list.firstOrNull { !it.isFull }?.let { next ->
+                    Text(
+                        stringResource(Res.string.refuge_next_free, next.date.shortLabel()),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = colors.onSurfaceVariant,
+                    )
+                }
+            } else {
+                Text(
+                    pluralStringResource(Res.plurals.refuge_free_beds, tonight.freeBeds, tonight.freeBeds),
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(stringResource(Res.string.refuge_tonight_lower), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+            }
+        }
+        PrimaryPillButton(stringResource(Res.string.booking_open), onClick = onBook, fill = false, modifier = Modifier.widthIn(min = 132.dp))
+    }
+}
+
+// ---- Descrizione e servizi ----
+
+// Quattro righe e "Leggi tutto", che apre il testo sul posto
+@Composable
+private fun Description(text: String) {
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var overflows by remember { mutableStateOf(false) }
+    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
+        Text(
+            text,
+            style = MaterialTheme.typography.bodyLarge,
+            maxLines = if (expanded) Int.MAX_VALUE else 4,
+            overflow = TextOverflow.Ellipsis,
+            onTextLayout = { if (!expanded) overflows = it.hasVisualOverflow },
+        )
+        if (overflows || expanded) {
+            TextButton(
+                onClick = { expanded = !expanded },
+                contentPadding = PaddingValues(horizontal = 0.dp),
+                modifier = Modifier.heightIn(min = 48.dp),
             ) {
-                // decorativa: il servizio è scritto accanto
-                Icon(Icons.Filled.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
-                Spacer(Modifier.width(6.dp))
-                Text(stringResource(label), style = MaterialTheme.typography.bodyMedium)
+                Text(stringResource(if (expanded) Res.string.refuge_read_less else Res.string.refuge_read_more), fontWeight = FontWeight.SemiBold)
             }
         }
     }
 }
 
-// I sentieri che passano entro 5 km, in una card: come in "Vicino a te", il tocco apre il sentiero
+// I servizi in una card, due colonne (una con il testo grande), spunta verde e testo
 @Composable
-private fun NearbyTrails(trails: List<TrailSummaryResponse>, onOpenTrail: (String) -> Unit) {
+private fun Amenities(labels: List<StringResource>) {
     val colors = MaterialTheme.colorScheme
-    val shape = RoundedCornerShape(20.dp)
-    Column(
-        Modifier
-            .widthIn(max = PageMaxWidth)
-            .fillMaxWidth()
-            .padding(horizontal = 20.dp)
-            .clip(shape)
-            .background(colors.surfaceContainerLowest)
-            .border(1.dp, colors.outlineVariant, shape),
-    ) {
-        trails.forEachIndexed { index, trail ->
-            if (index > 0) HorizontalDivider(Modifier.padding(start = 20.dp), color = colors.outlineVariant)
-            TrailRow(trail, onClick = { onOpenTrail(trail.id) })
+    val columns = if (LocalDensity.current.fontScale > LargeTextScale) 1 else 2
+    GroupCard(Modifier.widthIn(max = PageMaxWidth).padding(horizontal = 20.dp)) {
+        Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+            labels.chunked(columns).forEach { row ->
+                Row(Modifier.fillMaxWidth()) {
+                    row.forEach { label ->
+                        Row(Modifier.weight(1f).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // decorativa: il servizio è scritto accanto
+                            Icon(Icons.Filled.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(label), style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                    if (row.size < columns) Spacer(Modifier.weight(1f))
+                }
+            }
         }
-    }
-}
-
-// Chiamata (se c'è il numero) e indicazioni con le mappe del telefono, affiancate
-@Composable
-private fun Contacts(refuge: RefugeResponse) {
-    val dial = rememberDialer()
-    val uriHandler = LocalUriHandler.current
-    Row(
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
-        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 18.dp),
-    ) {
-        refuge.phone?.let { phone ->
-            ContactButton(Icons.Filled.Call, stringResource(Res.string.refuge_call), Modifier.weight(1f)) { dial(phone) }
-        }
-        ContactButton(Icons.Filled.Place, stringResource(Res.string.refuge_directions), Modifier.weight(1f)) {
-            uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon))
-        }
-    }
-}
-
-@Composable
-private fun ContactButton(icon: ImageVector, label: String, modifier: Modifier, onClick: () -> Unit) {
-    // tonali: si vedono come pulsanti al primo sguardo, ma "Prenota" resta l'unica azione piena della pagina
-    FilledTonalButton(onClick = onClick, modifier = modifier.heightIn(min = 52.dp)) {
-        // decorativa: l'azione è scritta accanto
-        Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-        Spacer(Modifier.width(8.dp))
-        Text(label, fontWeight = FontWeight.SemiBold)
     }
 }
 
@@ -541,7 +599,29 @@ private fun RefugeResponse.Amenities.label(): StringResource? = when (this) {
     RefugeResponse.Amenities.unknown_default_open_api -> null
 }
 
-/** "sab 10/10": giorno della settimana e data, nel calendario, nel form e nelle prenotazioni. */
+// Sagoma della pagina mentre arriva il rifugio: foto, titolo, due righe, la striscia dei giorni
+@Composable
+private fun DetailSkeleton() {
+    Column(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(HeroHeight).skeleton(RectangleShape))
+        Column(Modifier.padding(20.dp)) {
+            Box(Modifier.fillMaxWidth(0.65f).height(28.dp).skeleton())
+            Spacer(Modifier.height(12.dp))
+            Box(Modifier.fillMaxWidth(0.45f).height(16.dp).skeleton())
+            Spacer(Modifier.height(24.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Box(Modifier.weight(1f).height(48.dp).skeleton(CircleShape))
+                Box(Modifier.weight(1f).height(48.dp).skeleton(CircleShape))
+            }
+            Spacer(Modifier.height(32.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                repeat(5) { Box(Modifier.size(64.dp, 88.dp).skeleton(MaterialTheme.shapes.small)) }
+            }
+        }
+    }
+}
+
+/** "sab 10/10": giorno della settimana e data, nel calendario, nel riepilogo e nelle prenotazioni. */
 @Composable
 internal fun LocalDate.shortLabel(): String = "${stringResource(weekday())} $day/${month.number}"
 
@@ -553,29 +633,4 @@ internal fun LocalDate.weekday(): StringResource = when (dayOfWeek.isoDayNumber)
     5 -> Res.string.weekday_5
     6 -> Res.string.weekday_6
     else -> Res.string.weekday_7
-}
-
-@Composable
-private fun CenteredProgress(small: Boolean = false) {
-    Box(Modifier.fillMaxWidth().padding(vertical = if (small) 16.dp else 48.dp), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator(Modifier.size(if (small) 24.dp else 36.dp), strokeWidth = if (small) 2.dp else 3.dp)
-    }
-}
-
-@Composable
-private fun RetryMessage(message: UiMessage, onRetry: () -> Unit) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp, vertical = 24.dp),
-    ) {
-        Text(
-            message.resolve(),
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.error,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.semantics { liveRegion = LiveRegionMode.Polite },
-        )
-        Spacer(Modifier.height(16.dp))
-        PrimaryPillButton(stringResource(Res.string.trail_retry), onClick = onRetry)
-    }
 }

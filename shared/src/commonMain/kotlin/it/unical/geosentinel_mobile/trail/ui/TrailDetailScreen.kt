@@ -88,6 +88,17 @@ import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toBoundingBox
 import it.unical.geosentinel_mobile.core.location.toPositions
 import it.unical.geosentinel_mobile.core.ui.BackButton
+import it.unical.geosentinel_mobile.core.ui.CompactBar
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.ScrollState
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalDensity
+import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
+import it.unical.geosentinel_mobile.core.ui.StickyActionBar
+import androidx.compose.foundation.shape.RoundedCornerShape
+import geosentinel_mobile.shared.generated.resources.trail_tile_difficulty
+import geosentinel_mobile.shared.generated.resources.trail_tile_length
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.trail.data.MapType
@@ -120,6 +131,10 @@ fun TrailDetailScreen(
     val viewModel = koinViewModel<TrailDetailViewModel>(key = "trail-$trailId") { parametersOf(trailId) }
     val ui by viewModel.state.collectAsStateWithLifecycle()
 
+    val scroll = rememberScrollState()
+    // l'anteprima è scorsa via (fin sotto la barra): in alto compare la barra con il nome, come nelle pagine di iOS
+    val heroPx = with(LocalDensity.current) { (PreviewHeight - 96.dp).toPx() }
+    val collapsed by remember { derivedStateOf { scroll.value > heroPx } }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         val trail = ui.trail
         val error = ui.error
@@ -127,6 +142,7 @@ fun TrailDetailScreen(
             trail != null -> TrailContent(
                 trail = trail,
                 ui = ui,
+                scroll = scroll,
                 onLogin = onLogin,
                 onReportHazard = onReportHazard,
                 manage = manage,
@@ -140,14 +156,19 @@ fun TrailDetailScreen(
             error != null -> LoadFailed(error, onRetry = viewModel::retry)
             else -> Loading()
         }
-        BackButton(onBack, Modifier.align(Alignment.TopStart))
+        val name = trail?.name
+        if (collapsed && name != null) CompactBar(name, collapsed = true, onBack = onBack, actions = null) else BackButton(onBack, Modifier.align(Alignment.TopStart))
     }
 }
+
+// Altezza dell'anteprima del percorso in testata
+private val PreviewHeight = 300.dp
 
 @Composable
 private fun TrailContent(
     trail: TrailDetailResponse,
     ui: TrailDetailUiState,
+    scroll: ScrollState,
     onLogin: () -> Unit,
     onReportHazard: (start: GeoPoint) -> Unit,
     manage: @Composable (TrailDetailResponse) -> Unit,
@@ -159,26 +180,42 @@ private fun TrailContent(
     onPhotoRetry: (String) -> Unit,
 ) {
     val state = TrailState.of(trail.status.value)
+    // segnalare: l'azione principale della pagina, fissa in basso (solo da loggati, dall'inizio del percorso)
+    val reportFrom = if (ui.hazards != Section.Hidden) trail.path.toPositions().firstOrNull() else null
+    Box(Modifier.fillMaxSize()) {
     Column(
-        Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        Modifier.fillMaxSize().verticalScroll(scroll),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        PathPreview(trail, state, Modifier.fillMaxWidth().height(280.dp))
+        // l'anteprima da bordo a bordo e il pannello del contenuto che le sale sopra con gli angoli da 28 (redesign 11/2026)
+        Box(Modifier.fillMaxWidth().height(PreviewHeight)) {
+            PathPreview(trail, state, Modifier.fillMaxSize())
+            Box(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .background(MaterialTheme.colorScheme.background, RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp)),
+            )
+        }
         Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-            Spacer(Modifier.size(20.dp))
-            Text(trail.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+            Text(trail.name, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.size(12.dp))
             TrailStateBadge(state)
-            Spacer(Modifier.size(12.dp))
-            Text(
-                stringResource(Res.string.trail_difficulty, stringResource(TrailDifficulty.of(trail.difficulty.value).label)),
-                style = MaterialTheme.typography.bodyLarge,
-            )
-            Text(
-                stringResource(Res.string.trail_length_km, formatKm(trail.lengthM)),
-                style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            Spacer(Modifier.size(16.dp))
+            // i numeri del sentiero in tessere: il valore grande, l'etichetta piccola sotto
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                NumberTile(
+                    value = stringResource(Res.string.trail_length_km, formatKm(trail.lengthM)),
+                    label = stringResource(Res.string.trail_tile_length),
+                    modifier = Modifier.weight(1f),
+                )
+                NumberTile(
+                    value = stringResource(TrailDifficulty.of(trail.difficulty.value).label),
+                    label = stringResource(Res.string.trail_tile_difficulty),
+                    modifier = Modifier.weight(1f),
+                )
+            }
             UpdatedLine(ui.updatedAt, ui.stale, onRetry)
             manage(trail)
 
@@ -226,16 +263,6 @@ private fun TrailContent(
                         }
                     }
                 }
-                // Solo da loggati (qui siamo nel ramo con i pericoli): la mappa del form parte dall'inizio del sentiero
-                trail.path.toPositions().firstOrNull()?.let { start ->
-                    TextButton(
-                        onClick = { onReportHazard(start.toGeoPoint()) },
-                        contentPadding = PaddingValues(horizontal = 0.dp),
-                        modifier = Modifier.heightIn(min = 48.dp),
-                    ) {
-                        Text(stringResource(Res.string.report_open), fontWeight = FontWeight.SemiBold)
-                    }
-                }
                 // Le foto solo se ce ne sono: una sezione vuota non dice niente
                 val photos = ui.photos
                 if (photos !is Section.Loaded || photos.value.isNotEmpty()) {
@@ -245,8 +272,31 @@ private fun TrailContent(
                     }
                 }
             }
-            Spacer(Modifier.size(32.dp))
+            // spazio per la barra fissa in basso
+            Spacer(Modifier.size(if (reportFrom != null) 112.dp else 32.dp))
         }
+    }
+    // la mappa del form parte dall'inizio del sentiero
+    reportFrom?.let { start ->
+        StickyActionBar(Modifier.align(Alignment.BottomCenter)) {
+            PrimaryPillButton(stringResource(Res.string.report_open), onClick = { onReportHazard(start.toGeoPoint()) })
+        }
+    }
+    }
+}
+
+// Un numero del sentiero: il valore (Barlow 22) e cosa misura, su una tessera del colore delle card
+@Composable
+private fun NumberTile(value: String, label: String, modifier: Modifier) {
+    Column(
+        modifier
+            .clip(MaterialTheme.shapes.medium)
+            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
+            .padding(horizontal = 16.dp, vertical = 12.dp)
+            .semantics(mergeDescendants = true) { },
+    ) {
+        Text(value, style = MaterialTheme.typography.headlineSmall)
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -315,22 +365,17 @@ internal fun TrailStateBadge(state: TrailState) {
         TrailState.CLOSED -> Icons.Filled.Close
         TrailState.UNKNOWN -> Icons.Filled.Info
     }
-    Surface(
-        shape = CircleShape,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.5.dp, color),
-    ) {
-        Row(Modifier.padding(start = 10.dp, end = 14.dp, top = 6.dp, bottom = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            // decorativa: l'etichetta dice già lo stato
-            Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-            Spacer(Modifier.width(6.dp))
-            Text(
-                stringResource(state.label),
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.onSurface,
-            )
-        }
+    // terza passata: niente capsula con il bordo, solo simbolo colorato e parola (come gli stati nelle liste di iOS)
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        // decorativa: l'etichetta dice già lo stato
+        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(
+            stringResource(state.label),
+            style = MaterialTheme.typography.labelLarge,
+            fontWeight = FontWeight.SemiBold,
+            color = MaterialTheme.colorScheme.onSurface,
+        )
     }
 }
 
@@ -340,8 +385,11 @@ private fun PoiRow(poi: PoiResponse) {
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp).semantics(mergeDescendants = true) { },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(poi.type.icon(), contentDescription = null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(24.dp))
-        Spacer(Modifier.width(14.dp))
+        // lo stesso bollino della mappa (decorativo: il tipo è scritto accanto)
+        Box(Modifier.size(32.dp).background(poi.type.markerColor(), CircleShape), contentAlignment = Alignment.Center) {
+            Icon(poi.type.icon(), contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+        }
+        Spacer(Modifier.width(12.dp))
         Column {
             Text(poi.name, style = MaterialTheme.typography.bodyLarge)
             Text(stringResource(poi.type.label()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -473,18 +521,16 @@ private fun SectionTitle(text: StringResource) {
     Text(
         stringResource(text),
         style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = Modifier.padding(top = 28.dp, bottom = 10.dp).semantics { heading() },
+        modifier = Modifier.padding(top = 32.dp, bottom = 8.dp).semantics { heading() },
     )
 }
 
-// Card come nel Profilo: un passo di tono sopra lo sfondo e un filo di bordo, senza ombra
+// Card come nel Profilo: un passo di tono sopra lo sfondo, senza bordo né ombra (redesign 11/2026)
 @Composable
 private fun Card(content: @Composable () -> Unit) {
     Surface(
         shape = MaterialTheme.shapes.medium,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column { content() }

@@ -86,6 +86,7 @@ import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.LocalBottomBarInset
+import it.unical.geosentinel_mobile.core.ui.islandShadow
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItems
 import it.unical.geosentinel_mobile.core.ui.navigation.NoBottomBarRoutes
@@ -100,8 +101,8 @@ import it.unical.geosentinel_mobile.profile.ui.MfaScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
 import it.unical.geosentinel_mobile.trail.ui.MapScreen
 import it.unical.geosentinel_mobile.refuge.data.BookingRepository
-import it.unical.geosentinel_mobile.refuge.ui.BookRefugeScreen
-import it.unical.geosentinel_mobile.refuge.ui.MyBookingsScreen
+import it.unical.geosentinel_mobile.refuge.ui.REFUGES_BOOKINGS
+import it.unical.geosentinel_mobile.refuge.ui.REFUGES_EXPLORE
 import it.unical.geosentinel_mobile.refuge.ui.RefugeDetailScreen
 import it.unical.geosentinel_mobile.refuge.ui.RefugeListScreen
 import it.unical.geosentinel_mobile.rescue.ui.RescueAlertDetailScreen
@@ -250,6 +251,21 @@ fun App() {
 
     // stessa funzione tra una ricomposizione e l'altra: il livello delle allerte sulla mappa non si riconfigura ogni volta
     val openAlert: (String) -> Unit = remember(navController) { { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } } }
+
+    // Scheda Rifugi (redesign 11/2026): Esplora | Prenotazioni. Il segmento sta qui perché "Vedi le prenotazioni" (dal
+    // foglio Prenota) e il Profilo aprono direttamente le prenotazioni
+    var refugesSegment by rememberSaveable { mutableStateOf(REFUGES_EXPLORE) }
+    val openMyBookings: () -> Unit = {
+        refugesSegment = REFUGES_BOOKINGS
+        // la scheda è già nella pila (dal dettaglio di un rifugio aperto dalla lista): si torna lì;
+        // altrimenti si apre come dalla barra in basso, senza ripristinare un dettaglio rimasto nella sua pila
+        if (!navController.popBackStack<Route.Refuges>(inclusive = false)) {
+            navController.navigate(Route.Refuges) {
+                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                launchSingleTop = true
+            }
+        }
+    }
 
     val mode = themeMode ?: return
     GeoSentinelTheme(mode) {
@@ -410,33 +426,31 @@ fun App() {
                 composable<Route.Refuges>(
                     // come la mappa: il dettaglio entra da destra e la lista scivola via in parallasse
                     exitTransition = {
-                        val pushed = targetState.destination.hasRoute<Route.RefugeDetail>() || targetState.destination.hasRoute<Route.MyBookings>()
+                        val pushed = targetState.destination.hasRoute<Route.RefugeDetail>()
                         if (pushed) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
                     RefugeListScreen(
+                        segment = refugesSegment,
+                        onSegment = { refugesSegment = it },
                         onOpenRefuge = { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } },
-                        onOpenBookings = { navController.navigate(Route.MyBookings) { launchSingleTop = true } },
                     )
                 }
                 composable<Route.RefugeDetail>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
                     popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
                 ) { entry ->
+                    val userId = (sessionState as? SessionState.LoggedIn)?.profile?.id
                     RefugeDetailScreen(
                         entry.toRoute<Route.RefugeDetail>().refugeId,
                         onBack = { navController.popBackStack() },
-                        onBook = { id, name, capacity -> navController.navigate(Route.BookRefuge(id, name, capacity)) { launchSingleTop = true } },
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
+                        onOpenBookings = openMyBookings,
                         // posti letto (M8.3): il gestore di questo rifugio o un ADMIN; il server risponde comunque 403 agli altri
-                        manage = { refuge ->
-                            val userId = (sessionState as? SessionState.LoggedIn)?.profile?.id
-                            if (role == UserRole.ADMIN || (role.canManagePark() && refuge.managerId == userId)) {
-                                ManageLink(stringResource(Res.string.staff_capacity_edit)) {
-                                    navController.navigate(Route.RefugeCapacity(refuge.id, refuge.capacity)) { launchSingleTop = true }
-                                }
-                            }
+                        canManage = { refuge -> role == UserRole.ADMIN || (role.canManagePark() && refuge.managerId == userId) },
+                        onEditCapacity = { refuge ->
+                            navController.navigate(Route.RefugeCapacity(refuge.id, refuge.capacity)) { launchSingleTop = true }
                         },
                     )
                 }
@@ -458,19 +472,6 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         onCreated = { navController.popBackStack() },
                     )
-                }
-                composable<Route.BookRefuge>(
-                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
-                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
-                ) { entry ->
-                    val route = entry.toRoute<Route.BookRefuge>()
-                    BookRefugeScreen(route.refugeId, route.name, route.capacity, onBack = { navController.popBackStack() })
-                }
-                composable<Route.MyBookings>(
-                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
-                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
-                ) {
-                    MyBookingsScreen(onBack = { navController.popBackStack() })
                 }
                 composable<Route.Alerts> {
                     RescueAlertsListScreen(
@@ -527,6 +528,7 @@ fun App() {
                         onSetPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
                         onMfa = { navController.navigate(Route.Mfa) { launchSingleTop = true } },
                         onMyHazards = { navController.navigate(Route.MyHazards) { launchSingleTop = true } },
+                        onMyBookings = if (role.canViewRefuges()) openMyBookings else null,
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
                     )
@@ -632,13 +634,12 @@ private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Ro
         contentAlignment = Alignment.Center,
     ) {
         Surface(
-            // in orizzontale e sui tablet non si allunga da bordo a bordo
-            modifier = Modifier.widthIn(max = 560.dp),
+            // in orizzontale e sui tablet non si allunga da bordo a bordo; ombra tinta delle isole (redesign 11/2026)
+            modifier = Modifier.widthIn(max = 560.dp).islandShadow(CircleShape, MapControlElevation),
             // un'isola sopra il contenuto: stessi toni e anello dei controlli della mappa, che le passa sotto
             shape = CircleShape,
             color = mapControlColor(),
             border = mapControlBorder(),
-            shadowElevation = MapControlElevation,
         ) {
             // voci centrate in altezza: con l'allineamento di default (in alto) la pillola toccava il bordo
             Row(
@@ -715,7 +716,8 @@ private fun SosButton(onClick: () -> Unit) {
             // lettere da cartello, un po' spaziate: si leggono da lontano
             Text(
                 text = stringResource(Res.string.sos_button),
-                style = MaterialTheme.typography.headlineSmall,
+                // 26 sp fissi: la scala dei titoli è scesa (redesign), il pulsante d'emergenza no
+                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 30.sp),
                 fontWeight = FontWeight.Bold,
                 letterSpacing = 1.5.sp,
                 modifier = Modifier.padding(horizontal = 24.dp),

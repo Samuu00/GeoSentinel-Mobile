@@ -94,8 +94,6 @@ import geosentinel_mobile.shared.generated.resources.map_type_button
 import geosentinel_mobile.shared.generated.resources.map_type_satellite
 import geosentinel_mobile.shared.generated.resources.map_type_streets
 import geosentinel_mobile.shared.generated.resources.map_type_title
-import geosentinel_mobile.shared.generated.resources.map_zoom_in
-import geosentinel_mobile.shared.generated.resources.map_zoom_out
 import geosentinel_mobile.shared.generated.resources.poi_close
 import geosentinel_mobile.shared.generated.resources.poi_open_trail
 import geosentinel_mobile.shared.generated.resources.trail_length_km
@@ -113,6 +111,8 @@ import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
+import it.unical.geosentinel_mobile.core.ui.islandShadow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
@@ -225,7 +225,7 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
 // Quanto resta aperta l'attribuzione se nessuno tocca la mappa
 private val AttributionOpenFor = 5.seconds
 
-internal enum class Glyph { Layers, Plus, Minus, Locate, Hazard, AddPoint, NearMe }
+internal enum class Glyph { Layers, Locate, Hazard, AddPoint, NearMe }
 
 // Controlli sulla mappa: un livello che galleggia sopra il contenuto (§2). Tono dei menu, anello chiaro e ombra: si
 // staccano anche dal bosco scuro della mappa notturna, dove il tono delle card spariva
@@ -237,68 +237,41 @@ internal fun mapControlBorder() = BorderStroke(1.dp, MaterialTheme.colorScheme.o
 
 internal val MapControlElevation = 6.dp
 
+/** Un comando di [MapButtonGroup]. */
+internal class MapAction(val description: StringResource, val glyph: Glyph, val onClick: () -> Unit)
+
 /**
- * Tondo da 56 dp. [emphasized]: l'azione principale della mappa (segnalare), piena nel verde del tema; una sola,
- * così si riconosce al primo sguardo (le altre sono comandi della vista).
+ * Comandi della vista raccolti in una capsula sola, separati da un filo (come i controlli di Apple Maps in alto a
+ * destra): un oggetto solo per l'occhio invece di tanti tondi.
  */
 @Composable
-internal fun MapButton(description: StringResource, glyph: Glyph, emphasized: Boolean = false, onClick: () -> Unit) {
-    val label = stringResource(description)
-    val colors = MaterialTheme.colorScheme
-    val content = if (emphasized) colors.onPrimary else colors.onSurface
+internal fun MapButtonGroup(actions: List<MapAction>) {
     Surface(
-        onClick = onClick,
-        shape = CircleShape,
-        color = if (emphasized) colors.primary else mapControlColor(),
-        contentColor = content,
-        border = if (emphasized) null else mapControlBorder(),
-        shadowElevation = MapControlElevation,
-        modifier = Modifier.size(56.dp).semantics { contentDescription = label },
-    ) {
-        Box(contentAlignment = Alignment.Center) { GlyphIcon(glyph, content) }
-    }
-}
-
-// Zoom in una capsula sola, con un filo in mezzo (come le mappe di sistema): due comandi gemelli, un oggetto solo
-@Composable
-internal fun MapZoomButtons(onZoomIn: () -> Unit, onZoomOut: () -> Unit) {
-    Surface(
-        shape = CircleShape,
+        shape = RoundedCornerShape(26.dp),
         color = mapControlColor(),
         border = mapControlBorder(),
-        shadowElevation = MapControlElevation,
-        modifier = Modifier.width(56.dp),
+        modifier = Modifier.width(52.dp).islandShadow(RoundedCornerShape(26.dp), MapControlElevation),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            ZoomHalf(Res.string.map_zoom_in, Glyph.Plus, onZoomIn)
-            HorizontalDivider(Modifier.width(28.dp), color = MaterialTheme.colorScheme.outlineVariant)
-            ZoomHalf(Res.string.map_zoom_out, Glyph.Minus, onZoomOut)
+            actions.forEachIndexed { index, action ->
+                if (index > 0) HorizontalDivider(Modifier.width(28.dp), color = MaterialTheme.colorScheme.outlineVariant)
+                val label = stringResource(action.description)
+                Box(
+                    Modifier.size(52.dp).clickable(role = Role.Button, onClick = action.onClick).semantics { contentDescription = label },
+                    contentAlignment = Alignment.Center,
+                ) { GlyphIcon(action.glyph, MaterialTheme.colorScheme.onSurface) }
+            }
         }
     }
 }
 
-@Composable
-private fun ZoomHalf(description: StringResource, glyph: Glyph, onClick: () -> Unit) {
-    val label = stringResource(description)
-    Box(
-        Modifier.size(56.dp).clickable(role = Role.Button, onClick = onClick).semantics { contentDescription = label },
-        contentAlignment = Alignment.Center,
-    ) { GlyphIcon(glyph, MaterialTheme.colorScheme.onSurface) }
-}
-
 // Simboli disegnati con lo stesso tratto: material-icons-core non ha né il "meno" né il mirino della posizione
 @Composable
-private fun GlyphIcon(glyph: Glyph, tint: Color) {
+internal fun GlyphIcon(glyph: Glyph, tint: Color) {
     Canvas(Modifier.size(24.dp)) {
         val stroke = 2.dp.toPx()
         val c = center
-        val arm = size.minDimension * 0.36f
         when (glyph) {
-            Glyph.Plus -> {
-                drawLine(tint, c.copy(x = c.x - arm), c.copy(x = c.x + arm), stroke, StrokeCap.Round)
-                drawLine(tint, c.copy(y = c.y - arm), c.copy(y = c.y + arm), stroke, StrokeCap.Round)
-            }
-            Glyph.Minus -> drawLine(tint, c.copy(x = c.x - arm), c.copy(x = c.x + arm), stroke, StrokeCap.Round)
             Glyph.Layers -> {
                 // livelli: un rombo pieno di contorno e, sotto, il bordo di quello successivo
                 val w = size.width * 0.42f
@@ -439,13 +412,14 @@ private fun MapPreview(type: MapType, modifier: Modifier) {
         val h = size.height
         when (type) {
             MapType.STREETS -> {
-                drawRect(Color(0xFFF2F2EF))
-                drawOval(Color(0xFFCDEBC5), topLeft = Offset(w * 0.05f, h * 0.08f), size = Size(w * 0.5f, h * 0.38f))
-                drawCircle(Color(0xFFAADAFF), radius = w * 0.32f, center = Offset(w * 1.02f, h * 1.02f))
-                drawLine(Color(0xFFD4D4D4), Offset(0f, h * 0.62f), Offset(w, h * 0.5f), w * 0.09f)
+                // i colori di build_map_styles.py (LIGHT)
+                drawRect(Color(0xFFF6F3EC))
+                drawOval(Color(0xFFC8E0B2), topLeft = Offset(w * 0.05f, h * 0.08f), size = Size(w * 0.5f, h * 0.38f))
+                drawCircle(Color(0xFFA2D1F2), radius = w * 0.32f, center = Offset(w * 1.02f, h * 1.02f))
+                drawLine(Color(0xFFDCD6C9), Offset(0f, h * 0.62f), Offset(w, h * 0.5f), w * 0.09f)
                 drawLine(Color.White, Offset(0f, h * 0.62f), Offset(w, h * 0.5f), w * 0.06f)
-                drawLine(Color(0xFFF2C45A), Offset(w * 0.62f, 0f), Offset(w * 0.38f, h), w * 0.1f)
-                drawLine(Color(0xFFFDE293), Offset(w * 0.62f, 0f), Offset(w * 0.38f, h), w * 0.07f)
+                drawLine(Color(0xFFE2B250), Offset(w * 0.62f, 0f), Offset(w * 0.38f, h), w * 0.1f)
+                drawLine(Color(0xFFF8D37A), Offset(w * 0.62f, 0f), Offset(w * 0.38f, h), w * 0.07f)
             }
             MapType.SATELLITE -> {
                 drawRect(Color(0xFF3E4A2E))

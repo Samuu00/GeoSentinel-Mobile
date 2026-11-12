@@ -20,6 +20,12 @@ import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
@@ -89,6 +95,8 @@ import coil3.request.CachePolicy
 import coil3.request.ImageRequest
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.my_hazards_title
+import geosentinel_mobile.shared.generated.resources.my_bookings_title
+import androidx.compose.material.icons.filled.DateRange
 import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.auth_no_account
 import geosentinel_mobile.shared.generated.resources.auth_password_rules
@@ -158,9 +166,8 @@ import it.unical.geosentinel_mobile.core.ui.GroupDivider
 import it.unical.geosentinel_mobile.core.ui.GroupHeader
 import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
 import it.unical.geosentinel_mobile.core.ui.GroupRow
-import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.pageBottomInset
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
+import it.unical.geosentinel_mobile.core.ui.alpineBackdrop
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
@@ -194,6 +201,8 @@ fun ProfileScreen(
     onSetPassword: (email: String) -> Unit,
     onMfa: () -> Unit,
     onMyHazards: () -> Unit,
+    // null per chi non vede i rifugi
+    onMyBookings: (() -> Unit)?,
     themeMode: ThemeMode,
     onThemeModeSelected: (ThemeMode) -> Unit,
 ) {
@@ -216,38 +225,54 @@ fun ProfileScreen(
             .verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        ForestHeader(Modifier.fillMaxWidth().height(PageHeaderHeight))
+        // Terza passata (11/2026), come la scheda dell'ID Apple: in testata il cielo e le creste delle altre schede, e lì
+        // in mezzo chi sei (foto grande, nome, ruolo ed email), centrato. Da ospite la testata resta vuota e sotto c'è
+        // il blocco per entrare
+        val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
+        // il paesaggio ha un'altezza fissa dietro: la foto ci sta sopra, nome ed email sotto, sul fondo pulito
+        Box(Modifier.fillMaxWidth()) {
+        Box(Modifier.fillMaxWidth().height(topInset + 150.dp).alpineBackdrop())
+        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
+            Spacer(Modifier.height(if (session is SessionState.LoggedIn) 40.dp else 72.dp))
+            if (session is SessionState.LoggedIn) {
+                val encoder = koinInject<ImageEncoder>()
+                // quadrata da 512 px: il cerchio la mostra a 96 dp, anche sugli schermi più densi
+                val pickPhoto = rememberPhotoPicker { picked ->
+                    viewModel.uploadAvatar { encoder.toJpeg(picked, maxSidePx = AvatarSidePx, squareCrop = true) }
+                }
+                ProfileAvatar(profile, busy = ui.avatarBusy, onPick = pickPhoto, onRemove = viewModel::removeAvatar)
+                Spacer(Modifier.size(12.dp))
+                Text(
+                    text = profile?.displayName ?: stringResource(session.role.label()),
+                    style = MaterialTheme.typography.headlineMedium,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 20.dp).semantics { heading() },
+                )
+                // senza profilo (avvio offline) niente sottotitolo
+                if (profile != null) {
+                    Text(
+                        stringResource(profile.role.label()) + " · " + profile.email,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
+                    )
+                }
+                Spacer(Modifier.size(8.dp))
+            }
+        }
+        }
         Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
             if (session is SessionState.LoggedIn) {
-                // Chi sei: iniziale e nome, sotto ruolo ed email
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    val encoder = koinInject<ImageEncoder>()
-                    // quadrata da 512 px: il cerchio la mostra a 56 dp, anche sugli schermi più densi
-                    val pickPhoto = rememberPhotoPicker { picked ->
-                        viewModel.uploadAvatar { encoder.toJpeg(picked, maxSidePx = AvatarSidePx, squareCrop = true) }
-                    }
-                    ProfileAvatar(profile, busy = ui.avatarBusy, onPick = pickPhoto, onRemove = viewModel::removeAvatar)
-                    Spacer(Modifier.size(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(
-                            text = profile?.displayName ?: stringResource(session.role.label()),
-                            style = MaterialTheme.typography.headlineLarge,
-                            modifier = Modifier.semantics { heading() },
-                        )
-                        // senza profilo (avvio offline) niente sottotitolo
-                        if (profile != null) {
-                            Text(
-                                stringResource(profile.role.label()) + " · " + profile.email,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                    }
-                }
                 // Gruppi nell'ordine d'uso: quello che hai fatto, chi sei, come appare l'app; uscire e cancellarsi in fondo
                 GroupHeader(stringResource(Res.string.profile_activity_section))
                 GroupCard {
                     GroupRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, icon = Icons.Filled.Warning)
+                    if (onMyBookings != null) {
+                        GroupDivider(GroupIconIndent)
+                        GroupRow(stringResource(Res.string.my_bookings_title), onClick = onMyBookings, icon = Icons.Filled.DateRange)
+                    }
                 }
                 GroupHeader(stringResource(Res.string.profile_account_section))
                 GroupCard {
@@ -487,6 +512,8 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
 // ---- Mattoncini ----
 
 private const val AvatarSidePx = 512
+// La foto in testata al Profilo, grande come quella dell'ID Apple
+private val AvatarSize = 96.dp
 
 /**
  * La foto profilo (M11), o l'iniziale se non c'è. Un tocco apre il menu: scegli una foto, e rimuovila se c'è. Durante
@@ -501,14 +528,14 @@ private fun ProfileAvatar(profile: UserProfile?, busy: Boolean, onPick: () -> Un
         Box(
             contentAlignment = Alignment.Center,
             modifier = Modifier
-                .size(56.dp)
+                .size(AvatarSize)
                 .clip(CircleShape)
                 .clickable(enabled = profile != null && !busy, role = Role.Button) { menu = true }
                 .semantics { contentDescription = label },
         ) {
             Monogram(profile?.displayName)
             profile?.avatarMediaId?.let { AvatarPhoto(it) }
-            if (busy) CircularProgressIndicator(Modifier.size(56.dp), strokeWidth = 3.dp)
+            if (busy) CircularProgressIndicator(Modifier.size(AvatarSize), strokeWidth = 3.dp)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
             DropdownMenuItem(text = { Text(stringResource(Res.string.profile_photo_choose)) }, onClick = {
@@ -531,7 +558,7 @@ private fun AvatarPhoto(mediaId: String) {
     val signed = rememberSignedUrl(koinInject<MediaRepository>(), mediaId)
     val scope = rememberCoroutineScope()
     val context = LocalPlatformContext.current
-    val sidePx = with(LocalDensity.current) { 56.dp.roundToPx() }
+    val sidePx = with(LocalDensity.current) { AvatarSize.roundToPx() }
     val url = signed.url ?: return
     val request = remember(url) {
         ImageRequest.Builder(context)
@@ -546,20 +573,20 @@ private fun AvatarPhoto(mediaId: String) {
         contentDescription = null,
         contentScale = ContentScale.Crop,
         onError = { scope.launch { signed.onDownloadFailed() } },
-        modifier = Modifier.size(56.dp).clip(CircleShape),
+        modifier = Modifier.size(AvatarSize).clip(CircleShape),
     )
 }
 
 // Iniziale del nome su un tondo color muschio; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
 @Composable
-private fun Monogram(name: String?, modifier: Modifier = Modifier, size: Dp = 56.dp) {
+private fun Monogram(name: String?, modifier: Modifier = Modifier, size: Dp = AvatarSize) {
     val initial = name?.trim()?.firstOrNull()?.uppercaseChar()
     Box(
         modifier = modifier.size(size).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
         if (initial != null) {
-            Text(initial.toString(), style = MaterialTheme.typography.headlineSmall, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(initial.toString(), style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
         } else {
             Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(size / 2))
         }

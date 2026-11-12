@@ -129,6 +129,7 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (e
         @OptIn(ExperimentalComposeUiApi::class)
         BackHandler(onBack = viewModel::onMfaCancelled)
         FormScaffold(
+            brand = true,
             onBack = viewModel::onMfaCancelled,
             title = Res.string.mfa_login_title,
             body = if (state.recoveryCode) Res.string.mfa_login_body_recovery else Res.string.mfa_login_body,
@@ -147,6 +148,7 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (e
     }
 
     FormScaffold(
+        brand = true,
         onBack = onBack,
         title = Res.string.auth_login_title,
         body = Res.string.auth_login_body,
@@ -207,6 +209,7 @@ fun PasswordResetScreen(email: String, onBack: () -> Unit, onDone: () -> Unit) {
 
     when (state.step) {
         ResetStep.EMAIL -> FormScaffold(
+            brand = true,
             onBack = onBack,
             title = Res.string.reset_email_title,
             body = Res.string.reset_email_body,
@@ -226,6 +229,7 @@ fun PasswordResetScreen(email: String, onBack: () -> Unit, onDone: () -> Unit) {
             )
         }
         ResetStep.CODE -> FormScaffold(
+            brand = true,
             onBack = viewModel::changeEmail,
             title = Res.string.reset_code_title,
             body = Res.string.reset_code_body,
@@ -262,6 +266,7 @@ fun PasswordResetScreen(email: String, onBack: () -> Unit, onDone: () -> Unit) {
             }
         }
         ResetStep.DONE -> FormScaffold(
+            brand = true,
             onBack = onDone,
             title = Res.string.reset_done_title,
             body = Res.string.reset_done_body,
@@ -282,6 +287,7 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
     var pickingDate by rememberSaveable { mutableStateOf(false) }
 
     FormScaffold(
+        brand = true,
         onBack = onBack,
         title = Res.string.auth_register_title,
         body = Res.string.auth_register_body,

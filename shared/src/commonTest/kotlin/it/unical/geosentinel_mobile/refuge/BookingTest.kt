@@ -23,6 +23,10 @@ import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
 import it.unical.geosentinel_mobile.refuge.ui.BookRefugeViewModel
 import it.unical.geosentinel_mobile.refuge.ui.BookingDone
 import it.unical.geosentinel_mobile.refuge.ui.MyBookingsViewModel
+import it.unical.geosentinel_mobile.refuge.ui.sections
+import it.unical.geosentinel_mobile.refuge.data.NightAvailability
+import kotlinx.datetime.DatePeriod
+import kotlinx.datetime.plus
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.test.StandardTestDispatcher
@@ -374,6 +378,133 @@ class BookingTest {
         val viewModel = form(client().first)
 
         assertFalse("2026" in viewModel.state.value.toString())
+    }
+
+    // ---- Calendario del foglio "Prenota" (redesign 11/2026) ----
+
+    // posti per notte: 8 tranne quelle in [full]; si ricorda da dove ha chiesto
+    private val pagesAsked = mutableListOf<LocalDate>()
+
+    private fun sheet(bookings: BookingRepository, capacity: Int = 4, full: Set<LocalDate> = emptySet()) =
+        BookRefugeViewModel(
+            "r1",
+            capacity = capacity,
+            bookings = bookings,
+            ownerId = { "u1" },
+            today = { today },
+            loadNights = { from, nights ->
+                pagesAsked += from
+                Result.success(List(nights) { from.plus(DatePeriod(days = it)).let { d -> NightAvailability(d, if (d in full) 0 else 8) } })
+            },
+        )
+
+    private fun day(n: Int) = today.plus(DatePeriod(days = n))
+
+    @Test
+    fun `arrivo e partenza con due tocchi`() = runTest {
+        val viewModel = sheet(client().first)
+        viewModel.open(day(2))
+        advanceUntilIdle()
+
+        viewModel.onDayTapped(day(5))
+        assertEquals(day(2), viewModel.state.value.arrival)
+        assertEquals(3, viewModel.state.value.nights)
+        assertFalse(viewModel.state.value.pickingDeparture)
+        // terzo tocco: si ricomincia dall'arrivo
+        viewModel.onDayTapped(day(7))
+        assertEquals(day(7), viewModel.state.value.arrival)
+        assertEquals(1, viewModel.state.value.nights)
+    }
+
+    @Test
+    fun `una notte piena in mezzo non fa da partenza ma diventa un nuovo arrivo`() = runTest {
+        val viewModel = sheet(client().first, full = setOf(day(3)))
+        viewModel.open(day(1))
+        advanceUntilIdle()
+
+        viewModel.onDayTapped(day(5))
+        assertEquals(day(5), viewModel.state.value.arrival)
+        assertEquals(1, viewModel.state.value.nights)
+        // la notte piena non si sceglie come arrivo
+        viewModel.onDayTapped(day(3))
+        assertEquals(day(5), viewModel.state.value.arrival)
+    }
+
+    @Test
+    fun `al massimo 14 notti e mai giorni passati`() = runTest {
+        val viewModel = sheet(client().first)
+        viewModel.open(day(0))
+        advanceUntilIdle()
+
+        viewModel.onDayTapped(day(15))
+        assertEquals(day(15), viewModel.state.value.arrival, "15 notti: diventa un nuovo arrivo")
+        viewModel.onDayTapped(today.plus(DatePeriod(days = -1)))
+        assertEquals(day(15), viewModel.state.value.arrival)
+    }
+
+    @Test
+    fun `senza giorno l'arrivo è la prima notte libera`() = runTest {
+        val viewModel = sheet(client().first, full = setOf(day(0), day(1)))
+        viewModel.open(null)
+        advanceUntilIdle()
+
+        assertEquals(day(2), viewModel.state.value.arrival)
+    }
+
+    @Test
+    fun `le persone si fermano ai posti della notte più piena e a 20`() = runTest {
+        val (bookings) = client()
+        val big = sheet(bookings, capacity = 60)
+        big.onGuestsChange(50)
+        assertEquals(20, big.state.value.guests)
+
+        val viewModel = BookRefugeViewModel(
+            "r1",
+            10,
+            bookings,
+            ownerId = { "u1" },
+            today = { today },
+            loadNights = { from, nights -> Result.success(List(nights) { NightAvailability(from.plus(DatePeriod(days = it)), if (it == 1) 3 else 8) }) },
+        )
+        viewModel.open(day(0))
+        advanceUntilIdle()
+        viewModel.onDayTapped(day(3)) // tre notti: la seconda ha 3 posti
+        viewModel.onGuestsChange(9)
+        assertEquals(3, viewModel.state.value.guests)
+    }
+
+    @Test
+    fun `le pagine si chiedono una volta e mai nel passato`() = runTest {
+        val viewModel = sheet(client().first)
+        viewModel.open(day(0))
+        advanceUntilIdle()
+        viewModel.onPage(forward = true)
+        advanceUntilIdle()
+        viewModel.onPage(forward = false)
+        advanceUntilIdle()
+        viewModel.onPage(forward = false) // prima di questa settimana: non si va
+        advanceUntilIdle()
+
+        assertEquals(listOf(today, day(14)), pagesAsked)
+    }
+
+    @Test
+    fun `prenotazioni divise in prossimo soggiorno in arrivo e passate`() {
+        fun booking(id: String, checkIn: LocalDate, checkOut: LocalDate, status: BookingResponse.Status = BookingResponse.Status.CONFIRMED) =
+            BookingResponse(checkIn = checkIn, checkOut = checkOut, guests = 1, id = id, refugeId = "r1", status = status, userId = "u1")
+        val list = listOf(
+            booking("far", day(20), day(22)),
+            booking("near", day(3), day(4)),
+            booking("cancelled", day(5), day(6), BookingResponse.Status.CANCELLED),
+            booking("past", day(-10), day(-8)),
+            booking("now", day(-1), day(1)), // in corso
+        )
+
+        val sections = list.sections(today)
+
+        assertEquals("now", sections.next?.id)
+        assertEquals(listOf("near", "far"), sections.upcoming.map { it.id })
+        assertEquals(listOf("cancelled", "past"), sections.past.map { it.id })
     }
 
     // ---- Le mie prenotazioni ----

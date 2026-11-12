@@ -61,6 +61,7 @@ import androidx.compose.ui.semantics.role
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -287,7 +288,8 @@ private fun Body(text: String, modifier: Modifier = Modifier) {
 
 @Composable
 private fun StatusTitle(text: String) {
-    Text(text, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.SemiBold)
+    // 26 sp fissi: la schermata SOS non segue la scala ridotta dei titoli (redesign)
+    Text(text, style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 30.sp), fontWeight = FontWeight.SemiBold)
 }
 
 @Composable

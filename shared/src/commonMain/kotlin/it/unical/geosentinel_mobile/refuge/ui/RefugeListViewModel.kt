@@ -2,7 +2,10 @@ package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import it.unical.geosentinel_mobile.api.model.MediaResponse
 import it.unical.geosentinel_mobile.api.model.RefugeResponse
+import it.unical.geosentinel_mobile.media.data.MediaRepository
+import kotlinx.coroutines.flow.update
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
@@ -26,10 +29,27 @@ sealed interface RefugeList {
  * Scheda Rifugi (M5.1): i rifugi entro 50 km, dal più vicino. Il punto lo sceglie la schermata, che ha il provider della
  * posizione: la posizione dell'utente se c'è già il permesso, altrimenti l'area di partenza della mappa.
  */
-class RefugeListViewModel(private val refuges: RefugeRepository) : ViewModel() {
+class RefugeListViewModel(private val refuges: RefugeRepository, private val media: MediaRepository? = null) : ViewModel() {
 
     private val _state = MutableStateFlow<RefugeList>(RefugeList.Loading)
     val state: StateFlow<RefugeList> = _state.asStateFlow()
+
+    // la prima foto di ogni rifugio per la miniatura della riga (null = senza foto). Il contratto non la dà nella
+    // lista: si chiede solo per le righe che entrano in vista, una volta per rifugio
+    private val _covers = MutableStateFlow<Map<String, MediaResponse?>>(emptyMap())
+    val covers: StateFlow<Map<String, MediaResponse?>> = _covers.asStateFlow()
+    private val coversRequested = mutableSetOf<String>()
+
+    fun loadCover(refugeId: String) {
+        val media = media ?: return
+        if (!coversRequested.add(refugeId)) return
+        viewModelScope.launch {
+            media.photosOfRefuge(refugeId)
+                .onSuccess { list -> _covers.update { it + (refugeId to list.firstOrNull()) } }
+                // un errore lascia la tessera senza foto; si riprova alla prossima apertura della riga
+                .onFailure { coversRequested.remove(refugeId) }
+        }
+    }
 
     private var last: Pair<GeoPoint, Boolean>? = null
     private var job: Job? = null

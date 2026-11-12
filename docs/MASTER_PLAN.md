@@ -16,6 +16,11 @@
 > Il dettaglio giorno per giorno è nei singoli task e in `CLAUDE.md`. Aperti: prove a mano sul simulatore (Mac), push
 > su iOS (APNs, serve un account Apple a pagamento), satellite nero su iPhone.
 > **Pianificate (18/10):** M10, verifica in due passaggi (su M8 del backend), e M11, foto profilo (su M9 del backend).
+> **10/11: adattamento all'ADR-0026 del backend** (audit della 2FA): codice email nello setup della verifica e codice
+> 2FA nel cambio password (M10.4, scritta da Claude su richiesta), 349 test host, provata sull'emulatore.
+> **12/11: redesign dell'interfaccia e della mappa** ("Dopo M11", in fondo a §5; scritto da Claude su richiesta):
+> stile Apple con l'atmosfera montana, foglio "Prenota" al posto della schermata, mappa tipo Apple Maps con rilievo
+> ombreggiato. §2 descrive lo stato nuovo. 358 test host, provato sull'emulatore; manca la prova su iPhone.
 
 ---
 
@@ -115,32 +120,42 @@ L'app si usa all'aperto: sole sullo schermo, guanti, batteria che cala, rete a t
   Ruoli usati: `background` sfondo, `surfaceContainerLowest` card, `surfaceContainer` barra in basso,
   `surfaceContainerHigh` menu, `surfaceContainerHighest` binari (es. selettore del tema), `primaryContainer`
   "muschio", `onSurfaceVariant` testo secondario, `outlineVariant` separatori.
-- **Colori** (03/10): pietra `EDF0E9` e bosco di notte `0D1411` come sfondi, card un passo sopra (`FAFBF7` / `151E19`)
-  con un filo di bordo `outlineVariant`, accento verde abete `1F4535` (chiaro) e lichene `A9D3B6` (scuro). Il **rosso (`D32F2F`) è riservato all'SOS, ai pericoli `CRITICAL` e ai sentieri `CLOSED`**, così il pulsante di
-  emergenza non si confonde con nient'altro; gli **errori** (form, rete) usano la **prugna** del ruolo `error` (A19).
-  Stato dei sentieri: `OPEN` verde, `WARNING` ambra (`B45309`), `CLOSED` rosso, sempre con un'icona o un'etichetta
-  oltre al colore (per chi non distingue i colori).
-- **Forme e testo:** card a 20 dp, barra a 28 dp. Titoli (`headline*`) in Barlow Semi Condensed SemiBold, il semi-condensato
-  dei cartelli; tutto il resto in Atkinson Hyperlegible Next (corpo 15–17 sp), leggibile al sole. Tutti i ruoli di
-  `Typography` sono definiti, così nessun testo ricade su Roboto/SF. Ombre quasi assenti (barra 3 dp, SOS 4 dp).
-- **Testata `ForestHeader`** (03/10, secondo giro): paesaggio a strati di carta che arriva sotto la barra di stato.
-  Cielo color muschio con le curve di livello appena accennate (`contourPaths`: rilievo inventato tagliato con marching
-  squares, una direttrice ogni cinque), due creste più chiare con la distanza, una fascia fitta di abeti (il colore più
-  scuro) e il "terreno" nel colore dello sfondo, su cui poggia il contenuto. In chiaro gli strati scuriscono verso il verde
-  abete, in scuro verso il nero. In cima a stati vuoti, Profilo e form; mai sulla schermata SOS. Per questo il `NavHost`
-  non ha margine in alto: ogni schermata usa `WindowInsets.safeDrawing.only(Top)` per il suo contenuto.
+- **Colori** (redesign del 12/11, palette "Alba alpina"): superfici come quelle di iOS, cioè card bianche
+  (`FFFFFF` / `151D1A`) senza bordo sul fondo, che è nebbia calda `F2F1EC` di giorno e bosco blu-verde `0B1210` di
+  sera. Un solo accento: abete `24654A` (chiaro) e lichene `8BD3AB` (scuro), per azioni, selezione e valori "liberi";
+  muschio `DDEDE3` / `1B3428` per i contenitori morbidi. Il **rosso (`D32F2F`) è riservato all'SOS, ai pericoli
+  `CRITICAL` e ai sentieri `CLOSED`**, così il pulsante di emergenza non si confonde con nient'altro; gli **errori**
+  (form, rete) usano la **prugna** del ruolo `error` (A19). Stato dei sentieri: `OPEN` verde, `WARNING` ambra
+  (`B45309`, `E9A862` come testo nel tema scuro), `CLOSED` rosso, sempre con un simbolo e una parola oltre al colore.
+  Eccezioni ai colori del tema: `EmergencyRed`, il cielo della testata (`DawnLight` / `DawnDark`), i segnaposti
+  della mappa (`Marker*`, `LocationBlue`) e le anteprime del tipo di mappa.
+- **Forme e testo:** card e gruppi a 20 dp, fogli e isole a 28 dp, capsule per tutto ciò che si tocca. Scala di iOS:
+  titolo grande 34, titolo di pagina 28, numeri in evidenza 22, testo 17/15/13. Titoli e numeri in Barlow Semi
+  Condensed SemiBold (la voce dei cartelli); tutto il resto nel carattere di sistema (SF Pro su iPhone, Roboto su
+  Android), che segue le impostazioni del telefono. Due pesi, Regular e SemiBold; il Bold solo nell'SOS.
+- **Testata delle schede** (`alpineBackdrop`, `core/ui/ForestHeader.kt`): una fascia sopra il titolo grande con il
+  cielo d'alba che sfuma nel fondo, due creste e una fila di abeti velati di abete (di notte verso il nero). Il titolo
+  e il testo poggiano sempre sotto, sul fondo pulito. Il paesaggio pieno (`ForestHeader`, 200 dp) resta solo
+  nell'accesso, nella registrazione e nel reset della password; mai sulla schermata SOS. Il `NavHost` non ha margine
+  in alto: ogni schermata usa `WindowInsets.safeDrawing.only(Top)`.
+- **Pagine** (`core/ui/PageLayout.kt`): `LargeTitlePage`, cioè titolo grande che scorrendo si comprime in una barra
+  con il titolo piccolo (`CompactBar`, la stessa che compare su rifugio e sentiero quando la foto scorre via);
+  `SegmentedControl` per due o tre viste; `StickyActionBar` per l'azione fissa in basso, con una sfumatura al posto
+  del filo; righe in gruppi (`GroupCard`, `GroupRow` con l'icona bianca su tessera abete come nelle Impostazioni di
+  iOS); stati condivisi in `core/ui/States.kt` (`EmptyState`, `ErrorState`, sagome di caricamento). "Riduci
+  movimento" del sistema rispettato (`isReduceMotionEnabled`).
 - **Pulsanti** (03/10): una sola azione evidente per schermata, a tutta larghezza a capsula (`PrimaryPillButton`), e
   l'alternativa come link sotto ("Non hai un account? Registrati", `FooterLink`): niente due pulsanti grandi in competizione. Nei form l'azione principale e il link alternativo stanno in
   fondo, fissi, sopra la tastiera (zona del pollice). Indietro è un tondo da 48 dp in alto a sinistra.
 - **Movimento:** cambio di scheda con una dissolvenza breve; le schermate "spinte" (es. SOS) entrano da destra e la
   schermata sotto scivola via in parallasse. Ogni schermata ha uno **sfondo pieno**, altrimenti durante la
   transizione si vedono entrambe.
-- **Form** (M2.2, `core/ui/FormControls.kt`): campi come piccole card (`surfaceContainerLowest`, angoli da 20 dp)
-  con un bordo sottile `outlineVariant` che diventa `primary` (2 dp) col focus ed `error` con un errore; etichetta
-  sempre visibile, messaggio sotto il campo; errore generale in un riquadro `errorContainer` annunciato dagli screen
-  reader; invio con `PrimaryPillButton` (capsula). Nel Profilo da ospite due capsule compatte affiancate: "Accedi"
-  piena e "Registrati" solo bordo (`outline`, così il bordo si vede). I form nuovi (M2.3, M4) riusano questi
-  controlli.
+- **Form** (M2.2, rifatti il 12/11, `core/ui/FormControls.kt`): `FormScaffold` con Indietro, titolo grande e una
+  riga di testo in alto, campi al centro, azione fissa in fondo sopra la tastiera (`StickyActionBar`) con l'errore
+  del server subito sopra. Campi come piccole card con un bordo sottile `outlineVariant` che diventa `primary` (2 dp)
+  col focus ed `error` con un errore; etichetta sempre visibile, messaggio sotto il campo. Azioni secondarie
+  (Chiama, Indicazioni) con `TonalPillButton` muschio da 48 dp. Nel Profilo da ospite un blocco solo: "Accedi con
+  email", "Continua con Google" e "Registrati" come link sotto.
 - **Contrasto alto** (almeno WCAG AA, AAA sul testo della mappa e sull'SOS): sotto il sole i grigi chiari spariscono.
 - **Bersagli grandi** (regola precisata il 02/10): **72 dp per le azioni d'emergenza** (pulsante SOS, "Chiama 112"),
   **56 dp per il pulsante d'invio dei form**, **48 dp minimo per tutto il resto** (es. le capsule Accedi/Registrati
@@ -172,20 +187,33 @@ Barra in basso, con le voci che dipendono dal ruolo:
 La barra è fluttuante (capsula staccata dai bordi), con la voce attiva su una pillola color muschio; al massimo 5
 voci, che vede tutte solo `ADMIN`. Dal 12/10 è un'isola sopra la mappa: la mappa le passa sotto fino al bordo (il
 `NavHost` non ha margine in basso sulla scheda Mappa, `MapScreen(bottomBar)` sposta controlli, card e attribuzione).
-Isola e controlli della mappa hanno lo stesso aspetto (`mapControlColor`, anello `outline` al 45%, ombra 6 dp): sul
-bosco scuro della mappa notturna il tono delle card non si distingueva. Zoom in una capsula sola; "Segnala" pieno nel
-verde del tema, l'unica azione evidente della mappa. Nei form l'errore del server sta sopra il pulsante d'invio
-(`FormScaffold(error)`), non in fondo ai campi.
-Struttura delle pagine (12/10, `core/ui/PageLayout.kt`): testata da 148 dp (160 nei form) con il titolo subito sotto
-(`PageHeader`, azione secondaria a destra del titolo come "Prenotazioni" in `HeaderPill`, una riga di contesto);
-righe in gruppi (`GroupCard` + `GroupRow` + `GroupDivider`, stile raggruppato delle impostazioni) invece di una card per
-riga; nelle schede il contenuto scorre sotto l'isola (`LocalBottomBarInset`, `pageBottomInset()`). Profilo in gruppi
-nell'ordine d'uso (Attività, Account, Aspetto) con Esci ed Elimina account insieme in fondo. Pagina del rifugio con
-"Chiama" e "Indicazioni" tonali subito sotto il titolo e l'attribuzione della mappa in testata chiusa.
-Stesso schema (12/10) per Allerte (link "Nuova squadra" sotto il titolo), Gestione (schede Segnalazioni | Ticket nello
-slot `below` di `PageHeader`), Le mie segnalazioni e Le mie prenotazioni. Le liste paginate restano una riga per item:
-`Modifier.groupedItem(first, last)` disegna il pezzo di card di ogni riga (angoli sulla prima e sull'ultima). La coda
-delle segnalazioni del gestore resta a card separate (foto e azioni per riga). Introduzioni delle liste in una riga.
+Isola e controlli della mappa hanno lo stesso aspetto (`mapControlColor`, anello `outline` al 45%, ombra tinta di
+verde, `islandShadow`). Nelle schede il contenuto scorre sotto l'isola (`LocalBottomBarInset`, `pageBottomInset()`).
+
+**Mappa** (rifatta il 12/11 sullo schema di Apple Maps):
+- un solo gruppo di comandi in alto a destra: tipo di mappa, la mia posizione e, per il gestore, il punto nuovo.
+  Niente +/−: si zooma con il pizzico o il doppio tocco;
+- in basso la barra "Vicino a te" su una riga, con dentro, a destra, "Segnala un pericolo" (tondo verde pieno,
+  l'unica azione piena della mappa oltre all'SOS); accanto l'SOS;
+- un POI toccato apre una scheda di luogo nello stesso posto: bollino della categoria, nome, tipo, X grigia,
+  "Apri il sentiero" a capsula;
+- stile stradale tipo Apple Maps (terra crema, boschi salvia, strade bianche, statali gialle; grafite di notte) con
+  rilievo ombreggiato e cime con nome e quota; POI come bollini colorati per categoria e rifugi come bollini verdi
+  più grandi, con il nome sotto da vicino; pallino della posizione blu con anello bianco (dettagli in M3 e in
+  "Dopo M11").
+
+**Schede e pagine** (12/11):
+- Rifugi: segmenti Esplora | Prenotazioni (`Route.MyBookings` e `Route.BookRefuge` non ci sono più). Esplora mostra
+  card con la foto grande (16:10), nome, quota, posti e distanza. Prenotazioni mostra il prossimo soggiorno come un
+  biglietto, poi in arrivo e passate; un tocco apre un foglio con le azioni;
+- pagina del rifugio: foto a tutta larghezza con il pannello che le sale sopra, disponibilità subito dopo il titolo
+  (ogni giorno apre "Prenota" con quell'arrivo), "Prenota" fisso in basso con i posti di stanotte. "Prenota" è un
+  foglio (`BookingSheet`) con un calendario a due settimane, le persone e la conferma nello stesso foglio;
+- sentiero: anteprima del percorso, nome, stato, tessere dei numeri, "Segnala un pericolo" fisso in basso;
+- Profilo come la scheda dell'ID Apple: foto da 96 dp, nome ed email al centro sotto la testata, poi i gruppi
+  Attività (con "Le mie prenotazioni"), Account, Aspetto, ed Esci ed Elimina account in fondo;
+- Allerte, Gestione, Le mie segnalazioni: titolo grande con la testata alpina, righe in gruppi. Le liste paginate
+  restano una riga per item (`Modifier.groupedItem(first, last)`); la coda del gestore resta a card separate.
 
 Il pulsante SOS è una capsula rossa con la scritta "SOS" (72 dp) sopra la mappa, visibile a tutti. Apre la
 schermata SOS, che si "spinge" sopra la mappa e ha il suo pulsante Indietro (su iPhone non c'è quello di sistema);
@@ -689,7 +717,8 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
 - Tipi di mappa (03/10, richiesta dopo M3.1): selettore "Tipo di mappa" (pulsante livelli, foglio dal basso, scelta
   salvata in DataStore da `trail/data/MapSettings`). Stili in `composeResources/files/map`, generati da
   `tools/map-styles/build_map_styles.py`, tutti gratuiti e senza chiave:
-  - **Stradale**: `liberty` di OpenFreeMap ricolorato con una palette tipo Google Maps, chiaro e scuro;
+  - **Stradale**: `liberty` di OpenFreeMap ricolorato con una palette tipo Google Maps, chiaro e scuro (dal 12/11
+    palette tipo Apple Maps con rilievo ombreggiato e cime: vedi "Dopo M11");
   - **Satellite**: Sentinel-2 cloudless 2016 di EOX (CC BY 4.0, 10 m, nitido fino allo zoom 15) con strade,
     sentieri ed etichette sopra;
   - **Topografica tolta** (03/10): OpenTopoMap serve tile PNG, che il motore di maplibre-compose 0.19 su Android
@@ -1722,6 +1751,31 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
   - [x] `commonTest`: la riga compare solo per `ADMIN`; 404 e 409 con i messaggi giusti; 403 gestito comunque.
   - [x] sull'emulatore con `admin@`: azzeramento di un account di prova → quell'account entra senza codice.
 
+**M10.4 Adattamento all'ADR-0026 del backend (10/11, scritto da Claude su richiesta)**
+- Il backend ha cambiato due contratti dopo l'audit della 2FA del 10/11 (`api/openapi.json` ricopiato, client
+  rigenerato):
+  - `enableMfa` richiede `emailCode`: lo setup manda un codice all'email dell'account (16 caratteri, 15 minuti).
+    Senza, chi registra l'email di un altro potrebbe attivare la verifica e chiudere fuori il titolare;
+  - `changeMyPassword` accetta `mfaCode`, obbligatorio con la verifica attiva (422 `invalid-mfa-code`, mai 401).
+- Setup (`MfaViewModel`, `MfaScreen`): campo "Codice ricevuto per email" sotto la chiave. Maiuscole automatiche,
+  trattini e spazi ammessi; "Attiva la verifica" solo con 6 cifre + 16 caratteri. Il server non dice quale dei due
+  codici è sbagliato: un solo messaggio (`error_mfa_setup_codes_wrong`). Se il codice non arriva, Indietro e di nuovo
+  Attiva (cambiano anche la chiave e il codice).
+- Cambio password (`ChangePasswordViewModel`, `ChangePasswordScreen`): con `mfaEnabled` compare "Codice di verifica"
+  (TOTP o codice di recupero, testo libero). Vuoto → errore locale senza richiesta; `invalid-mfa-code` → errore sul
+  campo, e il campo compare anche se la verifica l'ha attivata un altro dispositivo. `SessionManager.changePassword`
+  ha il parametro `mfaCode`.
+- Checkpoint:
+  - [x] `MfaViewModelTest`: senza codice email non si invia; codice email sbagliato → messaggio unico; minuscolo senza
+    trattino → attivata; il codice non finisce nel `toString`.
+  - [x] `ProfileViewModelsTest`: con la verifica attiva, codice assente (nessuna richiesta), sbagliato, giusto.
+  - [x] `./gradlew :apiClient:checkApiContract :shared:testAndroidHostTest :androidApp:assembleDebug` verde (349 test).
+  - [x] sull'emulatore (10/11), email su Mailpit: codice email sbagliato → messaggio sul campo; giusto (scritto
+    minuscolo) → codici di recupero; cambio password vuoto, sbagliato e con un codice di recupero → password cambiata
+    e sessione tenuta. Nota per le prove: `adb shell input text` a raffica perde caratteri nel campo che converte in
+    maiuscolo; a velocità umana arrivano tutti.
+  - [ ] sull'iPhone (non provato: serve la build da `xtool`).
+
 ### Milestone 11: foto profilo
 
 > **Scritta il 19/10 da Claude su richiesta**, verificata sull'emulatore (JPEG 512×512 senza EXIF, seconda foto → la
@@ -1751,6 +1805,73 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
   - [x] sull'emulatore: foto scelta → avatar aggiornato; seconda foto → nel bucket di MinIO resta un solo oggetto;
     rimozione → di nuovo l'iniziale; dopo il logout la foto non è nella cache su disco.
   - [x] foto HEIC dall'iPhone → JPEG quadrato senza EXIF (19/10).
+
+### Dopo M11 (12/11): redesign dell'interfaccia e della mappa
+
+> Scritto da Claude su richiesta ("rifai da capo la UI/UX, stile Apple, ma che restino le vibes montane; l'icona non
+> si tocca"). Piano operativo e fasi in [`docs/UI_REDESIGN_PLAN.md`](UI_REDESIGN_PLAN.md); lo stato finale è in §2.
+> Strato `data/`, contratto API, outbox, regole di sessione e logica dell'SOS non sono cambiati.
+
+**R1 Sistema visivo e componenti comuni**
+- Palette "Alba alpina" (`Color.kt`), scala tipografica di iOS con il carattere di sistema per il testo e Barlow per
+  titoli e numeri (`Theme.kt`).
+- `core/ui`:
+  - `LargeTitlePage`, `CompactBar`, `SegmentedControl`, `StickyActionBar` e `MetaLine` in `PageLayout.kt`;
+  - `EmptyState`, `ErrorState` e le sagome di caricamento in `States.kt`;
+  - `isReduceMotionEnabled` (expect/actual), `TonalPillButton` e il nuovo `FormScaffold`;
+  - la testata `alpineBackdrop`.
+- `GroupCard` senza bordo, `GroupRow` con l'icona su tessera piena, `TrailStateBadge` senza capsula.
+
+**R2 Rifugi**
+- Foglio "Prenota" (`BookingSheet`, calendario a due settimane), che sostituisce `BookRefugeScreen` e il dialogo del
+  calendario:
+  - le notti senza posti per le persone scelte non si possono selezionare;
+  - al massimo 14 notti e `min(capacità, 20)` persone, come dice il contratto;
+  - la conferma avviene nello stesso foglio;
+  - il ViewModel vive con la pagina, quindi chiudere il foglio non annulla un invio.
+- Scheda Rifugi con i segmenti Esplora | Prenotazioni (via `Route.MyBookings` e `Route.BookRefuge`):
+  - card con la foto, chiesta una volta sola per ogni rifugio che si vede;
+  - prenotazioni divise in prossimo, in arrivo e passate, con un foglio di azioni per ognuna;
+  - "Le mie prenotazioni" nel Profilo.
+- Pagina del rifugio: foto con il pannello sopra, disponibilità che apre "Prenota", servizi in griglia, gestione in
+  fondo.
+
+**R3 Resto dell'app**
+- Profilo come la scheda dell'ID Apple, con la foto da 96 dp.
+- Mappa, sentiero, form, Allerte, Gestione e Le mie segnalazioni sullo stesso sistema.
+- Sono spariti `Message` e `RetryMessage` privati, la riga di sottotitolo di "Vicino a te" e i pulsanti dello zoom.
+
+**R4 Mappa sullo schema di Apple Maps**
+- Stile (`tools/map-styles/build_map_styles.py`, JSON rigenerati):
+  - palette tipo Apple Maps, chiara e scura;
+  - rilievo ombreggiato dalle Mapzen Terrain Tiles su AWS Open Data, raster-dem terrarium gratuito e senza chiave,
+    citato nell'attribuzione. Su Android si disegna, a differenza delle mappe raster PNG come OpenTopoMap;
+  - cime (`mountain_peak`) con nome e quota in corsivo marrone, da zoom 10, anche sul satellite;
+  - tolti i POI generici di OpenStreetMap e il rilievo di Natural Earth.
+- Segnaposti (`TrailMapLayers.kt`, `RefugeMapLayers.kt`):
+  - bollini Apple con colore della categoria, simbolo bianco, anello bianco e ombra: bivacco legno, sorgente blu,
+    panorama viola (simbolo `Peak`, nuovo), zona pericolosa ambra, attrezzatura grigia, informazioni ardesia;
+  - rifugi in verde abete, più grandi;
+  - nomi sotto i bollini con il carattere del server dei glifi di OpenFreeMap (`Noto Sans`), facoltativi nelle
+    collisioni: i POI da zoom 13, i rifugi da 11;
+  - pallino della posizione blu `0A84FF` con l'anello bianco;
+  - nel dettaglio del sentiero i punti di interesse usano gli stessi bollini.
+- Schermata:
+  - un gruppo di comandi in alto a destra;
+  - "Segnala" dentro la barra "Vicino a te";
+  - scheda del luogo per il POI toccato.
+
+**Checkpoint**
+- [x] `./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug` verde, 358 test (`BookingSheetTest` al posto
+  di `BookRefugeScreenTest`; regole del calendario in `BookingTest`).
+- [x] Emulatore, chiaro e scuro, con il backend locale: mappa da lontano (zoom 9,5, rilievo e bollini) e da vicino
+  (zoom 14, nomi, "Monte Scuro 1633 m", pallino), satellite, scheda del POI, Rifugi, pagina del rifugio con la barra
+  compatta scorrendo, foglio "Prenota", sentiero, Profilo da loggato e da ospite, Le mie segnalazioni, un form,
+  schermata SOS.
+- [ ] Testo al 200% e TalkBack su calendario e fogli.
+- [ ] Accesso, registrazione e reset, le schermate del gestore e dell'operatore dopo il redesign.
+- [ ] Job `ios` della CI e prova sull'iPhone: fogli, gesto indietro, safe area, rilievo e nomi sulla mappa (Metal).
+- [ ] Review del redesign (§6).
 
 ---
 

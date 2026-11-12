@@ -28,6 +28,23 @@ import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.location.toPositions
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.em
+import androidx.compose.ui.unit.sp
+import it.unical.geosentinel_mobile.core.ui.theme.InkDark
+import it.unical.geosentinel_mobile.core.ui.theme.InkLight
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerDanger
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerEquipment
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerInfo
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerOther
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerShelter
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerViewpoint
+import it.unical.geosentinel_mobile.core.ui.theme.MarkerWater
+import org.maplibre.compose.expressions.dsl.asString
+import org.maplibre.compose.expressions.dsl.format
+import org.maplibre.compose.expressions.dsl.span
+import org.maplibre.compose.expressions.dsl.textOffset
+import org.maplibre.compose.expressions.value.SymbolAnchor
 import it.unical.geosentinel_mobile.core.ui.theme.TrailClosed
 import it.unical.geosentinel_mobile.core.ui.theme.TrailOpen
 import it.unical.geosentinel_mobile.core.ui.theme.TrailWarning
@@ -143,10 +160,14 @@ private fun PathLayers(id: String, source: GeoJsonSource, color: Color, casing: 
     )
 }
 
-/** I POI: un tondo da card con il simbolo del tipo, cliccabili. Il simbolo dice il tipo anche senza colori. */
+/**
+ * I POI come le categorie di Apple Maps (11/2026): bollino pieno nel colore del tipo, simbolo bianco, anello bianco e
+ * un'ombra leggera; da vicino il nome sotto. Il simbolo dice il tipo anche senza colori. Cliccabili.
+ * [label] e [halo]: testo dei nomi e il suo alone (scuro su chiaro di giorno, il contrario di notte).
+ */
 @Composable
 @MaplibreComposable
-fun PoiMarkers(pois: List<PoiResponse>, background: Color, outline: Color, symbol: Color, onPoiClick: (String) -> Unit) {
+fun PoiMarkers(pois: List<PoiResponse>, label: Color, halo: Color, onPoiClick: (String) -> Unit) {
     val features = remember(pois) {
         pois.map { poi ->
             Feature(
@@ -154,19 +175,14 @@ fun PoiMarkers(pois: List<PoiResponse>, background: Color, outline: Color, symbo
                 properties = buildJsonObject {
                     put(IdProperty, poi.id)
                     put("type", poi.type.value)
+                    put(NameProperty, poi.name)
                 },
             )
         }
     }
     val source = rememberGeoJsonSource(GeoJsonData.Features(FeatureCollection(features)))
     val onClick = remember(onPoiClick) { idClickHandler(onPoiClick) }
-    val shelter = rememberBadge(Icons.Filled.Home, background, outline, symbol)
-    val water = rememberBadge(WaterDrop, background, outline, symbol)
-    val viewpoint = rememberBadge(Icons.Filled.Star, background, outline, symbol)
-    val danger = rememberBadge(Icons.Filled.Warning, background, outline, symbol)
-    val equipment = rememberBadge(Icons.Filled.Build, background, outline, symbol)
-    val info = rememberBadge(Icons.Filled.Info, background, outline, symbol)
-    val other = rememberBadge(Icons.Filled.Place, background, outline, symbol)
+    val badges = PoiResponse.Type.entries.associateWith { type -> rememberBadge(type.icon(), type.markerColor()) }
     val from = TrailMapViewModel.MinPoiZoom
     SymbolLayer(
         id = "poi",
@@ -174,71 +190,129 @@ fun PoiMarkers(pois: List<PoiResponse>, background: Color, outline: Color, symbo
         minZoom = from.toFloat(),
         iconImage = switch(
             feature["type"],
-            case(PoiResponse.Type.SHELTER.value, image(shelter, PoiBadge)),
-            case(PoiResponse.Type.WATER_SOURCE.value, image(water, PoiBadge)),
-            case(PoiResponse.Type.VIEWPOINT.value, image(viewpoint, PoiBadge)),
-            case(PoiResponse.Type.DANGER_ZONE.value, image(danger, PoiBadge)),
-            case(PoiResponse.Type.EQUIPMENT_POINT.value, image(equipment, PoiBadge)),
-            case(PoiResponse.Type.INFORMATION.value, image(info, PoiBadge)),
-            fallback = image(other, PoiBadge),
+            *PoiResponse.Type.entries.filter { it != PoiResponse.Type.unknown_default_open_api }
+                .map { type -> case(type.value, image(badges.getValue(type), PoiBadge)) }.toTypedArray(),
+            fallback = image(badges.getValue(PoiResponse.Type.unknown_default_open_api), PoiBadge),
         ),
         // più piccoli da lontano, pieni da vicino
-        iconSize = interpolate(linear(), zoom(), from to const(0.65f), 14 to const(1f)),
+        iconSize = interpolate(linear(), zoom(), from to const(0.7f), 14 to const(1f)),
         iconOpacity = fadeInFrom(from),
         // Collisioni: un POI che coprirebbe un altro simbolo (o un rifugio, che ha la precedenza) si nasconde, con una
-        // dissolvenza, e torna avvicinandosi. Prima tutti sovrapposti: con centinaia di POI non si capiva niente
+        // dissolvenza, e torna avvicinandosi. Il nome è facoltativo: se non c'è posto resta il bollino
         iconAllowOverlap = const(false),
         iconIgnorePlacement = const(false),
         onClick = onClick,
         hitPadding = 6.dp,
+        textField = format(span(feature[NameProperty].asString())),
+        textFont = MapFont,
+        textSize = const(11.sp),
+        textColor = const(label),
+        textHaloColor = const(halo),
+        textHaloWidth = const(1.5.dp),
+        textAnchor = const(SymbolAnchor.Top),
+        textOffset = textOffset(0.em, 1.4.em),
+        textMaxWidth = const(8.em),
+        textOptional = const(true),
+        // i nomi solo da vicino, in dissolvenza
+        textOpacity = fadeInFrom(PoiLabelZoom),
     )
 }
 
-private val PoiBadge = DpSize(28.dp, 28.dp)
+private val PoiBadge = DpSize(30.dp, 30.dp)
+private const val NameProperty = "name"
+private const val PoiLabelZoom = 13.0
+
+/** Testo e alone dei nomi sopra la mappa: dipendono dalla mappa (satellite e notte scuri), non dal tema. */
+internal fun mapLabelInk(mapIsDark: Boolean): Color = if (mapIsDark) InkDark else InkLight
+internal fun mapLabelHalo(mapIsDark: Boolean): Color = if (mapIsDark) Color.Black.copy(alpha = 0.75f) else Color.White
+
+/** Il carattere dei nomi sulla mappa: quello che il server dei glifi di OpenFreeMap ha (lo stesso dello stile). */
+internal val MapFont = const(listOf("Noto Sans Regular"))
 
 /**
- * Un "bollino" da mappa: tondo pieno con un filo di bordo e il simbolo al centro, in un'immagine sola. Con il tondo
- * in un CircleLayer e il simbolo in un SymbolLayer le collisioni non funzionavano (i cerchi non ne hanno): così il
- * bollino intero si nasconde quando si sovrappone. Lo usano anche i rifugi (RefugeMapLayers).
+ * Un "bollino" da mappa nello stile di Apple Maps: tondo pieno nel colore della categoria, anello bianco, simbolo
+ * bianco e un'ombra morbida sotto, in un'immagine sola (così il bollino intero partecipa alle collisioni). Lo usano
+ * anche i rifugi (RefugeMapLayers).
  */
 @Composable
-internal fun rememberBadge(icon: ImageVector, fill: Color, ring: Color, tint: Color, ringWidth: Dp = 1.5.dp, glyphFraction: Float = 0.62f): Painter {
+internal fun rememberBadge(icon: ImageVector, fill: Color, glyphFraction: Float = 0.56f): Painter {
     val glyph = rememberVectorPainter(icon)
-    return remember(glyph, fill, ring, tint, ringWidth, glyphFraction) { BadgePainter(glyph, fill, ring, tint, ringWidth, glyphFraction) }
+    return remember(glyph, fill, glyphFraction) { BadgePainter(glyph, fill, glyphFraction) }
 }
 
-private class BadgePainter(
-    private val glyph: Painter,
-    private val fill: Color,
-    private val ring: Color,
-    private val tint: Color,
-    private val ringWidth: Dp,
-    private val glyphFraction: Float,
-) : Painter() {
+private class BadgePainter(private val glyph: Painter, private val fill: Color, private val glyphFraction: Float) : Painter() {
     override val intrinsicSize: Size get() = Size.Unspecified
 
     override fun DrawScope.onDraw() {
-        val diameter = size.minDimension
-        val ringPx = ringWidth.toPx()
-        val radius = diameter / 2 - ringPx / 2
-        drawCircle(fill, radius)
-        drawCircle(ring, radius, style = Stroke(ringPx))
-        val glyphSize = diameter * glyphFraction
-        translate((size.width - glyphSize) / 2, (size.height - glyphSize) / 2) {
-            with(glyph) { draw(Size(glyphSize, glyphSize), colorFilter = ColorFilter.tint(tint)) }
+        val ring = 2.dp.toPx()
+        val shadow = 1.5.dp.toPx()
+        // il tondo lascia spazio all'ombra, che scende di poco
+        val radius = size.minDimension / 2 - shadow
+        val center = Offset(size.width / 2, size.height / 2 - shadow / 2)
+        drawCircle(Color.Black.copy(alpha = 0.22f), radius + shadow * 0.4f, center.copy(y = center.y + shadow))
+        drawCircle(Color.White, radius, center)
+        drawCircle(fill, radius - ring, center)
+        val glyphSize = radius * 2 * glyphFraction
+        translate(center.x - glyphSize / 2, center.y - glyphSize / 2) {
+            with(glyph) { draw(Size(glyphSize, glyphSize), colorFilter = ColorFilter.tint(Color.White)) }
         }
     }
+}
+
+/** Il blu della posizione di Apple Maps: lo riconosce chiunque come "sei qui". Colore della mappa, non del tema. */
+internal val LocationBlue = Color(0xFF0A84FF)
+
+/** Il pallino "sei qui" come su iPhone: blu pieno, anello bianco spesso e ombra morbida. */
+@Composable
+internal fun rememberLocationDot(): Painter = remember { LocationDotPainter() }
+
+private class LocationDotPainter : Painter() {
+    override val intrinsicSize: Size get() = Size.Unspecified
+
+    override fun DrawScope.onDraw() {
+        val shadow = 2.dp.toPx()
+        val radius = size.minDimension / 2 - shadow
+        val c = Offset(size.width / 2, size.height / 2)
+        drawCircle(Color.Black.copy(alpha = 0.25f), radius + shadow * 0.5f, c.copy(y = c.y + shadow * 0.6f))
+        drawCircle(Color.White, radius, c)
+        drawCircle(LocationBlue, radius * 0.68f, c)
+    }
+}
+
+/** Il colore della categoria di un POI sulla mappa (Color.kt, Marker*). */
+internal fun PoiResponse.Type.markerColor(): Color = when (this) {
+    PoiResponse.Type.SHELTER -> MarkerShelter
+    PoiResponse.Type.WATER_SOURCE -> MarkerWater
+    PoiResponse.Type.VIEWPOINT -> MarkerViewpoint
+    PoiResponse.Type.DANGER_ZONE -> MarkerDanger
+    PoiResponse.Type.EQUIPMENT_POINT -> MarkerEquipment
+    PoiResponse.Type.INFORMATION -> MarkerInfo
+    PoiResponse.Type.unknown_default_open_api -> MarkerOther
 }
 
 /** Il simbolo di un tipo di POI, uguale sulla mappa e nella lista del dettaglio. */
 fun PoiResponse.Type.icon(): ImageVector = when (this) {
     PoiResponse.Type.SHELTER -> Icons.Filled.Home
     PoiResponse.Type.WATER_SOURCE -> WaterDrop
-    PoiResponse.Type.VIEWPOINT -> Icons.Filled.Star
+    PoiResponse.Type.VIEWPOINT -> Peak
     PoiResponse.Type.DANGER_ZONE -> Icons.Filled.Warning
     PoiResponse.Type.EQUIPMENT_POINT -> Icons.Filled.Build
     PoiResponse.Type.INFORMATION -> Icons.Filled.Info
     PoiResponse.Type.unknown_default_open_api -> Icons.Filled.Place
+}
+
+// Panorama: due cime (material-icons-core non ha né le montagne né il binocolo)
+private val Peak: ImageVector by lazy {
+    ImageVector.Builder("Peak", 24.dp, 24.dp, 24f, 24f).apply {
+        path(fill = SolidColor(Color.Black)) {
+            moveTo(2f, 19.5f)
+            lineTo(9f, 7f)
+            lineTo(12.6f, 13.4f)
+            lineTo(15f, 10f)
+            lineTo(22f, 19.5f)
+            close()
+        }
+    }.build()
 }
 
 // Goccia per le sorgenti: material-icons-core non ce l'ha

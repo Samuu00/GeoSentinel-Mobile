@@ -171,12 +171,19 @@ fun coreModule(
     viewModel { MyHazardsViewModel(get()) }
     viewModel { params -> ReportHazardViewModel(get(), get(), get(), params.getOrNull<String>(), uploadScope = uploads) }
     // rifugi e prenotazioni; id e posti del rifugio dalla rotta, l'utente dalla sessione al momento dell'invio
-    viewModel { RefugeListViewModel(get()) }
+    viewModel { RefugeListViewModel(get(), get()) }
     viewModel { RefugeMapViewModel(get()) }
     viewModel { (refugeId: String) -> RefugeDetailViewModel(refugeId, get(), get(), get()) }
     viewModel { (refugeId: String, capacity: Int) ->
         val session = get<SessionManager>()
-        BookRefugeViewModel(refugeId, capacity, get(), ownerId = { session.currentUserId() })
+        val refuges = get<RefugeRepository>()
+        BookRefugeViewModel(
+            refugeId,
+            capacity,
+            get(),
+            ownerId = { session.currentUserId() },
+            loadNights = { from, nights -> refuges.availability(refugeId, from, nights) },
+        )
     }
     viewModel {
         val session = get<SessionManager>()

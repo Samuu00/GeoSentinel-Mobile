@@ -33,11 +33,9 @@ sealed interface Route {
     @Serializable data class ReportHazard(val lat: Double, val lon: Double, val zoom: Double, val trailId: String? = null) : Route
     @Serializable data object SosEmergency : Route
 
-    // ---- rifugi: "spinte" sopra la scheda Rifugi o la mappa ----
+    // ---- rifugi: "spinta" sopra la scheda Rifugi o la mappa. "Prenota" è un foglio della pagina e le prenotazioni un
+    // segmento della scheda (redesign 11/2026): niente rotte proprie ----
     @Serializable data class RefugeDetail(val refugeId: String) : Route
-    // form dal dettaglio del rifugio (M5.2): nome e posti per il form, senza richiederli
-    @Serializable data class BookRefuge(val refugeId: String, val name: String, val capacity: Int) : Route
-    @Serializable data object MyBookings : Route
 
     // ---- soccorso: "spinta" sopra la scheda Allerte, dalla mappa o da una push (M7.2) ----
     @Serializable data class AlertDetail(val alertId: String) : Route
@@ -70,13 +68,13 @@ sealed interface Route {
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
 val FormRoutes = setOf(
     Route.Login::class, Route.Register::class, Route.PasswordReset::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
-    Route.BookRefuge::class, Route.PoiCreate::class, Route.TicketCreate::class,
+    Route.PoiCreate::class, Route.TicketCreate::class,
     Route.RefugeCapacity::class, Route.RescueTeamCreate::class, Route.Mfa::class, Route.MfaReset::class,
 )
 
 // Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta e le liste "mie" (con il loro Indietro)
 val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.RefugeDetail::class + Route.AlertDetail::class +
-    Route.MyHazards::class + Route.MyBookings::class + Route.HazardQueue::class + Route.TicketDetail::class
+    Route.MyHazards::class + Route.HazardQueue::class + Route.TicketDetail::class
 
 data class BottomNavItem(
     val route: Route,

@@ -112,8 +112,6 @@
     <string name="error_field_birth_date">Inserisci la data di nascita.</string>
 
     <!-- Mappa e posizione (M3.1) -->
-    <string name="map_zoom_in">Aumenta lo zoom</string>
-    <string name="map_zoom_out">Riduci lo zoom</string>
     <string name="map_my_location">La mia posizione</string>
     <string name="map_type_button">Tipo di mappa</string>
     <string name="map_type_title">Tipo di mappa</string>
@@ -398,6 +396,70 @@
     <string name="booking_cancel_title">Annullare la prenotazione?</string>
     <string name="booking_cancel_body">Il posto torna libero per altri escursionisti.</string>
     <string name="booking_keep">Tienila</string>
+
+    <!-- Redesign (11/2026): pagina del rifugio, foglio "Prenota", scheda Rifugi -->
+    <string name="trail_tile_length">Lunghezza</string>
+    <string name="trail_tile_difficulty">Difficoltà</string>
+    <string name="refuge_few_beds">ultimi</string>
+    <string name="refuge_full_tonight">Pieno stanotte</string>
+    <string name="refuge_tonight_lower">stanotte</string>
+    <string name="refuge_next_free">prossima notte libera %1$s</string>
+    <string name="refuge_read_more">Leggi tutto</string>
+    <string name="refuge_read_less">Mostra meno</string>
+    <string name="refuge_about_title">Il rifugio</string>
+    <string name="refuge_manage_title">Gestione</string>
+    <string name="refuge_day_book">prenota da questa data</string>
+    <string name="refuges_near_me">Vicino a te</string>
+    <string name="refuges_near_area">Nell'area della Sila</string>
+    <string name="refuges_tab_explore">Esplora</string>
+    <string name="refuges_tab_bookings">Prenotazioni</string>
+    <plurals name="refuges_tab_bookings_badge">
+        <item quantity="one">%1$d da controllare</item>
+        <item quantity="other">%1$d da controllare</item>
+    </plurals>
+    <string name="refuges_empty_title">Nessun rifugio qui intorno</string>
+    <string name="refuges_empty_body">Non ci sono rifugi entro 50 km. Prova dalla mappa, spostandoti.</string>
+    <string name="refuges_loading">Caricamento dei rifugi</string>
+    <string name="booking_confirm">Conferma</string>
+    <string name="booking_calendar_prev">Due settimane prima</string>
+    <string name="booking_calendar_next">Due settimane dopo</string>
+    <string name="booking_range">%1$d %2$s – %3$d %4$s</string>
+    <string name="booking_pick_arrival">Tocca il giorno in cui arrivi.</string>
+    <string name="booking_pick_departure">Ora tocca il giorno in cui riparti.</string>
+    <string name="booking_day_arrival">arrivo</string>
+    <string name="booking_day_departure">partenza</string>
+    <string name="booking_day_in_stay">nel soggiorno</string>
+    <string name="booking_stay_limit">Solo %1$d posti %2$s.</string>
+    <string name="booking_guests_limit">Al massimo %1$d persone per prenotazione.</string>
+    <string name="booking_see_bookings">Vedi le prenotazioni</string>
+    <string name="booking_page_failed">Non riesco a leggere i posti liberi. Puoi prenotare lo stesso: il rifugio conferma.</string>
+    <string name="my_bookings_next_title">Prossimo soggiorno</string>
+    <string name="my_bookings_upcoming_title">In arrivo</string>
+    <string name="my_bookings_past_title">Passate e annullate</string>
+    <string name="my_bookings_rejected_title">Non siamo riusciti a prenotare</string>
+    <string name="my_bookings_empty_title">Nessuna prenotazione</string>
+    <string name="my_bookings_empty_body">Scegli un rifugio e tocca un giorno libero per prenotare.</string>
+    <string name="my_bookings_explore">Esplora i rifugi</string>
+    <string name="my_bookings_today">Oggi</string>
+    <string name="my_bookings_tomorrow">Domani</string>
+    <plurals name="my_bookings_in_days">
+        <item quantity="one">Tra %1$d giorno</item>
+        <item quantity="other">Tra %1$d giorni</item>
+    </plurals>
+    <string name="my_bookings_in_progress">In corso</string>
+    <string name="my_bookings_loading">Caricamento delle prenotazioni</string>
+    <string name="month_1">gennaio</string>
+    <string name="month_2">febbraio</string>
+    <string name="month_3">marzo</string>
+    <string name="month_4">aprile</string>
+    <string name="month_5">maggio</string>
+    <string name="month_6">giugno</string>
+    <string name="month_7">luglio</string>
+    <string name="month_8">agosto</string>
+    <string name="month_9">settembre</string>
+    <string name="month_10">ottobre</string>
+    <string name="month_11">novembre</string>
+    <string name="month_12">dicembre</string>
 
     <!-- Soccorso (M7.2): scheda Allerte e dettaglio dell'operatore -->
     <string name="rescue_alerts_title">Allerte SOS</string>

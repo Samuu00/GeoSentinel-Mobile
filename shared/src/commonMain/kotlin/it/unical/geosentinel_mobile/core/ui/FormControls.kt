@@ -29,9 +29,16 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsTopHeight
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -144,14 +151,23 @@ fun FormTextField(
     }
 }
 
-// Azione principale della schermata: capsula verde pino, piena larghezza
+// Azione principale della schermata: capsula verde pino, piena larghezza (o, con fill = false, larga quanto il testo:
+// accanto a un'altra informazione, come "Prenota" nella barra del rifugio)
 @Composable
-fun PrimaryPillButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, enabled: Boolean = true, loading: Boolean = false) {
+fun PrimaryPillButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+    fill: Boolean = true,
+) {
     Button(
         onClick = onClick,
         enabled = enabled && !loading,
         shape = CircleShape,
-        modifier = modifier.fillMaxWidth().heightIn(min = 56.dp),
+        contentPadding = PaddingValues(horizontal = 28.dp, vertical = 8.dp),
+        modifier = modifier.then(if (fill) Modifier.fillMaxWidth() else Modifier).heightIn(min = 56.dp),
     ) {
         if (loading) {
             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
@@ -187,12 +203,39 @@ fun FormErrorBanner(message: String?) {
     }
 }
 
-// Struttura dei form, secondo gli standard per mobile:
-// - in alto la testata con il paesaggio (sotto la barra di stato) e il tondo Indietro (su iPhone non c'è quello di sistema);
-// - al centro titolo, testo e campi, che scorrono;
-// - in fondo, fissa, l'azione principale con il link alternativo sotto: sempre visibile e a portata di pollice.
-//   [error] (la risposta del server all'invio) sta lì, sopra il pulsante: dove si è appena toccato. In mezzo ai campi,
-//   sotto una mappa, non si vedeva e si continuava a premere senza sapere perché.
+// Azione secondaria a capsula (Chiama, Indicazioni, Riprova in una sezione): tonale muschio, 48 dp. Si vede come
+// pulsante, ma l'unica azione piena della schermata resta PrimaryPillButton.
+@Composable
+internal fun TonalPillButton(
+    text: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    icon: ImageVector? = null,
+    enabled: Boolean = true,
+) {
+    val colors = MaterialTheme.colorScheme
+    FilledTonalButton(
+        onClick = onClick,
+        enabled = enabled,
+        shape = CircleShape,
+        colors = ButtonDefaults.filledTonalButtonColors(containerColor = colors.primaryContainer, contentColor = colors.onPrimaryContainer),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 8.dp),
+        modifier = modifier.heightIn(min = 48.dp),
+    ) {
+        if (icon != null) {
+            // decorativa: l'azione è scritta accanto
+            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.size(8.dp))
+        }
+        Text(text, style = MaterialTheme.typography.labelLarge, fontWeight = FontWeight.SemiBold)
+    }
+}
+
+// Struttura dei form (redesign 11/2026: niente più paesaggio in testata, che spingeva i campi a metà schermo):
+// - in alto il tondo Indietro (su iPhone non c'è quello di sistema), poi il titolo grande e una riga di testo;
+// - al centro i campi, che scorrono;
+// - in fondo, fissa (StickyActionBar), l'azione principale con il link alternativo sotto: sempre visibile e a portata
+//   di pollice. [error] (la risposta del server all'invio) sta lì, sopra il pulsante: dove si è appena toccato.
 //   Con la tastiera aperta sale sopra la tastiera: lo Scaffold di App applica safeDrawing, che comprende WindowInsets.ime.
 // Contenuto largo al massimo 480 dp.
 @Composable
@@ -201,35 +244,44 @@ internal fun FormScaffold(
     title: StringResource,
     body: StringResource,
     error: String? = null,
+    // accesso, registrazione, password: il paesaggio in testata, l'unico momento di marca dei form
+    brand: Boolean = false,
     actions: @Composable ColumnScope.() -> Unit,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    val background = MaterialTheme.colorScheme.background
+    Box(Modifier.fillMaxSize().background(background)) {
         Column(Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally) {
             Column(
                 modifier = Modifier.weight(1f).fillMaxWidth().verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
-                ForestHeader(Modifier.fillMaxWidth().height(160.dp))
+                if (brand) {
+                    ForestHeader(Modifier.fillMaxWidth().height(200.dp))
+                } else {
+                    Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
+                    // posto per il tondo Indietro
+                    Spacer(Modifier.height(56.dp))
+                }
                 Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp)) {
                     Text(stringResource(title), style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
                     Spacer(Modifier.size(8.dp))
                     Text(stringResource(body), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.size(28.dp))
+                    Spacer(Modifier.size(24.dp))
                     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) { content() }
                     Spacer(Modifier.size(24.dp))
                 }
             }
-            // azioni in fondo, su un filo che le separa dal contenuto che scorre
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            Column(
-                Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 4.dp),
-            ) {
-                FormErrorBanner(error)
-                if (error != null) Spacer(Modifier.size(12.dp))
-                actions()
+            StickyActionBar {
+                Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().align(Alignment.CenterHorizontally)) {
+                    FormErrorBanner(error)
+                    if (error != null) Spacer(Modifier.size(12.dp))
+                    actions()
+                }
             }
         }
+        // la barra di stato su fondo pieno: i campi che scorrono non le passano sotto (con il paesaggio lì c'è il cielo)
+        if (!brand) Spacer(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.safeDrawing).background(background))
         BackButton(onBack, Modifier.align(Alignment.TopStart))
     }
 }

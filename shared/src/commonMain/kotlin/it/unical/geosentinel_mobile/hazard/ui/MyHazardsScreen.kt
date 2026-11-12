@@ -72,7 +72,6 @@ import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.GroupDivider
 import it.unical.geosentinel_mobile.core.ui.PageHeader
 import it.unical.geosentinel_mobile.core.ui.groupedItem
-import it.unical.geosentinel_mobile.core.ui.PageHeaderHeight
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.trail.ui.color
@@ -121,7 +120,7 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
                 modifier = Modifier.fillMaxSize(),
             ) {
                 item(key = "header") {
-                    PageHeader(title = stringResource(Res.string.my_hazards_title), intro = stringResource(Res.string.my_hazards_intro))
+                    PageHeader(title = stringResource(Res.string.my_hazards_title), intro = stringResource(Res.string.my_hazards_intro), hasBack = true)
                 }
                 when {
                     state.items.isEmpty() && state.loading -> item(key = "loading") { CenteredProgress() }
