@@ -26,9 +26,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -119,7 +116,6 @@ import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.GroupCard
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
-import it.unical.geosentinel_mobile.core.ui.contours
 import it.unical.geosentinel_mobile.core.ui.rememberReduceMotion
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.theme.warningTextColor
@@ -134,6 +130,8 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import kotlin.time.Clock
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.cardShadow
 
 // Da quanti posti in giù una notte è "agli ultimi posti" (numero in ambra e la parola "ultimi")
 internal const val FEW_BEDS = 3
@@ -299,7 +297,7 @@ private fun StayCalendar(state: BookRefugeUiState, onDay: (LocalDate) -> Unit, o
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
         IconButton(onClick = { onPage(false) }, enabled = start > mondayOf(today), modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowLeft, contentDescription = stringResource(Res.string.booking_calendar_prev))
+            Icon(AppIcons.ChevronLeft, contentDescription = stringResource(Res.string.booking_calendar_prev))
         }
         Text(
             stringResource(Res.string.booking_range, start.day, stringResource(start.monthName()), end.day, stringResource(end.monthName())),
@@ -308,7 +306,7 @@ private fun StayCalendar(state: BookRefugeUiState, onDay: (LocalDate) -> Unit, o
             modifier = Modifier.weight(1f).semantics { liveRegion = LiveRegionMode.Polite },
         )
         IconButton(onClick = { onPage(true) }, modifier = Modifier.size(48.dp)) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = stringResource(Res.string.booking_calendar_next))
+            Icon(AppIcons.ChevronRight, contentDescription = stringResource(Res.string.booking_calendar_next))
         }
     }
     // intestazione dei giorni: decorativa (ogni cella dice il suo giorno)
@@ -530,47 +528,55 @@ internal fun StayTicket(
     note: String? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
+    // Il biglietto (Figma, "09 Rifugi · scuro"): in alto, su una fascia felce tenue, lo stato come occhiello, il rifugio
+    // in Archivo e le date; poi la perforazione (un tratteggio con due tacche ai lati) e sotto le azioni
     val colors = MaterialTheme.colorScheme
     val card = colors.surfaceContainerLowest
+    val page = colors.background
     val nights = (checkOut.toEpochDays() - checkIn.toEpochDays()).toInt()
-    Column(
-        modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(28.dp))
-            .background(card)
-            .contours(over = card, strength = 0.06f),
-    ) {
-        Row(Modifier.fillMaxWidth().padding(20.dp).semantics(mergeDescendants = true) { }, verticalAlignment = Alignment.CenterVertically) {
-            DateBlock(checkIn)
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Text(refugeName, style = MaterialTheme.typography.titleMedium)
-                Text(
-                    "${checkIn.shortLabel()} → ${checkOut.shortLabel()}",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                Text(
-                    pluralStringResource(Res.plurals.booking_nights_count, nights, nights) + " · " +
-                        pluralStringResource(Res.plurals.booking_guests_count, guests, guests),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                )
-                if (note != null) {
-                    Text(note, style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.SemiBold, color = colors.primary, modifier = Modifier.padding(top = 4.dp))
-                }
+    val shape = RoundedCornerShape(26.dp)
+    Column(modifier.fillMaxWidth().cardShadow(shape).clip(shape).background(card)) {
+        Column(
+            Modifier
+                .fillMaxWidth()
+                .background(colors.primaryContainer)
+                .padding(start = 20.dp, end = 20.dp, top = 18.dp, bottom = 20.dp)
+                .semantics(mergeDescendants = true) { },
+        ) {
+            if (note != null) {
+                Text(note.uppercase(), style = MaterialTheme.typography.labelSmall, color = colors.onPrimaryContainer)
+                Spacer(Modifier.height(6.dp))
             }
+            Text(refugeName, style = MaterialTheme.typography.titleLarge, color = colors.onSurface)
+            Text(
+                "${checkIn.shortLabel()} → ${checkOut.shortLabel()} · " +
+                    pluralStringResource(Res.plurals.booking_nights_count, nights, nights) + " · " +
+                    pluralStringResource(Res.plurals.booking_guests_count, guests, guests),
+                style = MaterialTheme.typography.bodyMedium,
+                color = colors.onSurface,
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
+        // la perforazione (le due tacche nel colore della pagina e il tratteggio) e sotto le azioni; senza azioni il
+        // biglietto finisce con la fascia
         if (actions != null) {
             val dash = colors.outlineVariant
-            Canvas(Modifier.fillMaxWidth().height(1.dp).padding(horizontal = 20.dp)) {
-                drawLine(dash, Offset.Zero, Offset(size.width, 0f), strokeWidth = 1.5.dp.toPx(), pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())))
+            Canvas(Modifier.fillMaxWidth().height(16.dp)) {
+                val r = 8.dp.toPx()
+                drawCircle(page, r, Offset(0f, size.height / 2))
+                drawCircle(page, r, Offset(size.width, size.height / 2))
+                drawLine(
+                    dash,
+                    Offset(r * 2, size.height / 2),
+                    Offset(size.width - r * 2, size.height / 2),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(6.dp.toPx(), 5.dp.toPx())),
+                )
             }
             Row(
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, bottom = 16.dp, top = 4.dp),
                 content = actions,
             )
         }

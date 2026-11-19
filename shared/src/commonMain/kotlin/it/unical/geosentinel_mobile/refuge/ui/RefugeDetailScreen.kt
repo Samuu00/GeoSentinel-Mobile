@@ -23,10 +23,6 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -124,7 +120,6 @@ import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.skeleton
 import it.unical.geosentinel_mobile.core.ui.theme.warningTextColor
 import it.unical.geosentinel_mobile.media.data.MediaRepository
-import it.unical.geosentinel_mobile.media.ui.PhotoCredit
 import it.unical.geosentinel_mobile.media.ui.PhotoViewer
 import it.unical.geosentinel_mobile.media.ui.photoRequest
 import it.unical.geosentinel_mobile.media.ui.rememberSignedUrl
@@ -148,6 +143,27 @@ import org.maplibre.compose.camera.CameraPosition
 import org.maplibre.compose.interaction.MapInteractions
 import org.maplibre.compose.map.MaplibreMap
 import org.maplibre.compose.map.rememberMapState
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.text.style.TextAlign
+import it.unical.geosentinel_mobile.core.ui.cardShadow
+import geosentinel_mobile.shared.generated.resources.booking_less
+import geosentinel_mobile.shared.generated.resources.booking_more
+import geosentinel_mobile.shared.generated.resources.refuge_guests_value
+import geosentinel_mobile.shared.generated.resources.refuge_nights_tap
+import geosentinel_mobile.shared.generated.resources.refuge_cell_beds
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.trail.data.ElevationRepository
+import androidx.compose.runtime.produceState
+import it.unical.geosentinel_mobile.trail.ui.isSourceCredit
+import it.unical.geosentinel_mobile.core.ui.Stat
+import it.unical.geosentinel_mobile.core.ui.StatTiles
+import geosentinel_mobile.shared.generated.resources.stat_altitude
+import geosentinel_mobile.shared.generated.resources.stat_beds
+import geosentinel_mobile.shared.generated.resources.stat_season
 
 private val HeroHeight = 320.dp
 // Il pannello del contenuto sale sulla foto con gli angoli alti arrotondati
@@ -183,6 +199,8 @@ fun RefugeDetailScreen(
     val loaded = (state.refuge as? Section.Loaded)?.value
     // il foglio "Prenota": null chiuso, "" aperto senza un giorno, altrimenti la data d'arrivo (ISO)
     var sheetArrival by rememberSaveable { mutableStateOf<String?>(null) }
+    // le persone scelte nella barra in basso (Figma): il foglio "Prenota" parte con queste
+    var guests by rememberSaveable { mutableIntStateOf(1) }
 
     val listState = rememberLazyListState()
     // la foto (primo item) è scorsa via: in alto compare la barra con il nome, come nelle pagine di iOS
@@ -206,7 +224,17 @@ fun RefugeDetailScreen(
                     item(key = "hero") { Hero(value, state.photos) }
                     item(key = "title") { Title(value) }
                     item(key = "contacts") { Contacts(value) }
-                    item(key = "nights-title") { SectionHeader(stringResource(Res.string.refuge_nights_title)) }
+                    item(key = "nights-title") {
+                        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth()) {
+                            SectionHeader(stringResource(Res.string.refuge_nights_title), Modifier.padding(bottom = 0.dp))
+                            Text(
+                                stringResource(Res.string.refuge_nights_tap),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 20.dp, end = 20.dp, top = 0.dp, bottom = 12.dp),
+                            )
+                        }
+                    }
                     item(key = "nights") {
                         when (val nights = state.nights) {
                             Section.Loading, Section.Hidden -> LoadingMore()
@@ -214,7 +242,8 @@ fun RefugeDetailScreen(
                             is Section.Loaded -> NightStrip(nights.value) { date -> sheetArrival = date.toString() }
                         }
                     }
-                    value.description?.takeIf { it.isNotBlank() }?.let { description ->
+                    // le righe che citano le fonti (OpenStreetMap, ©) stanno nei crediti, non qui
+                    value.description?.lines()?.filterNot { isSourceCredit(it.trim()) }?.joinToString("\n")?.trim()?.takeIf { it.isNotBlank() }?.let { description ->
                         item(key = "about-title") { SectionHeader(stringResource(Res.string.refuge_about_title)) }
                         item(key = "about") { Description(description) }
                     }
@@ -254,7 +283,7 @@ fun RefugeDetailScreen(
         // l'azione principale in fondo, nella zona del pollice, con com'è stanotte accanto
         if (loaded != null) {
             StickyActionBar(Modifier.align(Alignment.BottomCenter)) {
-                BookBar(state.nights) { sheetArrival = "" }
+                BookBar(guests = guests, maxGuests = minOf(loaded.capacity, MaxGuestsPerBooking), onGuests = { guests = it }) { sheetArrival = "" }
             }
         }
     }
@@ -264,6 +293,7 @@ fun RefugeDetailScreen(
             BookingHost(
                 refuge = loaded,
                 arrival = arrival,
+                guests = guests,
                 onClose = { sheetArrival = null },
                 onBooked = {
                     sheetArrival = null
@@ -280,9 +310,12 @@ fun RefugeDetailScreen(
 
 // Il ViewModel del foglio vive con questa pagina (la voce della pila), non con il foglio: chiuderlo non annulla un invio
 @Composable
-private fun BookingHost(refuge: RefugeResponse, arrival: String, onClose: () -> Unit, onBooked: () -> Unit, onOpenBookings: () -> Unit) {
+private fun BookingHost(refuge: RefugeResponse, arrival: String, guests: Int, onClose: () -> Unit, onBooked: () -> Unit, onOpenBookings: () -> Unit) {
     val viewModel = koinViewModel<BookRefugeViewModel>(key = "book-${refuge.id}") { parametersOf(refuge.id, refuge.capacity) }
-    LaunchedEffect(arrival) { viewModel.open(arrival.takeIf { it.isNotEmpty() }?.let(LocalDate::parse)) }
+    LaunchedEffect(arrival) {
+        viewModel.open(arrival.takeIf { it.isNotEmpty() }?.let(LocalDate::parse))
+        viewModel.onGuestsChange(guests)
+    }
     BookingSheet(refuge.name, viewModel, onDismiss = onClose, onBooked = onBooked, onOpenBookings = onOpenBookings)
 }
 
@@ -334,8 +367,6 @@ private fun Gallery(photos: List<MediaResponse>) {
                 }
             }
         }
-        // autore e licenza della foto mostrata (solo per le foto importate), sopra il bordo del pannello
-        PhotoCredit(photos[pager.currentPage].credit, Modifier.align(Alignment.BottomStart).padding(start = 4.dp, bottom = PanelLip + 4.dp))
         if (photos.size > 1) {
             val pill = Modifier
                 .align(Alignment.BottomEnd)
@@ -390,21 +421,30 @@ private fun MapHero(refuge: RefugeResponse) {
     }
 }
 
-// Nome e, in una riga, quota · posti · stagione
+// Il nome grande in Archivo e, sotto, le tessere dei dati: quota, posti, stagione (quelle che ci sono)
 @Composable
 private fun Title(refuge: RefugeResponse) {
+    // la quota dei dati o, se manca (rifugi importati), quella del rilievo nel punto del rifugio
+    val elevation = koinInject<ElevationRepository>()
+    val altitude by produceState(refuge.altitudeM, refuge.id) {
+        if (value == null) value = elevation.metersAt(refuge.location.toGeoPoint())
+    }
     Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-        Text(refuge.name, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-        MetaLine(
-            listOf(
-                refuge.altitudeM?.let { stringResource(Res.string.refuge_altitude, it) },
-                pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity),
-                refuge.season,
+        Text(refuge.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+        StatTiles(
+            listOfNotNull(
+                altitude?.let { Stat(stringResource(Res.string.stat_altitude), formatThousands(it), "m") },
+                Stat(stringResource(Res.string.stat_beds), refuge.capacity.toString()),
+                refuge.season?.takeIf { it.isNotBlank() }?.let { Stat(stringResource(Res.string.stat_season), it) },
             ),
-            modifier = Modifier.padding(top = 4.dp),
+            modifier = Modifier.padding(top = 16.dp),
         )
     }
 }
+
+// 1760 → "1 760", come sulle carte
+private fun formatThousands(value: Int): String =
+    value.toString().reversed().chunked(3).joinToString(" ").reversed()
 
 // Chiamata (se c'è il numero) e indicazioni con le mappe del telefono, metà e metà; senza numero Indicazioni resta a metà
 @Composable
@@ -416,12 +456,12 @@ private fun Contacts(refuge: RefugeResponse) {
         modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
     ) {
         refuge.phone?.let { phone ->
-            TonalPillButton(stringResource(Res.string.refuge_call), onClick = { dial(phone) }, icon = Icons.Filled.Call, modifier = Modifier.weight(1f))
+            TonalPillButton(stringResource(Res.string.refuge_call), onClick = { dial(phone) }, icon = AppIcons.Phone, modifier = Modifier.weight(1f))
         }
         TonalPillButton(
             stringResource(Res.string.refuge_directions),
             onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
-            icon = Icons.Filled.Place,
+            icon = AppIcons.MapPin,
             modifier = Modifier.weight(1f),
         )
         if (refuge.phone == null) Spacer(Modifier.weight(1f))
@@ -449,8 +489,9 @@ private fun NightStrip(nights: List<NightAvailability>, onPick: (LocalDate) -> U
 @Composable
 private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val container = if (tonight) colors.primaryContainer else colors.surfaceContainerLowest
-    val content = if (tonight) colors.onPrimaryContainer else colors.onSurface
+    // stanotte nel pino, come la scelta nel progetto Figma; le altre notti su card bianche
+    val container = if (tonight) colors.tertiary else colors.surfaceContainerLowest
+    val content = if (tonight) colors.onTertiary else colors.onSurface
     val few = !night.isFull && night.freeBeds <= FEW_BEDS
     val dayLabel = if (tonight) stringResource(Res.string.refuge_tonight) else night.date.longLabel()
     val bedsLabel = if (night.isFull) {
@@ -474,7 +515,7 @@ private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () ->
             .padding(horizontal = 12.dp, vertical = 12.dp),
     ) {
         Text(
-            if (tonight) stringResource(Res.string.refuge_tonight) else stringResource(night.date.weekday()),
+            (if (tonight) stringResource(Res.string.refuge_tonight) else stringResource(night.date.weekday())).uppercase(),
             style = MaterialTheme.typography.labelSmall,
             color = if (tonight) content else colors.onSurfaceVariant,
         )
@@ -493,47 +534,44 @@ private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () ->
                 color = if (tonight) content else warningTextColor(),
             )
             else -> Text(
-                night.freeBeds.toString(),
-                style = MaterialTheme.typography.labelLarge,
+                pluralStringResource(Res.plurals.refuge_cell_beds, night.freeBeds, night.freeBeds),
+                style = MaterialTheme.typography.labelMedium,
                 color = if (tonight) content else colors.primary,
             )
         }
     }
 }
 
-// La barra in basso: a sinistra com'è stanotte (il valore grande, l'etichetta piccola), a destra "Prenota".
-// Senza calendario (in caricamento o in errore) solo il pulsante, a tutta larghezza.
+// La barra in basso (come nel progetto Figma): a sinistra quante persone (− 2 +), a destra "Prenota", che apre il
+// foglio con quelle persone già scelte. I posti di ogni notte sono nella striscia sopra.
 @Composable
-private fun BookBar(nights: Section<List<NightAvailability>>, onBook: () -> Unit) {
+private fun BookBar(guests: Int, maxGuests: Int, onGuests: (Int) -> Unit, onBook: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val list = (nights as? Section.Loaded)?.value
-    val tonight = list?.firstOrNull()
-    if (list == null || tonight == null) {
-        PrimaryPillButton(stringResource(Res.string.booking_open), onClick = onBook)
-        return
-    }
+    val guestsLabel = stringResource(Res.string.refuge_guests_value, guests)
     Row(verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f).padding(end = 12.dp).semantics(mergeDescendants = true) { }) {
-            if (tonight.isFull) {
-                Text(stringResource(Res.string.refuge_full_tonight), style = MaterialTheme.typography.titleMedium)
-                list.firstOrNull { !it.isFull }?.let { next ->
-                    Text(
-                        stringResource(Res.string.refuge_next_free, next.date.shortLabel()),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = colors.onSurfaceVariant,
-                    )
+        Surface(shape = CircleShape, color = colors.surfaceContainerLowest, modifier = Modifier.cardShadow(CircleShape)) {
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = false) { }) {
+                IconButton(onClick = { onGuests(guests - 1) }, enabled = guests > 1, modifier = Modifier.size(56.dp)) {
+                    Icon(AppIcons.Minus, contentDescription = stringResource(Res.string.booking_less))
                 }
-            } else {
                 Text(
-                    pluralStringResource(Res.plurals.refuge_free_beds, tonight.freeBeds, tonight.freeBeds),
-                    style = MaterialTheme.typography.titleMedium,
+                    guests.toString(),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.widthIn(min = 24.dp).clearAndSetSemantics { contentDescription = guestsLabel; liveRegion = LiveRegionMode.Polite },
+                    textAlign = TextAlign.Center,
                 )
-                Text(stringResource(Res.string.refuge_tonight_lower), style = MaterialTheme.typography.bodySmall, color = colors.onSurfaceVariant)
+                IconButton(onClick = { onGuests(guests + 1) }, enabled = guests < maxGuests, modifier = Modifier.size(56.dp)) {
+                    Icon(AppIcons.Plus, contentDescription = stringResource(Res.string.booking_more))
+                }
             }
         }
-        PrimaryPillButton(stringResource(Res.string.booking_open), onClick = onBook, fill = false, modifier = Modifier.widthIn(min = 132.dp))
+        Spacer(Modifier.width(12.dp))
+        PrimaryPillButton(stringResource(Res.string.booking_open), onClick = onBook, modifier = Modifier.weight(1f))
     }
 }
+
+// Il contratto (CreateBookingRequest.guests) accetta al massimo 20 persone per prenotazione
+private const val MaxGuestsPerBooking = 20
 
 // ---- Descrizione e servizi ----
 
@@ -574,7 +612,7 @@ private fun Amenities(labels: List<StringResource>) {
                     row.forEach { label ->
                         Row(Modifier.weight(1f).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             // decorativa: il servizio è scritto accanto
-                            Icon(Icons.Filled.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
+                            Icon(AppIcons.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(label), style = MaterialTheme.typography.bodyMedium)
                         }

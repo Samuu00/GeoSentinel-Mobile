@@ -1,92 +1,103 @@
 package it.unical.geosentinel_mobile.core.ui.theme
 
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 
-// Palette "Alba alpina" (redesign 11/2026, terza passata): le superfici sono quelle di iOS (card bianche sul fondo
-// raggruppato), ma il fondo è la nebbia calda di una mattina in quota e non un grigio da ufficio; di notte è il bosco
-// blu-verde, non il nero. Un solo accento, l'abete (lichene di notte), per azioni, selezione e valori "liberi".
-// La montagna sta nella testata delle schede (cielo d'alba e creste), nei titoli Barlow e nelle foto.
-// I nomi restano quelli di prima (FirLight, StoneLight...): li usano Theme e qualche componente.
+// Palette "Luce di quota" (redesign 11/2026, Figma: "GeoSentinel — Redesign Luce di quota").
+// Il colore vivo sta nel cielo delle testate (Sky.kt), che segue l'ora; l'interfaccia resta quieta: fondo salvia
+// freddo, card bianche, un solo verde (felce) per selezione e link, il pino quasi nero per l'azione piena.
+// Di notte: bosco nero-verde, card un passo sopra, azione in menta. Rapporti di contrasto calcolati sui valori.
 
-// Accento: abete (chiaro) e lichene (scuro)
-val FirLight = Color(0xFF24654A)                  // 6,9:1 con il bianco sopra; 6,2:1 come testo sul fondo
-val OnFirLight = Color(0xFFFFFFFF)
-val LichenDark = Color(0xFF8BD3AB)                // 10,4:1 sul fondo scuro
-val OnLichenDark = Color(0xFF0A2A1B)
-
-// Muschio: contenitori morbidi (pillola della scheda attiva, avatar, pulsanti tonali)
-val MossLight = Color(0xFFDDEDE3)
-val OnMossLight = Color(0xFF123726)               // 11:1 sul muschio
-val MossDark = Color(0xFF1B3428)
-val OnMossDark = Color(0xFFCBEBD8)
-
-// Sfondi: nebbia calda (chiaro) e bosco di notte, un blu-verde profondo (scuro)
-val StoneLight = Color(0xFFF2F1EC)
-val NightForestDark = Color(0xFF0B1210)
-
-// Card, barre e menu: bianco sulla nebbia; di notte un passo sopra il bosco
+// Fondo e superfici
+val CanvasLight = Color(0xFFEEF2EE)               // nebbia salvia
 val CardLight = Color(0xFFFFFFFF)
-val CardDark = Color(0xFF151D1A)
-val MenuLight = Color(0xFFFFFFFF)
-val MenuDark = Color(0xFF202A26)
-val TrackLight = Color(0xFFE4E3DC)                // binari (segmenti, tema), sagome di caricamento
-val TrackDark = Color(0xFF25302B)
+val RaisedLight = Color(0xFFE2E8E3)               // binari, tessere, sagome di caricamento
+val CanvasDark = Color(0xFF09110E)
+val CardDark = Color(0xFF121C18)
+val RaisedDark = Color(0xFF1A2621)
+val MenuDark = Color(0xFF22302A)
 
 // Testo
-val InkLight = Color(0xFF1A1D1B)                  // 16:1 sul bianco
-val InkDark = Color(0xFFEFF2EF)
-val InkSecondaryLight = Color(0xFF666B67)         // 5,6:1 sul bianco, 5,0:1 sulla nebbia
-val InkSecondaryDark = Color(0xFF9BA6A0)          // 6,6:1 sulle card scure
+val InkLight = Color(0xFF0E1B16)                  // 15,6:1 sul fondo
+val Ink2Light = Color(0xFF56645D)                 // 6,2:1 sulla card, 5,0:1 sul rilievo
+val InkDark = Color(0xFFE9F0EC)
+val Ink2Dark = Color(0xFF9AA9A1)                  // 7,1:1 sulla card scura
 
-// Fili: separatori sottili e curve di livello
-val LineLight = Color(0xFFDCDCD4)
-val LineDark = Color(0xFF29342F)
+// Azione piena: pino (chiaro) e menta (scuro)
+val PineLight = Color(0xFF12382B)                 // bianco sopra 12,9:1
+val PineDark = Color(0xFFA6E2C0)
+val OnPineDark = Color(0xFF08241A)                // 11,2:1 sulla menta
 
-// Cielo dell'alba nella testata delle schede: solo decorazione, il testo non ci sta mai sopra
-val DawnLight = Color(0xFFF7E4CF)                 // pesca chiaro all'orizzonte
-val DawnDark = Color(0xFF15263A)                  // blu della sera sopra le creste
+// Accento: felce. Selezione, link, valori "liberi"
+val FernLight = Color(0xFF226A49)                 // 6,5:1 sulla card, 5,3:1 sulla felce tenue
+val FernSoftLight = Color(0xFFD7EEDF)
+val FernDark = Color(0xFF8BD3AB)                  // 10:1 sulla card scura, 7,2:1 sulla felce tenue
+val FernSoftDark = Color(0xFF18392A)
 
-// Emergenza: riservato a SOS e pericoli CRITICAL. Bianco sopra a 5:1, e si stacca da entrambi gli sfondi.
+// Fili
+val LineLight = Color(0xFFD5DDD7)
+val LineDark = Color(0xFF24312B)
+
+// Emergenza: riservato a SOS, pericoli CRITICAL e sentieri chiusi. Bianco sopra a 5:1.
 val EmergencyRed = Color(0xFFD32F2F)
 val EmergencyOnRed = Color(0xFFFFFFFF)
+val EmergencySoft = Color(0xFFFBE0E0)
+val EmergencyInk = Color(0xFFB71C1C)              // testo rosso sul rosso tenue, 5,3:1
 
-// Errori (form, rete, validazione): prugna, così il rosso resta solo a SOS e CRITICAL.
-// Si distingue dal rosso anche con la protanopia, e va sempre con icona e testo.
+// Errori (form, rete): prugna, così il rosso resta solo all'emergenza. Sempre con icona o testo.
 val ErrorPlumLight = Color(0xFF8E2C82)            // 7,4:1 sul bianco
 val OnErrorPlumLight = Color(0xFFFFFFFF)
-val ErrorPlumContainerLight = Color(0xFFFFD7F3)
+val ErrorPlumContainerLight = Color(0xFFFBE7F8)
 val OnErrorPlumContainerLight = Color(0xFF3A0035)
-val ErrorPlumDark = Color(0xFFF2B0E8)             // 9:1 sulle card scure
+val ErrorPlumDark = Color(0xFFF2B0E8)
 val OnErrorPlumDark = Color(0xFF5A0052)
-val ErrorPlumContainerDark = Color(0xFF74266A)
+val ErrorPlumContainerDark = Color(0xFF4A1844)
 val OnErrorPlumContainerDark = Color(0xFFFFD7F3)
 
-// Stati del sentiero, sempre affiancati da icona o etichetta (almeno 4,5:1 sul bianco)
+// Stati del sentiero, sempre con icona o etichetta
 val TrailOpen = Color(0xFF2E7D32)
-val TrailWarning = Color(0xFFB45309)             // 4,8:1 sulle card chiare, solo 3,4:1 su quelle scure
+val TrailWarning = Color(0xFFB45309)              // linee della mappa e icone (5:1 sul bianco)
 val TrailClosed = EmergencyRed
+val WarningSoftLight = Color(0xFFFBEBD7)
+val WarningInkLight = Color(0xFF9A4A0A)           // testo ambra sull'ambra tenue, 5,4:1
+val WarningSoftDark = Color(0xFF3A2610)
+val WarningTextDark = Color(0xFFE9A862)           // 8,5:1 sulla card scura
 
-// Segnaposti della mappa (11/2026), come le categorie di Apple Maps: un colore per tipo, simbolo bianco sopra (almeno
-// 3:1 col bianco). Sono colori della mappa, uguali nei due temi, come quelli degli stili. Mai rosso: il pericolo è ambra.
-val MarkerShelter = Color(0xFF9A6A44)            // bivacco: legno
-val MarkerWater = Color(0xFF2D84D2)              // sorgente
-val MarkerViewpoint = Color(0xFF7E57C2)          // panorama
-val MarkerDanger = Color(0xFFC77417)             // zona pericolosa
-val MarkerEquipment = Color(0xFF66707A)          // attrezzatura
-val MarkerInfo = Color(0xFF3F6E9E)               // informazioni
+// ---- Mappa: invariata (stili, segnaposti, nomi). Valori identici a prima del redesign. ----
+val MarkerShelter = Color(0xFF9A6A44)
+val MarkerWater = Color(0xFF2D84D2)
+val MarkerViewpoint = Color(0xFF7E57C2)
+val MarkerDanger = Color(0xFFC77417)
+val MarkerEquipment = Color(0xFF66707A)
+val MarkerInfo = Color(0xFF3F6E9E)
 val MarkerOther = Color(0xFF6B7A72)
-val MarkerRefuge = FirLight                      // rifugi: il verde dell'app, più grandi dei POI
+val MarkerRefuge = Color(0xFF24654A)
+val MapLabelInkLight = Color(0xFF1A1D1B)
+val MapLabelInkDark = Color(0xFFEFF2EF)
+// grigio dei sentieri e dei pericoli senza stato noto, fondo dei segnaposti delle allerte
+val MapMutedLight = Color(0xFF666B67)
+val MapMutedDark = Color(0xFF9BA6A0)
+val MapMarkerFillLight = Color(0xFFFFFFFF)
+val MapMarkerFillDark = Color(0xFF151D1A)
 
-// Ambra per il testo nel tema scuro (posti "ultimi" nel calendario dei rifugi): 8,3:1 su CardDark.
-// Le linee della mappa restano TrailWarning, uguale nei due temi.
-val WarningTextDark = Color(0xFFE9A862)
+/** Il tema in uso è scuro? (dal fondo: lo decide l'utente, non solo il sistema) */
+@Composable
+fun isDarkTheme(): Boolean = MaterialTheme.colorScheme.background.luminance() < 0.5f
 
 /** Ambra leggibile come testo sulle card, nel tema in uso. */
-@androidx.compose.runtime.Composable
-fun warningTextColor(): Color =
-    if (androidx.compose.material3.MaterialTheme.colorScheme.background == NightForestDark) WarningTextDark else TrailWarning
+@Composable
+fun warningTextColor(): Color = if (isDarkTheme()) WarningTextDark else WarningInkLight
 
-/** Il colore del cielo all'orizzonte nella testata, nel tema in uso. */
-@androidx.compose.runtime.Composable
-fun dawnColor(): Color =
-    if (androidx.compose.material3.MaterialTheme.colorScheme.background == NightForestDark) DawnDark else DawnLight
+/** Rosso leggibile come testo sul rosso tenue (chip "Chiuso", allerte nuove), nel tema in uso. */
+@Composable
+fun emergencyTextColor(): Color = if (isDarkTheme()) Color(0xFFFF9C94) else EmergencyInk
+
+/** Fondo tenue rosso, nel tema in uso. */
+@Composable
+fun emergencySoftColor(): Color = if (isDarkTheme()) Color(0xFF3D1716) else EmergencySoft
+
+/** Fondo tenue per avvisi ambra (chip "Attenzione", icone dei pericoli). */
+@Composable
+fun warningSoftColor(): Color = if (isDarkTheme()) WarningSoftDark else WarningSoftLight

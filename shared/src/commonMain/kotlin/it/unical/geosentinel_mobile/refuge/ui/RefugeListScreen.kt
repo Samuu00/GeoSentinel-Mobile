@@ -17,10 +17,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Call
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -111,7 +107,10 @@ import it.unical.geosentinel_mobile.core.ui.SectionHeader
 import it.unical.geosentinel_mobile.core.ui.SegmentedControl
 import it.unical.geosentinel_mobile.core.ui.SkeletonRows
 import it.unical.geosentinel_mobile.core.ui.TonalPillButton
-import it.unical.geosentinel_mobile.core.ui.contours
+import it.unical.geosentinel_mobile.core.ui.TapCard
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.Icon
+import it.unical.geosentinel_mobile.core.ui.SkyPicture
 import it.unical.geosentinel_mobile.core.ui.directionsUri
 import it.unical.geosentinel_mobile.core.ui.groupedItem
 import it.unical.geosentinel_mobile.core.ui.rememberDialer
@@ -136,6 +135,7 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.maplibre.compose.location.LocationPermission
 import org.maplibre.compose.location.rememberLocationState
 import kotlin.time.Duration.Companion.seconds
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 // Quanto si aspetta la posizione (con il permesso già dato) prima di ripiegare sull'area di partenza
 private val FixWait = 3.seconds
@@ -269,62 +269,72 @@ private fun LazyListScope.exploreItems(
                 )
             }
             // una card per item (lazy: le foto si chiedono solo per le card che si vedono)
-            itemsIndexed(list.refuges, key = { _, refuge -> "refuge-" + refuge.id }) { _, refuge ->
+            itemsIndexed(list.refuges, key = { _, refuge -> "refuge-" + refuge.id }) { index, refuge ->
                 LaunchedEffect(refuge.id) { onCover(refuge.id) }
                 RefugeCard(
                     refuge,
                     from = list.from,
                     cover = covers[refuge.id],
                     coverKnown = refuge.id in covers,
-                    modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 24.dp),
+                    index = index,
+                    modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 16.dp),
                 ) { onOpenRefuge(refuge.id) }
             }
         }
     }
 }
 
-// Un rifugio come una cartolina (terza passata): la foto grande, sotto il nome, quota · posti e la distanza in verde;
-// tutta la card apre il dettaglio. Niente bordo né card intorno al testo: la foto fa da oggetto, come nelle guide di
-// Apple Maps
+// Un rifugio come una cartolina (redesign "Luce di quota"): card bianca con la foto in testa e la distanza in un chip
+// sulla foto; sotto il nome in Archivo, quota e posti. Tutta la card apre il dettaglio; entra a cascata e cede al tocco.
 @Composable
 private fun RefugeCard(
     refuge: RefugeResponse,
     from: GeoPoint,
     cover: MediaResponse?,
     coverKnown: Boolean,
+    index: Int,
     modifier: Modifier,
     onClick: () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
-    Column(
-        modifier
-            .clip(MaterialTheme.shapes.medium)
-            .clickable(onClickLabel = stringResource(Res.string.refuge_open), role = Role.Button, onClick = onClick),
-    ) {
-        Cover(cover, loading = !coverKnown)
-        Row(Modifier.padding(top = 12.dp, start = 4.dp, end = 4.dp, bottom = 4.dp), verticalAlignment = Alignment.Top) {
-            Column(Modifier.weight(1f)) {
-                Text(refuge.name, style = MaterialTheme.typography.titleMedium)
-                MetaLine(
-                    listOf(
-                        refuge.altitudeM?.let { stringResource(Res.string.refuge_altitude, it) },
-                        pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity),
-                    ),
-                    modifier = Modifier.padding(top = 2.dp),
-                )
+    TapCard(onClick = onClick, modifier = modifier, index = index, onClickLabel = stringResource(Res.string.refuge_open)) {
+        Box {
+            Cover(cover, loading = !coverKnown)
+            Surface(
+                color = colors.surfaceContainerLowest.copy(alpha = 0.92f),
+                contentColor = colors.onSurface,
+                shape = CircleShape,
+                modifier = Modifier.padding(12.dp),
+            ) {
+                Row(Modifier.padding(horizontal = 12.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(AppIcons.Navigation, contentDescription = null, modifier = Modifier.size(14.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text(distanceLabel(from.distanceTo(refuge.location.toGeoPoint())), style = MaterialTheme.typography.labelMedium)
+                }
             }
-            Spacer(Modifier.width(12.dp))
-            Text(
-                distanceLabel(from.distanceTo(refuge.location.toGeoPoint())),
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = colors.primary,
-            )
+        }
+        Row(Modifier.padding(start = 18.dp, end = 12.dp, top = 14.dp, bottom = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(refuge.name, style = MaterialTheme.typography.titleLarge)
+                Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(AppIcons.Mountain, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(6.dp))
+                    MetaLine(
+                        listOf(
+                            refuge.altitudeM?.let { stringResource(Res.string.refuge_altitude, it) },
+                            pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity),
+                            // la stagione, come nel progetto Figma ("1 760 m · Sila · giu–set")
+                            refuge.season,
+                        ),
+                    )
+                }
+            }
+            Icon(AppIcons.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
         }
     }
 }
 
-// La foto del rifugio a tutta larghezza (16:10, raggio 20) o, senza foto, una tessera muschio con le curve di livello.
+// La foto del rifugio a tutta larghezza (16:10) o, senza foto, il cielo dell'ora con le creste.
 // Decorativa: il nome è scritto sotto
 @Composable
 private fun Cover(cover: MediaResponse?, loading: Boolean) {
@@ -332,13 +342,13 @@ private fun Cover(cover: MediaResponse?, loading: Boolean) {
     Box(
         Modifier
             .fillMaxWidth()
-            .aspectRatio(16f / 10f)
-            .clip(MaterialTheme.shapes.medium)
+            .aspectRatio(16f / 9f)
             .background(fill)
             .clearAndSetSemantics { },
     ) {
         if (cover == null) {
-            if (!loading) Box(Modifier.matchParentSize().contours(over = fill, strength = 0.2f, cell = 8.dp))
+            // senza foto: il cielo dell'ora sopra le creste, come in testata
+            if (!loading) SkyPicture(Modifier.matchParentSize())
         } else {
             val media = koinInject<MediaRepository>()
             val signed = rememberSignedUrl(media, cover.id)
@@ -546,12 +556,12 @@ private fun NextStay(booking: BookingResponse, refuge: RefugeResponse?, today: L
             actions = if (refuge == null) null else {
                 {
                     refuge.phone?.let { phone ->
-                        TonalPillButton(stringResource(Res.string.refuge_call), onClick = { dial(phone) }, icon = Icons.Filled.Call, modifier = Modifier.weight(1f))
+                        TonalPillButton(stringResource(Res.string.refuge_call), onClick = { dial(phone) }, icon = AppIcons.Phone, modifier = Modifier.weight(1f))
                     }
                     TonalPillButton(
                         stringResource(Res.string.refuge_directions),
                         onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
-                        icon = Icons.Filled.Place,
+                        icon = AppIcons.MapPin,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -624,18 +634,18 @@ private fun BookingActionsSheet(
                 )
                 Spacer(Modifier.height(16.dp))
                 GroupCard {
-                    GroupRow(stringResource(Res.string.refuge_open), icon = Icons.Filled.Home, onClick = { close(onOpenRefuge) })
+                    GroupRow(stringResource(Res.string.refuge_open), icon = AppIcons.House, onClick = { close(onOpenRefuge) })
                     if (refuge != null) {
                         GroupDivider(60.dp)
                         GroupRow(
                             stringResource(Res.string.refuge_directions),
-                            icon = Icons.Filled.Place,
+                            icon = AppIcons.MapPin,
                             chevron = false,
                             onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
                         )
                         refuge.phone?.let { phone ->
                             GroupDivider(60.dp)
-                            GroupRow(stringResource(Res.string.refuge_call), icon = Icons.Filled.Call, chevron = false, onClick = { dial(phone) })
+                            GroupRow(stringResource(Res.string.refuge_call), icon = AppIcons.Phone, chevron = false, onClick = { dial(phone) })
                         }
                     }
                 }

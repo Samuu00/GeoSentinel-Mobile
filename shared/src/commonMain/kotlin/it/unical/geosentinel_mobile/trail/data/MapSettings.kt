@@ -5,6 +5,7 @@ import androidx.datastore.core.IOException
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -26,7 +27,17 @@ class MapSettings(private val dataStore: DataStore<Preferences>) {
         dataStore.edit { it[KEY] = type.name }
     }
 
+    /** Il foglio "Vicino a te" sulla mappa è aperto? (aperto la prima volta; poi come l'ha lasciato l'utente) */
+    val nearMeOpen: Flow<Boolean> = dataStore.data
+        .catch { if (it is IOException) emit(emptyPreferences()) else throw it }
+        .map { prefs -> prefs[NEAR_ME_OPEN] ?: true }
+
+    suspend fun setNearMeOpen(open: Boolean) {
+        dataStore.edit { it[NEAR_ME_OPEN] = open }
+    }
+
     private companion object {
         val KEY = stringPreferencesKey("map_type")
+        val NEAR_ME_OPEN = booleanPreferencesKey("near_me_open")
     }
 }

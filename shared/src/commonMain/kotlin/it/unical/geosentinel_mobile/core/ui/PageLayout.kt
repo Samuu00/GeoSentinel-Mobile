@@ -1,21 +1,34 @@
 package it.unical.geosentinel_mobile.core.ui
 
 import androidx.compose.animation.animateColorAsState
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -23,74 +36,56 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.pulltorefresh.PullToRefreshBox
-import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.semantics.stateDescription
-import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.compositionLocalOf
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shape
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.RoundRect
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.graphics.drawscope.clipRect
+import it.unical.geosentinel_mobile.core.ui.theme.StatusBarOverDark
+import it.unical.geosentinel_mobile.core.ui.theme.isDarkTheme
 
-// Struttura comune delle pagine (12/10): testata più bassa con il titolo subito sotto, gruppi di righe in una card sola
-// (lo stile "raggruppato" delle impostazioni) invece di una card per riga, e il contenuto che scorre sotto la barra a
-// isola. Prima ogni scheda apriva con 200 dp di paesaggio, titolo e due righe di introduzione: il contenuto partiva a
-// metà schermo.
+// Struttura comune delle pagine (redesign "Luce di quota", 11/2026): in cima il cielo dell'ora con il titolo grande
+// (Sky.kt), poi il foglio su cui sta il contenuto: gruppi di righe su card bianche, tessere dei dati in Archivo,
+// chip di stato. Il contenuto scorre sotto la barra in basso a isola.
 
 /** Larghezza massima del contenuto delle pagine (tablet, orizzontale). */
 internal val PageMaxWidth = 600.dp
-
 
 /**
  * Quanto occupa la barra a isola sotto il contenuto di una scheda (0 dove non c'è): App la fornisce, le schede la
@@ -98,98 +93,81 @@ internal val PageMaxWidth = 600.dp
  */
 internal val LocalBottomBarInset = compositionLocalOf { 0.dp }
 
-/**
- * Spazio da lasciare in fondo a una pagina che scorre: la barra a isola (che comprende già la safe area) nelle schede;
- * 0 nelle schermate spinte, dove il NavHost ha già il margine della safe area (prima si sommava due volte).
- */
+/** Spazio da lasciare in fondo a una pagina che scorre: la barra a isola nelle schede, 0 nelle schermate spinte. */
 @Composable
 internal fun pageBottomInset(): Dp = LocalBottomBarInset.current
 
 /**
- * Testata della pagina (redesign 11/2026: niente più paesaggio): il titolo grande sopra le curve di livello, con, a
- * destra, un'azione secondaria facoltativa ([trailing]) e sotto una riga di contesto ([intro]), breve. [hasBack]: la
- * pagina ha il tondo Indietro in alto, che vuole il suo spazio sopra il titolo.
- * Per le pagine nuove c'è [LargeTitlePage], che in più comprime il titolo in una barra scorrendo.
+ * Testata di una pagina che gestisce da sé la sua lista (primo item): il cielo con il titolo ([SkyHeader]).
+ * [hasBack]: la pagina ha il tondo Indietro in alto, che vuole il suo spazio sopra il titolo.
+ * Finché il cielo sta sotto la barra di stato, le icone di stato seguono il cielo.
  */
 @Composable
 internal fun PageHeader(
     title: String,
     intro: String? = null,
     trailing: (@Composable () -> Unit)? = null,
-    // sotto il titolo e l'introduzione: le schede (Segnalazioni | Ticket) o un link d'azione
     below: (@Composable () -> Unit)? = null,
     hasBack: Boolean = false,
 ) {
-    val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.fillMaxWidth().alpineBackdrop(landscapeHeight(topInset, hasBack)),
-    ) {
-        Spacer(Modifier.height(landscapeHeight(topInset, hasBack)))
-        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    title,
-                    style = MaterialTheme.typography.headlineLarge,
-                    modifier = Modifier.weight(1f).semantics { heading() },
-                )
-                if (trailing != null) {
-                    Spacer(Modifier.width(12.dp))
-                    trailing()
-                }
-            }
-            if (intro != null) {
-                Text(
-                    intro,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 4.dp),
-                )
-            }
-            if (below != null) {
-                Spacer(Modifier.height(16.dp))
-                below()
-            }
-        }
-    }
+    val daylight = rememberDaylight()
+    StatusBarOverDark(skyPalette(daylight.phase).dark)
+    SkyHeader(title = title, intro = intro, trailing = trailing, below = below, topBar = hasBack, daylight = daylight)
 }
 
-/** Titolo di un gruppo di righe, piccolo e grigio, appena sopra la card. */
+/** Titolo di un gruppo di righe: occhiello maiuscolo e spaziato, appena sopra la card. */
 @Composable
 internal fun GroupHeader(text: String, modifier: Modifier = Modifier) {
     Text(
-        text = text,
-        style = MaterialTheme.typography.labelLarge,
+        text = text.uppercase(),
+        style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp).semantics { heading() },
+        modifier = modifier.padding(start = 6.dp, top = 28.dp, bottom = 10.dp).semantics { heading() },
     )
 }
 
-/**
- * Card che raccoglie righe separate da un filo: un gruppo, un oggetto solo per l'occhio. Senza bordo (redesign): si
- * stacca dal fondo con il passo di tono, come le liste raggruppate di iOS.
- */
+/** Ombra morbida delle card sul fondo chiaro; di notte niente ombra (si staccano col tono). */
+@Composable
+internal fun Modifier.cardShadow(shape: Shape = MaterialTheme.shapes.medium, elevation: Dp = 10.dp): Modifier {
+    if (isDarkTheme()) return this
+    val tint = Color(0xFF0E2A1E).copy(alpha = 0.10f)
+    return shadow(elevation, shape, clip = false, ambientColor = tint, spotColor = tint)
+}
+
+/** Card che raccoglie righe separate da un filo: un gruppo, un oggetto solo per l'occhio. */
 @Composable
 internal fun GroupCard(modifier: Modifier = Modifier, content: @Composable () -> Unit) {
+    val shape = MaterialTheme.shapes.medium
     Surface(
-        shape = MaterialTheme.shapes.medium,
+        shape = shape,
         color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().cardShadow(shape),
     ) {
         Column { content() }
     }
 }
 
-/** Filo tra due righe, rientrato quanto il testo (dopo l'icona, se c'è). */
+/** Filo tra due righe, rientrato quanto il testo (dopo la tessera dell'icona, se c'è). */
 @Composable
 internal fun GroupDivider(indent: Dp = 16.dp) = HorizontalDivider(Modifier.padding(start = indent), color = MaterialTheme.colorScheme.outlineVariant)
 
-/** Rientro del filo dopo una riga con l'icona: 16 + 32 + 12. */
-internal val GroupIconIndent = 60.dp
+/** Rientro del filo dopo una riga con l'icona: 16 + 36 + 14. */
+internal val GroupIconIndent = 66.dp
+
+/** Tessera tonda-quadrata con un'icona: felce tenue di default, il colore dato per le righe-azione. Decorativa. */
+@Composable
+internal fun IconTile(icon: ImageVector, modifier: Modifier = Modifier, tint: Color = MaterialTheme.colorScheme.primary, size: Dp = 36.dp) {
+    Box(
+        modifier.size(size).background(tint.copy(alpha = if (isDarkTheme()) 0.18f else 0.12f), RoundedCornerShape(size * 0.32f)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(size * 0.56f))
+    }
+}
 
 /**
- * Riga di un gruppo, alta almeno 56 dp: icona facoltativa su un tondo muschio, titolo, sottotitolo, valore a destra e
- * freccia se apre un'altra schermata. [color] per le righe-azione (Esci, Elimina): niente freccia, testo in grassetto.
+ * Riga di un gruppo, alta almeno 60 dp: tessera dell'icona facoltativa, titolo, sottotitolo, valore a destra e freccia
+ * se apre un'altra schermata. [color] per le righe-azione (Esci, Elimina): niente freccia, testo in grassetto.
  */
 @Composable
 internal fun GroupRow(
@@ -204,28 +182,25 @@ internal fun GroupRow(
     onClickLabel: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
+    val action = color != Color.Unspecified
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .heightIn(min = 56.dp)
+            .heightIn(min = 60.dp)
             .clickable(enabled = enabled, onClickLabel = onClickLabel, role = Role.Button, onClick = onClick)
-            .padding(start = 16.dp, end = if (chevron) 8.dp else 16.dp, top = 12.dp, bottom = 12.dp),
+            .padding(start = 16.dp, end = if (chevron) 10.dp else 16.dp, top = 12.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (icon != null) {
-            // decorativa: il titolo dice già cos'è. Tessera piena come nelle Impostazioni di iOS, nel verde abete
-            Box(Modifier.size(32.dp).background(colors.primary, RoundedCornerShape(8.dp)), contentAlignment = Alignment.Center) {
-                Icon(icon, contentDescription = null, tint = colors.onPrimary, modifier = Modifier.size(20.dp))
-            }
-            Spacer(Modifier.width(12.dp))
+            IconTile(icon, tint = if (action) color else colors.primary)
+            Spacer(Modifier.width(14.dp))
         }
         Column(Modifier.weight(1f)) {
             Text(
                 title,
                 style = MaterialTheme.typography.bodyLarge,
-                // come nelle liste di iOS: titolo normale, il peso lo danno le righe-azione
-                fontWeight = if (color != Color.Unspecified) FontWeight.SemiBold else FontWeight.Normal,
-                color = if (color != Color.Unspecified) color else colors.onSurface,
+                fontWeight = if (action) FontWeight.SemiBold else FontWeight.Normal,
+                color = if (action) color else colors.onSurface,
             )
             if (subtitle != null) {
                 Text(subtitle, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, modifier = Modifier.padding(top = 2.dp))
@@ -235,19 +210,17 @@ internal fun GroupRow(
             Text(value, style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant, maxLines = 1, modifier = Modifier.padding(start = 12.dp))
         }
         if (chevron) {
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
+            Icon(AppIcons.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.padding(start = 4.dp).size(20.dp))
         }
     }
 }
 
 // Raggio dei gruppi: quello delle card (shapes.medium)
-private val GroupRadius = 20.dp
+private val GroupRadius = 24.dp
 
 /**
  * Una riga di un gruppo in una lista pigra (allerte, ticket, prenotazioni: paginate, quindi una riga per item e non una
  * card sola). Disegna il suo pezzo di card: angoli in alto sulla prima, in basso sull'ultima, solo i lati in mezzo.
- * Senza spazio tra gli item, le righe formano un gruppo come [GroupCard]; il filo tra le righe lo mette la riga
- * ([GroupDivider] in cima se non è la prima).
  */
 @Composable
 internal fun Modifier.groupedItem(first: Boolean, last: Boolean): Modifier {
@@ -258,56 +231,23 @@ internal fun Modifier.groupedItem(first: Boolean, last: Boolean): Modifier {
         bottomStart = if (last) GroupRadius else 0.dp,
         bottomEnd = if (last) GroupRadius else 0.dp,
     )
-    return this
-        .drawBehind {
-            val r = GroupRadius.toPx()
-            val stroke = 1.dp.toPx()
-            // il contorno di una card più alta, tagliato ai bordi della riga: restano solo i pezzi di questa riga
-            val path = Path().apply {
-                addRoundRect(
-                    RoundRect(
-                        left = stroke / 2,
-                        top = stroke / 2 - if (first) 0f else 2 * r,
-                        right = size.width - stroke / 2,
-                        bottom = size.height - stroke / 2 + if (last) 0f else 2 * r,
-                        cornerRadius = CornerRadius(r),
-                    ),
-                )
-            }
-            // solo il fondo, senza bordo, come GroupCard
-            clipRect { drawPath(path, fill) }
-        }
-        .clip(shape)
+    return this.clip(shape).background(fill)
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Redesign (11/2026, docs/UI_REDESIGN_PLAN.md §2.1)
-// ---------------------------------------------------------------------------------------------------------------------
+/** Ombra delle "isole" (controlli che galleggiano sopra il contenuto: barra in basso, Indietro, controlli della mappa). */
+@Composable
+internal fun Modifier.islandShadow(shape: Shape, elevation: Dp = 12.dp): Modifier {
+    val tint = Color(0xFF06140E).copy(alpha = if (isDarkTheme()) 0.5f else 0.18f)
+    return shadow(elevation, shape, clip = false, ambientColor = tint, spotColor = tint)
+}
 
 // Altezza della barra compatta in cima alle pagine (Indietro, titolo piccolo, azioni)
 private val CompactBarHeight = 52.dp
 
-// Il paesaggio sopra il titolo delle pagine: tanto basta per due creste e gli abeti (sotto la barra, se c'è)
-private val LandscapeBand = 56.dp
-
-private fun landscapeHeight(topInset: Dp, hasBar: Boolean): Dp =
-    topInset + if (hasBar) CompactBarHeight + LandscapeBand else LandscapeBand + 24.dp
-
 /**
- * Ombra delle "isole" (controlli che galleggiano sopra il contenuto: barra in basso, Indietro sopra una foto, barra
- * fissa): morbida e tinta del verde del tema invece del grigio, così sul bosco e sulla pietra non sporca.
- */
-@Composable
-internal fun Modifier.islandShadow(shape: Shape, elevation: Dp = 6.dp): Modifier {
-    val tint = MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
-    return shadow(elevation, shape, clip = false, ambientColor = tint, spotColor = tint)
-}
-
-/**
- * Pagina con il titolo grande (stile iOS): il titolo in Barlow da 34 sta in cima alla lista, sopra le curve di livello,
- * e scorre con il contenuto; quando passa sotto la barra in alto lì compare il titolo piccolo, centrato, su fondo pieno.
- * [onBack] e [actions] stanno sempre nella barra; [below] sotto il titolo grande (segmenti, link).
- * Con [onRefresh] la lista si aggiorna tirandola in giù.
+ * Pagina con il cielo e il titolo grande: la testata ([SkyHeader]) è il primo item e scorre con il contenuto; quando il
+ * titolo passa sotto la barra in alto lì compare il titolo piccolo su fondo pieno. [onBack] e [actions] stanno sempre
+ * nella barra; [below] sotto il titolo grande, già sul foglio (segmenti, link). Con [onRefresh] si aggiorna tirando giù.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -327,11 +267,15 @@ internal fun LargeTitlePage(
     val density = LocalDensity.current
     val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
     val hasBar = onBack != null || actions != null
-    // quanti px deve scorrere la lista perché il titolo grande passi sotto la barra
+    val daylight = rememberDaylight()
+    val palette = skyPalette(daylight.phase)
+    // quanti px deve scorrere la lista perché il cielo passi sotto la barra
     var threshold by remember { mutableIntStateOf(Int.MAX_VALUE) }
     val collapsed by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > threshold }
     }
+    // icone di stato: sul cielo quelle del cielo, sulla barra piena quelle del tema
+    StatusBarOverDark(if (collapsed) null else palette.dark)
     val list = @Composable {
         LazyColumn(
             state = listState,
@@ -340,40 +284,16 @@ internal fun LargeTitlePage(
             modifier = Modifier.fillMaxSize(),
         ) {
             item(key = "large-title") {
-                // il cielo e le creste in una fascia sopra il titolo (terza passata): il titolo poggia sul fondo pulito
-                val landscape = landscapeHeight(topInset, hasBar)
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier.fillMaxWidth().alpineBackdrop(landscape),
-                ) {
-                    Column(
-                        Modifier.fillMaxWidth().onSizeChanged { size ->
-                            threshold = size.height - with(density) { (topInset + CompactBarHeight).roundToPx() }
-                        },
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                    ) {
-                        Spacer(Modifier.height(landscape))
-                        Text(
-                            title,
-                            style = MaterialTheme.typography.headlineLarge,
-                            modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).semantics { heading() },
-                        )
-                    }
-                    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 16.dp)) {
-                        if (subtitle != null) {
-                            Text(
-                                subtitle,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = colors.onSurfaceVariant,
-                                modifier = Modifier.padding(top = 4.dp),
-                            )
-                        }
-                        if (below != null) {
-                            Spacer(Modifier.height(16.dp))
-                            below()
-                        }
-                    }
-                }
+                SkyHeader(
+                    title = title,
+                    intro = subtitle,
+                    below = below,
+                    topBar = hasBar,
+                    daylight = daylight,
+                    modifier = Modifier.onSizeChanged { size ->
+                        threshold = size.height - with(density) { (topInset + CompactBarHeight + RidgeBand).roundToPx() }
+                    },
+                )
             }
             content()
         }
@@ -384,16 +304,24 @@ internal fun LargeTitlePage(
         } else {
             list()
         }
-        CompactBar(title, collapsed, onBack, actions)
+        CompactBar(title, collapsed, onBack, actions, overSky = if (collapsed) null else palette.content)
     }
 }
 
-// La barra in cima: trasparente sopra il titolo grande, piena (con il titolo piccolo e un filo) quando il titolo è scorso via.
-// La usano anche le pagine con la foto in testata (rifugio, sentiero), quando la foto è scorsa via
+/**
+ * La barra in cima: trasparente sopra il cielo o la foto, piena (con il titolo piccolo e un filo) quando sono scorsi
+ * via. [overSky]: il colore dei controlli finché la barra sta sopra il cielo (null = quelli del tema).
+ */
 @Composable
-internal fun CompactBar(title: String, collapsed: Boolean, onBack: (() -> Unit)?, actions: (@Composable RowScope.() -> Unit)?) {
+internal fun CompactBar(
+    title: String,
+    collapsed: Boolean,
+    onBack: (() -> Unit)?,
+    actions: (@Composable RowScope.() -> Unit)?,
+    overSky: Color? = null,
+) {
     val colors = MaterialTheme.colorScheme
-    val fill by animateColorAsState(if (collapsed) colors.background else colors.background.copy(alpha = 0f), tween(150))
+    val fill by animateColorAsState(if (collapsed) colors.background else colors.background.copy(alpha = 0f), tween(180))
     Column(Modifier.fillMaxWidth().background(fill)) {
         Box(
             Modifier
@@ -401,8 +329,8 @@ internal fun CompactBar(title: String, collapsed: Boolean, onBack: (() -> Unit)?
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .height(CompactBarHeight),
         ) {
-            if (onBack != null) BackButton(onBack, Modifier.align(Alignment.CenterStart), floating = false)
-            val titleAlpha by animateFloatAsState(if (collapsed) 1f else 0f, tween(150))
+            if (onBack != null) BackButton(onBack, Modifier.align(Alignment.CenterStart).padding(start = 8.dp), floating = !collapsed, inBar = true)
+            val titleAlpha by animateFloatAsState(if (collapsed) 1f else 0f, tween(180))
             if (titleAlpha > 0f) {
                 Text(
                     title,
@@ -413,7 +341,11 @@ internal fun CompactBar(title: String, collapsed: Boolean, onBack: (() -> Unit)?
                 )
             }
             if (actions != null) {
-                Row(Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.material3.LocalContentColor provides (overSky ?: colors.onSurface),
+                ) {
+                    Row(Modifier.align(Alignment.CenterEnd).padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically, content = actions)
+                }
             }
         }
         if (collapsed) HorizontalDivider(color = colors.outlineVariant)
@@ -421,9 +353,9 @@ internal fun CompactBar(title: String, collapsed: Boolean, onBack: (() -> Unit)?
 }
 
 /**
- * Due o tre viste della stessa pagina (Esplora | Prenotazioni, Segnalazioni | Ticket): binario a capsula, la voce
- * scelta su un "pollice" chiaro che scorre. [badges]: voce → descrizione per gli screen reader di un pallino accanto
- * all'etichetta (es. prenotazioni da controllare).
+ * Due o tre viste della stessa pagina (Esplora | Prenotazioni, Segnalazioni | Ticket): binario in rilievo, la voce
+ * scelta su una card bianca che scorre con una molla. [badges]: voce → descrizione per gli screen reader di un pallino
+ * accanto all'etichetta (es. prenotazioni da controllare).
  */
 @Composable
 internal fun SegmentedControl(
@@ -434,8 +366,10 @@ internal fun SegmentedControl(
     badges: Map<Int, String> = emptyMap(),
 ) {
     val colors = MaterialTheme.colorScheme
-    val thumbColor = colors.surfaceContainerLowest
-    val position by animateFloatAsState(selected.toFloat(), spring(dampingRatio = 0.8f, stiffness = Spring.StiffnessMediumLow))
+    // bianco di giorno, un passo sopra il binario di notte
+    val thumbColor = colors.surfaceContainerHigh
+    val dark = isDarkTheme()
+    val position by animateFloatAsState(selected.toFloat(), spring(dampingRatio = 0.78f, stiffness = Spring.StiffnessMediumLow))
     Row(
         modifier
             .fillMaxWidth()
@@ -443,14 +377,14 @@ internal fun SegmentedControl(
             .background(colors.surfaceContainerHighest)
             .padding(4.dp)
             .drawBehind {
-                // il pollice si disegna dietro alle voci, così segue l'altezza anche con il testo grande
                 val width = size.width / options.size
-                drawRoundRect(
-                    color = thumbColor,
-                    topLeft = Offset(width * position, 0f),
-                    size = Size(width, size.height),
-                    cornerRadius = CornerRadius(size.height / 2),
-                )
+                val corner = CornerRadius(size.height / 2)
+                val topLeft = Offset(width * position, 0f)
+                if (!dark) {
+                    // un'ombra appena accennata sotto il pollice
+                    drawRoundRect(Color.Black.copy(alpha = 0.06f), topLeft + Offset(0f, 2.dp.toPx()), Size(width, size.height), corner)
+                }
+                drawRoundRect(thumbColor, topLeft, Size(width, size.height), corner)
             }
             .selectableGroup(),
     ) {
@@ -487,8 +421,6 @@ internal fun SegmentedControl(
 /**
  * Barra fissa in fondo alle schermate spinte e ai form: l'azione principale nella zona del pollice. Sopra, una
  * sfumatura di 24 dp verso il fondo: il contenuto che scorre sotto sfuma invece di finire contro un filo.
- * Le schermate la mettono in fondo a un Box (sopra il contenuto, che lascia spazio in basso) o in fondo a una Column.
- * Il margine della safe area lo dà già il NavHost.
  */
 @Composable
 internal fun StickyActionBar(modifier: Modifier = Modifier, content: @Composable ColumnScope.() -> Unit) {
@@ -519,19 +451,19 @@ internal fun MetaLine(parts: List<String?>, modifier: Modifier = Modifier, color
     if (text.isNotEmpty()) Text(text, style = MaterialTheme.typography.bodyMedium, color = color, modifier = modifier)
 }
 
-/** Titolo di una sezione dentro una pagina (Disponibilità, Servizi): 17 SemiBold, 32 dp sopra, 8 sotto. */
+/** Titolo di una sezione dentro una pagina (Disponibilità, Servizi): Archivo 20, 32 dp sopra, 12 sotto. */
 @Composable
 internal fun SectionHeader(text: String, modifier: Modifier = Modifier, trailing: (@Composable () -> Unit)? = null) {
     Row(
-        modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 32.dp, bottom = 8.dp),
+        modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 32.dp, bottom = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Text(text, style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f).semantics { heading() })
+        Text(text, style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).semantics { heading() })
         trailing?.invoke()
     }
 }
 
-/** Azione secondaria sotto il titolo della pagina, come link verde (es. "Nuova squadra di soccorso"). */
+/** Azione secondaria sotto il titolo della pagina, come link (es. "Nuova squadra di soccorso"). */
 @Composable
 internal fun HeaderLink(text: String, onClick: () -> Unit) {
     TextButton(
@@ -541,4 +473,130 @@ internal fun HeaderLink(text: String, onClick: () -> Unit) {
     ) {
         Text(text, fontWeight = FontWeight.SemiBold)
     }
+}
+
+/** Un dato in evidenza (Quota 1 760 m): etichetta piccola sopra, valore in Archivo, unità facoltativa. */
+internal data class Stat(val label: String, val value: String, val unit: String? = null)
+
+/**
+ * Le tessere dei dati di un luogo, affiancate in una card: Lunghezza, Dislivello, Tempo; Quota, Posti, Stagione.
+ * Lette come una frase sola ("Quota 1 760 m") dagli screen reader.
+ */
+@Composable
+internal fun StatStrip(stats: List<Stat>, modifier: Modifier = Modifier) {
+    if (stats.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    val single = stats.size == 1
+    val shape = MaterialTheme.shapes.medium
+    // un dato solo: la tessera larga quanto il suo contenuto, non una fascia vuota
+    Surface(
+        shape = shape,
+        color = colors.surfaceContainerLowest,
+        modifier = modifier.then(if (single) Modifier else Modifier.fillMaxWidth()).cardShadow(shape),
+    ) {
+        Row(Modifier.padding(vertical = 16.dp)) {
+            stats.forEachIndexed { index, stat ->
+                if (index > 0) Box(Modifier.width(1.dp).height(48.dp).background(colors.outlineVariant).align(Alignment.CenterVertically))
+                Column(
+                    Modifier
+                        .then(if (single) Modifier.widthIn(min = 120.dp) else Modifier.weight(1f))
+                        .padding(horizontal = 16.dp)
+                        .semantics(mergeDescendants = true) { },
+                ) {
+                    Text(stat.label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1)
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.Bottom) {
+                        Text(stat.value, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (stat.unit != null) {
+                            Text(
+                                " ${stat.unit}",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = colors.onSurfaceVariant,
+                                modifier = Modifier.padding(bottom = 2.dp),
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** I dati di un luogo in tessere separate, una card per dato (Quota, Posti, Stagione), affiancate. */
+@Composable
+internal fun StatTiles(stats: List<Stat>, modifier: Modifier = Modifier) {
+    if (stats.isEmpty()) return
+    val colors = MaterialTheme.colorScheme
+    val shape = MaterialTheme.shapes.medium
+    Row(modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        stats.forEach { stat ->
+            Surface(shape = shape, color = colors.surfaceContainerLowest, modifier = Modifier.weight(1f).cardShadow(shape)) {
+                Column(Modifier.padding(horizontal = 14.dp, vertical = 14.dp).semantics(mergeDescendants = true) { }) {
+                    Text(stat.label, style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant, maxLines = 1)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        stat.value + (stat.unit?.let { " $it" } ?: ""),
+                        style = MaterialTheme.typography.titleLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+            }
+        }
+        // sempre tre posti: con meno dati le tessere restano larghe un terzo, non si allungano
+        repeat(3 - stats.size.coerceAtMost(3)) { Spacer(Modifier.weight(1f)) }
+    }
+}
+
+/** Capsula di stato (Aperto, Attenzione, Chiuso, Confermata): icona e testo su un fondo tenue. */
+@Composable
+internal fun StatusChip(text: String, color: Color, modifier: Modifier = Modifier, icon: ImageVector? = null, container: Color? = null) {
+    Surface(
+        color = container ?: color.copy(alpha = if (isDarkTheme()) 0.18f else 0.12f),
+        contentColor = color,
+        shape = CircleShape,
+        modifier = modifier,
+    ) {
+        Row(Modifier.heightIn(min = 30.dp).padding(horizontal = 12.dp, vertical = 5.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (icon != null) {
+                Icon(icon, contentDescription = null, modifier = Modifier.size(16.dp))
+                Spacer(Modifier.width(6.dp))
+            }
+            Text(text, style = MaterialTheme.typography.labelMedium)
+        }
+    }
+}
+
+/** Card toccabile del nuovo sistema: bianca, angoli da 24, ombra morbida, cede sotto il dito, entra a cascata. */
+@Composable
+internal fun TapCard(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    index: Int = 0,
+    onClickLabel: String? = null,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    val shape = MaterialTheme.shapes.medium
+    val interaction = remember { MutableInteractionSource() }
+    Surface(
+        shape = shape,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+        modifier = modifier
+            .enterStagger(index)
+            .pressScale(interaction)
+            .cardShadow(shape)
+            .clip(shape)
+            .clickable(interactionSource = interaction, indication = androidx.compose.material3.ripple(), onClickLabel = onClickLabel, role = Role.Button, onClick = onClick),
+    ) {
+        Column(content = content)
+    }
+}
+
+/** "39,3121 N · 16,4211 E": una posizione a quattro decimali (circa 10 m), come la leggono i soccorritori. */
+internal fun coordinatesLabel(lat: Double, lon: Double): String {
+    fun Double.four(): String {
+        val scaled = kotlin.math.round(kotlin.math.abs(this) * 10_000).toLong()
+        return "${scaled / 10_000},${(scaled % 10_000).toString().padStart(4, '0')}"
+    }
+    return "${lat.four()} ${if (lat >= 0) "N" else "S"} · ${lon.four()} ${if (lon >= 0) "E" else "O"}"
 }

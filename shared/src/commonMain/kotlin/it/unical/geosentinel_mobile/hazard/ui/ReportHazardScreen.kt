@@ -29,8 +29,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.FilterChipDefaults
 import androidx.compose.material3.Icon
@@ -120,6 +118,7 @@ import org.maplibre.compose.map.rememberMapState
 import kotlin.math.log2
 import kotlin.math.max
 import kotlin.time.Duration.Companion.seconds
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 // Zoom minimo dopo "Usa la mia posizione": abbastanza vicino da spostare il segnaposto sul punto giusto
 private const val PickZoom = 16.0
@@ -355,7 +354,7 @@ internal fun LocationPicker(
         )
         // la punta del segnaposto sul centro della mappa; decorativo, il testo sotto spiega cosa fare
         Icon(
-            Icons.Filled.Place,
+            AppIcons.MapPin,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.align(Alignment.Center).size(44.dp).offset(y = (-22).dp),

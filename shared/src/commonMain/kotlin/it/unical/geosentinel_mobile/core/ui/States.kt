@@ -25,13 +25,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.drawWithCache
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.StrokeCap
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -45,39 +40,12 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import org.jetbrains.compose.resources.stringResource
 
-// Stati condivisi delle pagine (redesign, 11/2026): vuoto, errore, caricamento. Prima ogni schermata aveva il suo
-// Message privato, con margini e colori un po' diversi.
+// Stati condivisi delle pagine: vuoto, errore, caricamento (redesign "Luce di quota": il disegno è un piccolo cielo).
 
-/**
- * Curve di livello disegnate dietro al contenuto: l'elemento firma dell'app (titoli grandi, stati vuoti, biglietto
- * della prenotazione). [strength] è quanto l'inchiostro si stacca dal fondo [over]: 0.06–0.12, mai di più (è trama).
- */
+/** Il tondo con un piccolo cielo dell'ora e le creste: il "disegno" degli stati vuoti e d'errore. Decorativo. */
 @Composable
-internal fun Modifier.contours(over: Color, strength: Float = 0.08f, cell: Dp = 7.dp): Modifier {
-    val ink = MaterialTheme.colorScheme.primary
-    return drawWithCache {
-        val (minor, major) = contourPaths(size.width, size.height, cell.toPx())
-        val thin = Stroke(width = 1.dp.toPx(), cap = StrokeCap.Round)
-        val thick = Stroke(width = 1.5.dp.toPx(), cap = StrokeCap.Round)
-        onDrawBehind {
-            drawPath(minor, lerp(over, ink, strength), style = thin)
-            drawPath(major, lerp(over, ink, strength * 1.8f), style = thick)
-        }
-    }
-}
-
-/** Il tondo muschio con le curve di livello: il "disegno" degli stati vuoti e d'errore. Decorativo. */
-@Composable
-internal fun ContourBadge(size: Dp = 96.dp) {
-    val fill = MaterialTheme.colorScheme.primaryContainer
-    Box(
-        Modifier
-            .size(size)
-            .clip(CircleShape)
-            .background(fill)
-            .contours(over = fill, strength = 0.18f, cell = 5.dp)
-            .clearAndSetSemantics { },
-    )
+internal fun SkyBadge(size: Dp = 112.dp) {
+    SkyPicture(Modifier.size(size).clip(CircleShape).clearAndSetSemantics { })
 }
 
 /** Stato vuoto: disegno, titolo, una riga di spiegazione e al massimo un'azione. */
@@ -87,9 +55,9 @@ internal fun EmptyState(title: String, body: String? = null, modifier: Modifier 
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 32.dp, vertical = 48.dp),
     ) {
-        ContourBadge()
+        SkyBadge()
         Spacer(Modifier.height(24.dp))
-        Text(title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
+        Text(title, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center, modifier = Modifier.semantics { heading() })
         if (body != null) {
             Spacer(Modifier.height(8.dp))
             Text(body, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
@@ -112,7 +80,7 @@ internal fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier
         modifier = modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 32.dp, vertical = if (compact) 16.dp else 48.dp),
     ) {
         if (!compact) {
-            ContourBadge()
+            SkyBadge()
             Spacer(Modifier.height(24.dp))
         }
         Text(

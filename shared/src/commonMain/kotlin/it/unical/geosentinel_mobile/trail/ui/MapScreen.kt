@@ -34,8 +34,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -130,7 +128,11 @@ import it.unical.geosentinel_mobile.core.ui.SegmentedControl
 import it.unical.geosentinel_mobile.core.ui.TonalPillButton
 import it.unical.geosentinel_mobile.core.ui.islandShadow
 import androidx.compose.foundation.shape.RoundedCornerShape
-import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
+import it.unical.geosentinel_mobile.core.ui.theme.StatusBarOverDark
+import it.unical.geosentinel_mobile.core.ui.theme.MapMutedDark
+import it.unical.geosentinel_mobile.core.ui.theme.MapMutedLight
+import it.unical.geosentinel_mobile.core.ui.theme.MapMarkerFillDark
+import it.unical.geosentinel_mobile.core.ui.theme.MapMarkerFillLight
 import it.unical.geosentinel_mobile.core.push.PushEvent
 import it.unical.geosentinel_mobile.core.push.PushManager
 import it.unical.geosentinel_mobile.hazard.ui.HazardCard
@@ -186,6 +188,7 @@ import org.maplibre.compose.overlay.DisappearingScaleBar
 import org.maplibre.compose.overlay.LocalViewportInsets
 import org.maplibre.compose.overlay.MapOverlay
 import org.maplibre.compose.style.BaseStyle
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 // Senza posizione la mappa parte dalla Sila, dove stanno i sentieri del seed. Anche la lista dei rifugi parte da qui
 internal val DefaultArea = GeoPoint(lat = 39.33, lon = 16.55)
@@ -251,6 +254,10 @@ private enum class NearTab(val label: StringResource) { Trails(Res.string.near_m
 
 // Spazio sotto i controlli per il pulsante SOS (72 dp) e il suo margine
 private val SosClearance = 104.dp
+// spazio della barra di ricerca in alto e del foglio "Vicino a te" in basso (redesign "Luce di quota")
+private val TopBarSpace = 64.dp
+private val PeekSpace = 236.dp
+private val PeekClosedSpace = 76.dp
 
 // Il tocco su "Pericoli vicini" porta almeno a questo zoom: il triangolo si vede in mezzo ai sentieri
 private const val HazardZoom = 15.0
@@ -271,6 +278,10 @@ fun MapScreen(
     onOpenRefuge: ((String) -> Unit)?,
     onOpenAlert: ((String) -> Unit)?,
     bottomBar: Dp = 0.dp,
+    // il tondo dell'utente in alto a destra (Figma): apre il Profilo; l'iniziale del nome, se c'è
+    onOpenProfile: () -> Unit = {},
+    avatarInitial: Char? = null,
+    avatarMediaId: String? = null,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
@@ -318,24 +329,24 @@ fun MapScreen(
         }
     }
     var choosingType by rememberSaveable { mutableStateOf(false) }
+    var searching by rememberSaveable { mutableStateOf(false) }
+    // "Vicino a te" aperto o chiuso: come l'ha lasciato l'utente (DataStore)
+    val nearMeOpen by mapSettings.nearMeOpen.collectAsState(initial = true)
+    val peekSpace = if (nearMeOpen) PeekSpace else PeekClosedSpace
     // remember, non rememberSaveable: tornando sulla mappa da un'altra pagina o scheda la card del POI è chiusa
     var selectedPoiId by remember { mutableStateOf<String?>(null) }
     // lo stesso per la card del pericolo, la cui selezione vive nel ViewModel
     DisposableEffect(Unit) { onDispose { hazardViewModel.clearSelection() } }
     // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
     // Lasciando la mappa tornano a seguire il tema.
-    val statusBarOverDark = LocalStatusBarOverDark.current
     val mapIsDark = mapType == MapType.SATELLITE || dark
-    DisposableEffect(mapIsDark) {
-        statusBarOverDark.value = mapIsDark
-        onDispose { statusBarOverDark.value = null }
-    }
+    StatusBarOverDark(mapIsDark)
     val casing = trailCasing(mapIsDark)
     val mapState = rememberMapState(
         baseStyle = style,
         initialCameraPosition = CameraPosition(target = DefaultArea.toPosition(), zoom = DefaultZoom),
     ) {
-        TrailLines(ui.trails, casing = casing, unknownColor = colors.onSurfaceVariant, onTrailClick = onOpenTrail)
+        TrailLines(ui.trails, casing = casing, unknownColor = if (dark) MapMutedDark else MapMutedLight, onTrailClick = onOpenTrail)
         PoiMarkers(
             ui.pois,
             label = mapLabelInk(mapIsDark),
@@ -349,13 +360,13 @@ fun MapScreen(
             RefugeMarkers(refuges, label = mapLabelInk(mapIsDark), halo = mapLabelHalo(mapIsDark), onRefugeClick = onOpenRefuge)
         }
         // sopra sentieri, POI e rifugi: un pericolo non deve restare nascosto
-        HazardMarkers(hazardUi.shown, halo = casing, otherColor = colors.onSurfaceVariant) { id ->
+        HazardMarkers(hazardUi.shown, halo = casing, otherColor = if (dark) MapMutedDark else MapMutedLight) { id ->
             selectedPoiId = null
             hazardViewModel.select(id)
         }
         // le allerte sopra i pericoli: per l'operatore sono la cosa più importante della mappa
         if (onOpenAlert != null) {
-            SosAlertMarkers(alerts, light = colors.surfaceContainerLowest, onAlertClick = onOpenAlert)
+            SosAlertMarkers(alerts, light = if (dark) MapMarkerFillDark else MapMarkerFillLight, onAlertClick = onOpenAlert)
         }
         // il pallino sopra tutto
         // come su iPhone: pallino blu con l'anello bianco, cerchio della precisione azzurro tenue, cono della direzione
@@ -462,8 +473,9 @@ fun MapScreen(
             // la mappa arriva sotto la barra di stato e sotto la barra in basso; scala, bussola e attribuzione restano
             // visibili sopra la barra e sopra il pulsante SOS
             viewportInsets = PaddingValues(
-                top = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding(),
-                bottom = bottomBar + 96.dp,
+                // sotto la barra di ricerca in alto e sopra il foglio "Vicino a te" in basso
+                top = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding() + TopBarSpace,
+                bottom = bottomBar + peekSpace,
             ),
             // Overlay di default di MapLibre senza il logo (la licenza BSD non lo richiede), stesso posizionamento.
             // L'attribuzione (la "i") resta: OpenStreetMap (ODbL) e OpenFreeMap la chiedono visibile sulla mappa.
@@ -495,7 +507,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
-                .padding(top = 12.dp, start = 72.dp, end = 72.dp),
+                .padding(top = TopBarSpace + 12.dp, start = 72.dp, end = 72.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
@@ -538,7 +550,7 @@ fun MapScreen(
             modifier = Modifier
                 .align(Alignment.TopEnd)
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.End + WindowInsetsSides.Top))
-                .padding(end = 16.dp, top = 8.dp, bottom = bottomBar + SosClearance)
+                .padding(end = 16.dp, top = TopBarSpace + 8.dp, bottom = bottomBar + peekSpace)
                 .verticalScroll(rememberScrollState())
                 .padding(start = 8.dp, bottom = 8.dp),
         ) {
@@ -546,6 +558,12 @@ fun MapScreen(
                 listOfNotNull(
                     MapAction(Res.string.map_type_button, Glyph.Layers) { choosingType = true },
                     MapAction(Res.string.map_my_location, Glyph.Locate) { withLocation(LocationGoal.Center) { centerOnFix = true } },
+                    // segnalare un pericolo nel punto che si sta guardando (da loggati)
+                    onReportHazard?.let { report ->
+                        MapAction(Res.string.report_open, Glyph.Hazard) {
+                            report(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
+                        }
+                    },
                     // solo per il gestore del parco (M8.1): il form parte dal punto che si sta guardando
                     onCreatePoi?.let { create ->
                         MapAction(Res.string.poi_create_title, Glyph.AddPoint) {
@@ -557,16 +575,32 @@ fun MapScreen(
         }
         // sentieri e pericoli intorno a te: la barra in basso a sinistra apre il foglio con due schede; dentro, a destra,
         // "Segnala un pericolo" (solo da loggati). Nascosta quando c'è la card di un punto toccato, che sta nello stesso posto
+        // in alto la ricerca e il tondo del Profilo (Figma)
+        MapTopBar(
+            onSearch = { searching = true },
+            onProfile = onOpenProfile,
+            initial = avatarInitial,
+            avatarMediaId = avatarMediaId,
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        )
+        // "Vicino a te": i sentieri dell'area in card; nascosto quando c'è la card di un punto toccato, che sta lì
         if (selectedPoiId == null && hazardUi.selected == null) {
-            NearMeBar(
-                onClick = { withLocation(LocationGoal.NearMe, ::openNearMe) },
-                onReport = onReportHazard?.let { report ->
-                    { report(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom)) }
-                },
+            NearMePeek(
+                trails = ui.trails,
+                center = mapState.cameraPosition.target.toGeoPoint(),
+                zoomTooLow = ui.zoomTooLow,
+                expanded = nearMeOpen,
+                onToggle = { scope.launch { mapSettings.setNearMeOpen(!nearMeOpen) } },
+                onOpenTrail = onOpenTrail,
+                onOpenNearMe = { withLocation(LocationGoal.NearMe, ::openNearMe) },
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Start))
-                    .padding(start = 16.dp, end = 136.dp, bottom = bottomBar + 16.dp),
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(start = 12.dp, end = 12.dp, bottom = bottomBar + 8.dp)
+                    .widthIn(max = 560.dp),
             )
         }
         // POI toccato: nome e tipo in una card in basso a sinistra (l'SOS sta a destra)
@@ -593,6 +627,29 @@ fun MapScreen(
                     .padding(start = 16.dp, end = 136.dp, bottom = bottomBar + 16.dp),
             )
         }
+    }
+
+    if (searching) {
+        MapSearchSheet(
+            trails = ui.trails,
+            refuges = if (onOpenRefuge != null) refuges else emptyList(),
+            pois = ui.pois,
+            onPick = { hit ->
+                searching = false
+                when (hit) {
+                    is MapSearchHit.Trail -> onOpenTrail(hit.trail.id)
+                    is MapSearchHit.Refuge -> onOpenRefuge?.invoke(hit.refuge.id)
+                    is MapSearchHit.Poi -> {
+                        hazardViewModel.clearSelection()
+                        selectedPoiId = hit.poi.id
+                        scope.launch {
+                            mapState.animateCamera(CameraUpdate(target = hit.poi.location.toGeoPoint().toPosition(), zoom = max(mapState.cameraPosition.zoom, HazardZoom)))
+                        }
+                    }
+                }
+            },
+            onDismiss = { searching = false },
+        )
     }
 
     if (choosingType) {
@@ -677,58 +734,6 @@ internal fun LocationState.recentFix(): GeoPoint? {
     return if (age <= MaxFixAge) fix.position.toGeoPoint() else null
 }
 
-// "Vicino a te" come la barra di ricerca di Apple Maps: una capsula larga in basso con il simbolo del radar e una riga
-// che dice cosa trova. Isola come gli altri controlli
-// [onReport]: "Segnala un pericolo" in fondo alla barra, un tondo verde pieno (l'unica azione piena della mappa, oltre
-// all'SOS); null per l'ospite. Due bersagli separati: la barra apre il foglio, il tondo il form.
-@Composable
-private fun NearMeBar(onClick: () -> Unit, onReport: (() -> Unit)?, modifier: Modifier) {
-    val colors = MaterialTheme.colorScheme
-    Surface(
-        shape = CircleShape,
-        color = mapControlColor(),
-        border = mapControlBorder(),
-        modifier = modifier.fillMaxWidth().widthIn(max = 420.dp).islandShadow(CircleShape, MapControlElevation),
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Row(
-                Modifier
-                    .weight(1f)
-                    .heightIn(min = 60.dp)
-                    .clip(CircleShape)
-                    .clickable(role = Role.Button, onClick = onClick)
-                    .padding(start = 10.dp, end = 12.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Box(Modifier.size(40.dp).background(colors.primaryContainer, CircleShape), contentAlignment = Alignment.Center) {
-                    GlyphIcon(Glyph.NearMe, colors.onPrimaryContainer)
-                }
-                Spacer(Modifier.width(12.dp))
-                // una riga sola, come la ricerca di Apple Maps
-                Text(
-                    stringResource(Res.string.near_me_title),
-                    style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.padding(vertical = 8.dp),
-                )
-            }
-            if (onReport != null) {
-                val label = stringResource(Res.string.report_open)
-                Box(
-                    Modifier
-                        .padding(end = 8.dp)
-                        .size(48.dp)
-                        .clip(CircleShape)
-                        .background(colors.primary)
-                        .clickable(role = Role.Button, onClick = onReport)
-                        .semantics { contentDescription = label },
-                    contentAlignment = Alignment.Center,
-                ) { GlyphIcon(Glyph.Hazard, colors.onPrimary) }
-            }
-        }
-    }
-}
 
 // Capsula sopra la mappa, nei colori delle card: un'azione (emphasized, nel verde del tema) o un avviso
 @Composable
@@ -781,7 +786,7 @@ private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onClose: () ->
                     contentAlignment = Alignment.Center,
                 ) {
                     Box(Modifier.size(30.dp).background(colors.surfaceContainerHighest, CircleShape), contentAlignment = Alignment.Center) {
-                        Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.poi_close), tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                        Icon(AppIcons.Close, contentDescription = stringResource(Res.string.poi_close), tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
                     }
                 }
             }

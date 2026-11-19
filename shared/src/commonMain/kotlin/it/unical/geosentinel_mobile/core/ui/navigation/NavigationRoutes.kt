@@ -1,11 +1,5 @@
 package it.unical.geosentinel_mobile.core.ui.navigation
 
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Build
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Notifications
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.ui.graphics.vector.ImageVector
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.nav_alerts
@@ -14,6 +8,7 @@ import geosentinel_mobile.shared.generated.resources.nav_map
 import geosentinel_mobile.shared.generated.resources.nav_profile
 import geosentinel_mobile.shared.generated.resources.nav_refuges
 import it.unical.geosentinel_mobile.core.session.UserRole
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 import kotlinx.serialization.Serializable
 import org.jetbrains.compose.resources.StringResource
 
@@ -63,6 +58,8 @@ sealed interface Route {
     // verifica in due passaggi (M10.2)
     @Serializable data object Mfa : Route
     @Serializable data object MyHazards : Route
+    // crediti e licenze delle fonti esterne (mappa, foto, icone, caratteri)
+    @Serializable data object Credits : Route
 }
 
 // Schermate "spinte" con un form: niente barra in basso (con la tastiera aperta ruberebbe spazio)
@@ -72,9 +69,10 @@ val FormRoutes = setOf(
     Route.RefugeCapacity::class, Route.RescueTeamCreate::class, Route.Mfa::class, Route.MfaReset::class,
 )
 
-// Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta e le liste "mie" (con il loro Indietro)
+// Schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta, le liste "mie" (con il loro
+// Indietro) e l'SOS, che resta una schermata sola, senza distrazioni (redesign "Luce di quota")
 val NoBottomBarRoutes = FormRoutes + Route.TrailDetail::class + Route.RefugeDetail::class + Route.AlertDetail::class +
-    Route.MyHazards::class + Route.HazardQueue::class + Route.TicketDetail::class
+    Route.MyHazards::class + Route.HazardQueue::class + Route.TicketDetail::class + Route.SosEmergency::class + Route.Credits::class
 
 data class BottomNavItem(
     val route: Route,
@@ -85,10 +83,10 @@ data class BottomNavItem(
 
 // Al massimo 5 voci (le vede tutte solo ADMIN)
 val BottomNavItems = listOf(
-    BottomNavItem(Route.Map, Res.string.nav_map, Icons.Filled.Place) { true },
-    BottomNavItem(Route.Refuges, Res.string.nav_refuges, Icons.Filled.Home) { it.canViewRefuges() },
+    BottomNavItem(Route.Map, Res.string.nav_map, AppIcons.Map) { true },
+    BottomNavItem(Route.Refuges, Res.string.nav_refuges, AppIcons.House) { it.canViewRefuges() },
     // campanella e non triangolo: il triangolo resta ai pericoli sui sentieri
-    BottomNavItem(Route.Alerts, Res.string.nav_alerts, Icons.Filled.Notifications) { it.canViewAlerts() },
-    BottomNavItem(Route.Management, Res.string.nav_management, Icons.Filled.Build) { it.canManagePark() },
-    BottomNavItem(Route.Profile, Res.string.nav_profile, Icons.Filled.Person) { true },
+    BottomNavItem(Route.Alerts, Res.string.nav_alerts, AppIcons.Bell) { it.canViewAlerts() },
+    BottomNavItem(Route.Management, Res.string.nav_management, AppIcons.Wrench) { it.canManagePark() },
+    BottomNavItem(Route.Profile, Res.string.nav_profile, AppIcons.User) { true },
 )

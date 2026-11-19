@@ -131,6 +131,8 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 /**
  * Scheda Gestione: le segnalazioni da verificare (M8.1) e i ticket di manutenzione (M8.2), scelti con due voci sotto
@@ -178,7 +180,10 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
         onPauseOrDispose { }
     }
 
+    val listState = rememberLazyListState()
+    Box(Modifier.fillMaxSize()) {
     LazyColumn(
+        state = listState,
         horizontalAlignment = Alignment.CenterHorizontally,
         contentPadding = PaddingValues(bottom = 24.dp + pageBottomInset()),
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -217,6 +222,8 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
                 TicketRow(ticket, first = index == 0, last = index == state.tickets.lastIndex) { onOpenTicket(ticket.id) }
             }
         }
+    }
+    SkyStatusBarScrim(show = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 120)
     }
 }
 

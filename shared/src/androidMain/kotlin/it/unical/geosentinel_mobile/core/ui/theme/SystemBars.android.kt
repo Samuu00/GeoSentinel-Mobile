@@ -6,6 +6,7 @@ import android.os.Build
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
@@ -13,7 +14,11 @@ import androidx.core.view.WindowCompat
 actual fun SystemBarsAppearance(mode: ThemeMode, darkTheme: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
+    // al cambio di tema (setApplicationNightMode, qui sotto) il sistema rimette le icone di default: leggere la
+    // configurazione fa ricomporre e riapplicare la scelta anche quando [darkTheme] non è cambiato
+    val uiMode = LocalConfiguration.current.uiMode
     SideEffect {
+        uiMode.hashCode()
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
             isAppearanceLightStatusBars = !darkTheme

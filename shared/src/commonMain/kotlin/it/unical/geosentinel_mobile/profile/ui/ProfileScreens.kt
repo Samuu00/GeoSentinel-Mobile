@@ -11,6 +11,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -33,12 +34,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
-import androidx.compose.material.icons.filled.Lock
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -56,7 +51,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -72,8 +66,6 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathOperation
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -89,14 +81,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import coil3.compose.AsyncImage
-import coil3.compose.LocalPlatformContext
-import coil3.request.CachePolicy
-import coil3.request.ImageRequest
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.my_hazards_title
 import geosentinel_mobile.shared.generated.resources.my_bookings_title
-import androidx.compose.material.icons.filled.DateRange
 import geosentinel_mobile.shared.generated.resources.auth_cancel
 import geosentinel_mobile.shared.generated.resources.auth_no_account
 import geosentinel_mobile.shared.generated.resources.auth_password_rules
@@ -154,10 +141,7 @@ import it.unical.geosentinel_mobile.auth.ui.ContinueWithGoogle
 import it.unical.geosentinel_mobile.core.session.SessionState
 import it.unical.geosentinel_mobile.core.session.UserProfile
 import it.unical.geosentinel_mobile.media.data.ImageEncoder
-import it.unical.geosentinel_mobile.media.data.MediaRepository
 import it.unical.geosentinel_mobile.media.ui.rememberPhotoPicker
-import it.unical.geosentinel_mobile.media.ui.rememberSignedUrl
-import kotlinx.coroutines.launch
 import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.FooterLink
@@ -167,7 +151,13 @@ import it.unical.geosentinel_mobile.core.ui.GroupHeader
 import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
 import it.unical.geosentinel_mobile.core.ui.GroupRow
 import it.unical.geosentinel_mobile.core.ui.pageBottomInset
-import it.unical.geosentinel_mobile.core.ui.alpineBackdrop
+import it.unical.geosentinel_mobile.core.ui.PageHeader
+import it.unical.geosentinel_mobile.media.ui.AvatarPhoto
+import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
+import it.unical.geosentinel_mobile.core.ui.StatusChip
+import geosentinel_mobile.shared.generated.resources.nav_profile
+import geosentinel_mobile.shared.generated.resources.credits_title
+import geosentinel_mobile.shared.generated.resources.profile_info_section
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
@@ -184,6 +174,7 @@ import org.koin.compose.viewmodel.koinViewModel
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 
 // Passi della cancellazione: prima cosa succede, poi la conferma definitiva (doppia conferma, §M2.3)
@@ -201,6 +192,7 @@ fun ProfileScreen(
     onSetPassword: (email: String) -> Unit,
     onMfa: () -> Unit,
     onMyHazards: () -> Unit,
+    onCredits: () -> Unit,
     // null per chi non vede i rifugi
     onMyBookings: (() -> Unit)?,
     themeMode: ThemeMode,
@@ -218,60 +210,58 @@ fun ProfileScreen(
         if (sosState is SosState.Sending || sosState is SosState.Raised) confirmLogout = true else viewModel.logout()
     }
 
+    val scroll = rememberScrollState()
+    Box(Modifier.fillMaxSize()) {
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background)
-            .verticalScroll(rememberScrollState()),
+            .verticalScroll(scroll),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Terza passata (11/2026), come la scheda dell'ID Apple: in testata il cielo e le creste delle altre schede, e lì
-        // in mezzo chi sei (foto grande, nome, ruolo ed email), centrato. Da ospite la testata resta vuota e sotto c'è
-        // il blocco per entrare
-        val topInset = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding()
-        // il paesaggio ha un'altezza fissa dietro: la foto ci sta sopra, nome ed email sotto, sul fondo pulito
-        Box(Modifier.fillMaxWidth()) {
-        Box(Modifier.fillMaxWidth().height(topInset + 150.dp).alpineBackdrop())
-        Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
-            Spacer(Modifier.height(if (session is SessionState.LoggedIn) 40.dp else 72.dp))
+        // Redesign "Luce di quota": il cielo dell'ora con il titolo, poi sul foglio la card di chi sei (foto, nome, ruolo,
+        // email) che si appoggia sulle creste. Da ospite al suo posto il blocco per entrare.
+        PageHeader(title = stringResource(Res.string.nav_profile))
+        // la prima card si appoggia sulle creste (Figma): tutto il contenuto sale di 36 dp sul foglio
+        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).offset(y = (-36).dp)) {
             if (session is SessionState.LoggedIn) {
                 val encoder = koinInject<ImageEncoder>()
-                // quadrata da 512 px: il cerchio la mostra a 96 dp, anche sugli schermi più densi
+                // quadrata da 512 px: il cerchio la mostra a 80 dp, anche sugli schermi più densi
                 val pickPhoto = rememberPhotoPicker { picked ->
                     viewModel.uploadAvatar { encoder.toJpeg(picked, maxSidePx = AvatarSidePx, squareCrop = true) }
                 }
-                ProfileAvatar(profile, busy = ui.avatarBusy, onPick = pickPhoto, onRemove = viewModel::removeAvatar)
-                Spacer(Modifier.size(12.dp))
-                Text(
-                    text = profile?.displayName ?: stringResource(session.role.label()),
-                    style = MaterialTheme.typography.headlineMedium,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(horizontal = 20.dp).semantics { heading() },
-                )
-                // senza profilo (avvio offline) niente sottotitolo
-                if (profile != null) {
-                    Text(
-                        stringResource(profile.role.label()) + " · " + profile.email,
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        modifier = Modifier.padding(horizontal = 20.dp, vertical = 2.dp),
-                    )
+                GroupCard {
+                    Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        ProfileAvatar(profile, busy = ui.avatarBusy, onPick = pickPhoto, onRemove = viewModel::removeAvatar)
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                text = profile?.displayName ?: stringResource(session.role.label()),
+                                style = MaterialTheme.typography.titleLarge,
+                                modifier = Modifier.semantics { heading() },
+                            )
+                            // senza profilo (avvio offline) niente ruolo né email
+                            if (profile != null) {
+                                Text(
+                                    profile.email,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                    modifier = Modifier.padding(top = 2.dp, bottom = 8.dp),
+                                )
+                                StatusChip(stringResource(profile.role.label()), MaterialTheme.colorScheme.primary, icon = AppIcons.Mountain)
+                            }
+                        }
+                    }
                 }
-                Spacer(Modifier.size(8.dp))
-            }
-        }
-        }
-        Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-            if (session is SessionState.LoggedIn) {
                 // Gruppi nell'ordine d'uso: quello che hai fatto, chi sei, come appare l'app; uscire e cancellarsi in fondo
                 GroupHeader(stringResource(Res.string.profile_activity_section))
                 GroupCard {
-                    GroupRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, icon = Icons.Filled.Warning)
+                    GroupRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, icon = AppIcons.Alert)
                     if (onMyBookings != null) {
                         GroupDivider(GroupIconIndent)
-                        GroupRow(stringResource(Res.string.my_bookings_title), onClick = onMyBookings, icon = Icons.Filled.DateRange)
+                        GroupRow(stringResource(Res.string.my_bookings_title), onClick = onMyBookings, icon = AppIcons.Calendar)
                     }
                 }
                 GroupHeader(stringResource(Res.string.profile_account_section))
@@ -282,14 +272,14 @@ fun ProfileScreen(
                         value = profile?.displayName,
                         onClick = onEditName,
                         enabled = profile != null,
-                        icon = Icons.Filled.Person,
+                        icon = AppIcons.User,
                     )
                     GroupDivider(GroupIconIndent)
                     // Account aperto con Google: non c'è una password da cambiare (il server darebbe 422), si imposta via email
                     if (profile?.hasPassword == false) {
-                        GroupRow(stringResource(Res.string.profile_set_password), onClick = { onSetPassword(profile.email) }, icon = Icons.Filled.Lock)
+                        GroupRow(stringResource(Res.string.profile_set_password), onClick = { onSetPassword(profile.email) }, icon = AppIcons.Lock)
                     } else {
-                        GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = Icons.Filled.Lock)
+                        GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = AppIcons.Lock)
                     }
                     GroupDivider(GroupIconIndent)
                     // senza profilo non si sa se è attiva: la riga aspetta
@@ -298,7 +288,7 @@ fun ProfileScreen(
                         value = profile?.let { stringResource(if (it.mfaEnabled) Res.string.profile_mfa_on else Res.string.profile_mfa_off) },
                         onClick = onMfa,
                         enabled = profile != null,
-                        icon = Icons.Filled.CheckCircle,
+                        icon = AppIcons.CheckCircle,
                     )
                 }
             } else {
@@ -316,6 +306,11 @@ fun ProfileScreen(
                     Text(stringResource(Res.string.theme_title), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                     ThemeSwitch(themeMode, onThemeModeSelected)
                 }
+            }
+
+            GroupHeader(stringResource(Res.string.profile_info_section))
+            GroupCard {
+                GroupRow(stringResource(Res.string.credits_title), onClick = onCredits, icon = AppIcons.Info)
             }
 
             if (session is SessionState.LoggedIn) {
@@ -343,6 +338,9 @@ fun ProfileScreen(
             // il contenuto scorre sotto la barra a isola
             Spacer(Modifier.size(32.dp + pageBottomInset()))
         }
+    }
+    // scorrendo, la barra di stato prende il colore del cielo: il contenuto non le passa sotto
+    SkyStatusBarScrim(show = scroll.value > 120)
     }
 
     if (confirmLogout) {
@@ -513,7 +511,7 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
 
 private const val AvatarSidePx = 512
 // La foto in testata al Profilo, grande come quella dell'ID Apple
-private val AvatarSize = 96.dp
+private val AvatarSize = 80.dp
 
 /**
  * La foto profilo (M11), o l'iniziale se non c'è. Un tocco apre il menu: scegli una foto, e rimuovila se c'è. Durante
@@ -534,7 +532,7 @@ private fun ProfileAvatar(profile: UserProfile?, busy: Boolean, onPick: () -> Un
                 .semantics { contentDescription = label },
         ) {
             Monogram(profile?.displayName)
-            profile?.avatarMediaId?.let { AvatarPhoto(it) }
+            profile?.avatarMediaId?.let { AvatarPhoto(it, AvatarSize) }
             if (busy) CircularProgressIndicator(Modifier.size(AvatarSize), strokeWidth = 3.dp)
         }
         DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
@@ -552,43 +550,19 @@ private fun ProfileAvatar(profile: UserProfile?, busy: Boolean, onPick: () -> Un
     }
 }
 
-// Sopra l'iniziale, che si vede finché la foto non arriva (o se non arriva)
-@Composable
-private fun AvatarPhoto(mediaId: String) {
-    val signed = rememberSignedUrl(koinInject<MediaRepository>(), mediaId)
-    val scope = rememberCoroutineScope()
-    val context = LocalPlatformContext.current
-    val sidePx = with(LocalDensity.current) { AvatarSize.roundToPx() }
-    val url = signed.url ?: return
-    val request = remember(url) {
-        ImageRequest.Builder(context)
-            .data(url)
-            .size(sidePx)
-            .memoryCacheKey(mediaId)
-            .diskCachePolicy(CachePolicy.DISABLED)
-            .build()
-    }
-    AsyncImage(
-        model = request,
-        contentDescription = null,
-        contentScale = ContentScale.Crop,
-        onError = { scope.launch { signed.onDownloadFailed() } },
-        modifier = Modifier.size(AvatarSize).clip(CircleShape),
-    )
-}
 
-// Iniziale del nome su un tondo color muschio; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
+// Iniziale del nome su un tondo color pino; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
 @Composable
 private fun Monogram(name: String?, modifier: Modifier = Modifier, size: Dp = AvatarSize) {
     val initial = name?.trim()?.firstOrNull()?.uppercaseChar()
     Box(
-        modifier = modifier.size(size).background(MaterialTheme.colorScheme.primaryContainer, CircleShape).clearAndSetSemantics { },
+        modifier = modifier.size(size).background(MaterialTheme.colorScheme.tertiary, CircleShape).clearAndSetSemantics { },
         contentAlignment = Alignment.Center,
     ) {
         if (initial != null) {
-            Text(initial.toString(), style = MaterialTheme.typography.headlineLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(initial.toString(), style = MaterialTheme.typography.headlineMedium, color = MaterialTheme.colorScheme.onTertiary)
         } else {
-            Icon(Icons.Filled.Person, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer, modifier = Modifier.size(size / 2))
+            Icon(AppIcons.User, contentDescription = null, tint = MaterialTheme.colorScheme.onTertiary, modifier = Modifier.size(size / 2))
         }
     }
 }

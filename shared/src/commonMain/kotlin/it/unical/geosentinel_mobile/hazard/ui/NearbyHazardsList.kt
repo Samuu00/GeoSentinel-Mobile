@@ -11,8 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -42,6 +40,7 @@ import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.trail.ui.color
 import it.unical.geosentinel_mobile.trail.ui.label
 import org.jetbrains.compose.resources.stringResource
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 /**
  * La scheda "Pericoli" del foglio "Vicino a te" (il foglio sta in MapScreen): mentre cerca la posizione e carica, poi la
@@ -101,7 +100,7 @@ private fun HazardRow(hazard: HazardResponse, from: GeoPoint, onClick: () -> Uni
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // decorativa: la gravità è scritta sotto
-        Icon(Icons.Filled.Warning, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
+        Icon(AppIcons.Alert, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {
             Text(stringResource(hazard.type.label()), style = MaterialTheme.typography.titleMedium)

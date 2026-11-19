@@ -31,8 +31,8 @@ import it.unical.geosentinel_mobile.core.location.toPositions
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
-import it.unical.geosentinel_mobile.core.ui.theme.InkDark
-import it.unical.geosentinel_mobile.core.ui.theme.InkLight
+import it.unical.geosentinel_mobile.core.ui.theme.MapLabelInkDark
+import it.unical.geosentinel_mobile.core.ui.theme.MapLabelInkLight
 import it.unical.geosentinel_mobile.core.ui.theme.MarkerDanger
 import it.unical.geosentinel_mobile.core.ui.theme.MarkerEquipment
 import it.unical.geosentinel_mobile.core.ui.theme.MarkerInfo
@@ -223,7 +223,7 @@ private const val NameProperty = "name"
 private const val PoiLabelZoom = 13.0
 
 /** Testo e alone dei nomi sopra la mappa: dipendono dalla mappa (satellite e notte scuri), non dal tema. */
-internal fun mapLabelInk(mapIsDark: Boolean): Color = if (mapIsDark) InkDark else InkLight
+internal fun mapLabelInk(mapIsDark: Boolean): Color = if (mapIsDark) MapLabelInkDark else MapLabelInkLight
 internal fun mapLabelHalo(mapIsDark: Boolean): Color = if (mapIsDark) Color.Black.copy(alpha = 0.75f) else Color.White
 
 /** Il carattere dei nomi sulla mappa: quello che il server dei glifi di OpenFreeMap ha (lo stesso dello stile). */

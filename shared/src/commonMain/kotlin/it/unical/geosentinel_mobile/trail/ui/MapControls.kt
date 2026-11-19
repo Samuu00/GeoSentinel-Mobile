@@ -32,8 +32,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -112,8 +110,8 @@ import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.islandShadow
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 import androidx.compose.foundation.shape.RoundedCornerShape
-import it.unical.geosentinel_mobile.core.ui.theme.LocalStatusBarOverDark
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.MapType
 import kotlin.math.max
@@ -158,7 +156,7 @@ import org.maplibre.compose.style.BaseStyle
 // riaprirla. Quella di MapLibre si chiude solo al primo gesto: sull'anteprima ferma del dettaglio restava aperta.
 @Composable
 // [startExpanded] false sulle mappe ferme (testata del rifugio): la "i" basta, il pannello aperto copriva la foto
-internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd: Boolean = false, startExpanded: Boolean = true) {
+internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd: Boolean = false, startExpanded: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     var expanded by rememberSaveable { mutableStateOf(startExpanded) }
     LaunchedEffect(mapState) {
@@ -233,9 +231,12 @@ internal enum class Glyph { Layers, Locate, Hazard, AddPoint, NearMe }
 internal fun mapControlColor() = MaterialTheme.colorScheme.surfaceContainerHigh
 
 @Composable
-internal fun mapControlBorder() = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.45f))
+internal fun mapControlBorder() = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
-internal val MapControlElevation = 6.dp
+internal val MapControlElevation = 12.dp
+
+// Angoli dei comandi della mappa (redesign "Luce di quota"): tessere morbide, non capsule
+private val MapControlShape = RoundedCornerShape(18.dp)
 
 /** Un comando di [MapButtonGroup]. */
 internal class MapAction(val description: StringResource, val glyph: Glyph, val onClick: () -> Unit)
@@ -247,10 +248,9 @@ internal class MapAction(val description: StringResource, val glyph: Glyph, val 
 @Composable
 internal fun MapButtonGroup(actions: List<MapAction>) {
     Surface(
-        shape = RoundedCornerShape(26.dp),
+        shape = MapControlShape,
         color = mapControlColor(),
-        border = mapControlBorder(),
-        modifier = Modifier.width(52.dp).islandShadow(RoundedCornerShape(26.dp), MapControlElevation),
+        modifier = Modifier.width(52.dp).islandShadow(MapControlShape, MapControlElevation),
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             actions.forEachIndexed { index, action ->
@@ -268,6 +268,13 @@ internal fun MapButtonGroup(actions: List<MapAction>) {
 // Simboli disegnati con lo stesso tratto: material-icons-core non ha né il "meno" né il mirino della posizione
 @Composable
 internal fun GlyphIcon(glyph: Glyph, tint: Color) {
+    // i simboli che il set dell'app ha già: stesso tratto delle altre icone
+    when (glyph) {
+        Glyph.Layers -> return Icon(AppIcons.Layers, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        Glyph.Hazard -> return Icon(AppIcons.Alert, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        Glyph.Locate -> return Icon(AppIcons.Locate, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
+        else -> Unit
+    }
     Canvas(Modifier.size(24.dp)) {
         val stroke = 2.dp.toPx()
         val c = center

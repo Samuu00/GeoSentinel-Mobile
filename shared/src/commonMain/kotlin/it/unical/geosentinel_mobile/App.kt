@@ -3,18 +3,28 @@ package it.unical.geosentinel_mobile
 import androidx.compose.animation.EnterTransition
 import androidx.compose.animation.ExitTransition
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -31,8 +41,6 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Place
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -51,6 +59,12 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -87,6 +101,7 @@ import it.unical.geosentinel_mobile.core.session.UserRole
 import it.unical.geosentinel_mobile.core.session.role
 import it.unical.geosentinel_mobile.core.ui.LocalBottomBarInset
 import it.unical.geosentinel_mobile.core.ui.islandShadow
+import it.unical.geosentinel_mobile.core.ui.rememberReduceMotion
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItem
 import it.unical.geosentinel_mobile.core.ui.navigation.BottomNavItems
 import it.unical.geosentinel_mobile.core.ui.navigation.NoBottomBarRoutes
@@ -96,6 +111,7 @@ import it.unical.geosentinel_mobile.core.ui.theme.EmergencyRed
 import it.unical.geosentinel_mobile.core.ui.theme.GeoSentinelTheme
 import it.unical.geosentinel_mobile.core.ui.theme.ThemeSettings
 import it.unical.geosentinel_mobile.profile.ui.ChangePasswordScreen
+import it.unical.geosentinel_mobile.profile.ui.CreditsScreen
 import it.unical.geosentinel_mobile.profile.ui.EditNameScreen
 import it.unical.geosentinel_mobile.profile.ui.MfaScreen
 import it.unical.geosentinel_mobile.profile.ui.ProfileScreen
@@ -120,9 +136,6 @@ import it.unical.geosentinel_mobile.staff.ui.ManageLink
 import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityScreen
 import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateScreen
 import it.unical.geosentinel_mobile.trail.ui.DefaultArea
-import it.unical.geosentinel_mobile.trail.ui.MapControlElevation
-import it.unical.geosentinel_mobile.trail.ui.mapControlBorder
-import it.unical.geosentinel_mobile.trail.ui.mapControlColor
 import geosentinel_mobile.shared.generated.resources.staff_capacity_edit
 import it.unical.geosentinel_mobile.staff.ui.TrailManagementSection
 import it.unical.geosentinel_mobile.core.location.GeoPoint
@@ -277,19 +290,19 @@ fun App() {
             bottomBar = {
                 // nei form la barra non serve (con la tastiera aperta ruberebbe spazio), nel dettaglio del sentiero nemmeno
                 if (NoBottomBarRoutes.any { route -> destination?.hasRoute(route) == true }) return@Scaffold
-                TabBar(role, destination) { route ->
-                    navController.navigate(route) {
-                        popUpTo(navController.graph.findStartDestination().id) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                }
-            },
-            floatingActionButton = {
-                // Solo sopra la mappa (§2). Il tocco apre la schermata, dove l'SOS parte tenendo premuto 3 s (M6.1).
-                if (destination?.hasRoute<Route.Map>() == true) {
-                    SosButton { navController.navigate(Route.SosEmergency) }
-                }
+                TabBar(
+                    role,
+                    destination,
+                    onNavigate = { route ->
+                        navController.navigate(route) {
+                            popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    // il tocco apre la schermata, dove l'SOS parte tenendo premuto 3 s (M6.1)
+                    onSos = { navController.navigate(Route.SosEmergency) { launchSingleTop = true } },
+                )
             },
         ) { innerPadding ->
             // Il contenuto passa sotto la barra in basso, che galleggia come un'isola (§2): niente margine sotto. La
@@ -306,14 +319,15 @@ fun App() {
                 modifier = Modifier.padding(
                     start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                     end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                    bottom = if (barShown) 0.dp else bottomBar,
+                    // l'SOS disegna fino in fondo il suo fondo scuro e si tiene da sé il margine della safe area
+                    bottom = if (barShown || destination?.hasRoute<Route.SosEmergency>() == true) 0.dp else bottomBar,
                 ),
                 // cambio di scheda: dissolvenza breve, niente movimento
                 enterTransition = { fadeIn(tween(150)) },
                 exitTransition = { fadeOut(tween(100)) },
             ) {
                 composable<Route.Map>(
-                    // quando entra l'SOS, un sentiero, un rifugio o un'allerta la mappa scivola un po' a sinistra e lascia il posto (parallasse)
+                    // quando entra un sentiero, un rifugio o un'allerta la mappa scivola un po' a sinistra e lascia il posto (parallasse)
                     exitTransition = {
                         val destination = targetState.destination
                         if (destination.hasRoute<Route.SosEmergency>() || destination.hasRoute<Route.TrailDetail>() ||
@@ -351,6 +365,15 @@ fun App() {
                         // le allerte aperte solo per chi vede la scheda Allerte (M7.2): il tocco apre il dettaglio
                         onOpenAlert = if (role.canViewAlerts()) openAlert else null,
                         bottomBar = bottomBar,
+                        onOpenProfile = {
+                            navController.navigate(Route.Profile) {
+                                popUpTo(navController.graph.findStartDestination().id) { saveState = true }
+                                launchSingleTop = true
+                                restoreState = true
+                            }
+                        },
+                        avatarInitial = (sessionState as? SessionState.LoggedIn)?.profile?.displayName?.trim()?.firstOrNull(),
+                        avatarMediaId = (sessionState as? SessionState.LoggedIn)?.profile?.avatarMediaId,
                     )
                 }
                 composable<Route.TrailDetail>(
@@ -528,10 +551,17 @@ fun App() {
                         onSetPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
                         onMfa = { navController.navigate(Route.Mfa) { launchSingleTop = true } },
                         onMyHazards = { navController.navigate(Route.MyHazards) { launchSingleTop = true } },
+                        onCredits = { navController.navigate(Route.Credits) { launchSingleTop = true } },
                         onMyBookings = if (role.canViewRefuges()) openMyBookings else null,
                         themeMode = mode,
                         onThemeModeSelected = { scope.launch { themeSettings.setMode(it) } },
                     )
+                }
+                composable<Route.Credits>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) {
+                    CreditsScreen(onBack = { navController.popBackStack() })
                 }
                 composable<Route.MyHazards>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
@@ -621,57 +651,71 @@ fun App() {
     }
 }
 
-// Barra in basso fluttuante: una capsula staccata dai bordi, la voce attiva su una pillola color muschio.
-// Si stacca dallo sfondo con un filo di bordo e un'ombra appena accennata, come le card.
+// Barra in basso (redesign "Luce di quota"): un'isola a capsula con le schede, la pillola felce che scorre con una
+// molla sotto la voce attiva, e accanto, staccato, il tondo rosso dell'SOS da 72 dp: l'emergenza a un tocco da ogni
+// scheda, non solo dalla mappa. Il tocco apre la schermata SOS, dove l'invio vuole 3 secondi di pressione.
 @Composable
-private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Route) -> Unit) {
-    Box(
+private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Route) -> Unit, onSos: () -> Unit) {
+    val items = BottomNavItems.filter { it.isVisible(role) }
+    val selected = items.indexOfFirst { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
+    val colors = MaterialTheme.colorScheme
+    val pill = colors.primaryContainer
+    val position by animateFloatAsState(selected.coerceAtLeast(0).toFloat(), spring(dampingRatio = 0.75f, stiffness = Spring.StiffnessMediumLow))
+    Row(
         Modifier
             .fillMaxWidth()
             // indicatore Home / barra di navigazione in basso, tacca sui lati in orizzontale
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
             .padding(horizontal = 16.dp, vertical = 8.dp),
-        contentAlignment = Alignment.Center,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
     ) {
         Surface(
-            // in orizzontale e sui tablet non si allunga da bordo a bordo; ombra tinta delle isole (redesign 11/2026)
-            modifier = Modifier.widthIn(max = 560.dp).islandShadow(CircleShape, MapControlElevation),
-            // un'isola sopra il contenuto: stessi toni e anello dei controlli della mappa, che le passa sotto
+            // in orizzontale e sui tablet non si allunga da bordo a bordo
+            modifier = Modifier.weight(1f, fill = false).widthIn(max = 480.dp).fillMaxWidth().islandShadow(CircleShape),
             shape = CircleShape,
-            color = mapControlColor(),
-            border = mapControlBorder(),
+            color = colors.surfaceContainerHigh,
         ) {
-            // voci centrate in altezza: con l'allineamento di default (in alto) la pillola toccava il bordo
             Row(
-                Modifier.fillMaxWidth().height(68.dp).padding(horizontal = 6.dp).selectableGroup(),
+                Modifier
+                    .fillMaxWidth()
+                    .height(68.dp)
+                    .padding(6.dp)
+                    .drawBehind {
+                        if (selected >= 0) {
+                            val width = size.width / items.size
+                            drawRoundRect(
+                                pill,
+                                topLeft = Offset(width * position + 2.dp.toPx(), 0f),
+                                size = Size(width - 4.dp.toPx(), size.height),
+                                cornerRadius = CornerRadius(size.height / 2),
+                            )
+                        }
+                    }
+                    .selectableGroup(),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                BottomNavItems.filter { it.isVisible(role) }.forEach { item ->
-                    TabBarItem(
-                        item = item,
-                        // la schermata SOS è "spinta" sopra la mappa: la scheda Mappa resta attiva
-                        selected = destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true ||
-                            (item.route == Route.Map && destination?.hasRoute<Route.SosEmergency>() == true),
-                        onClick = { onNavigate(item.route) },
-                        modifier = Modifier.weight(1f),
-                    )
+                items.forEachIndexed { index, item ->
+                    TabBarItem(item = item, selected = index == selected, onClick = { onNavigate(item.route) }, modifier = Modifier.weight(1f))
                 }
             }
         }
+        Spacer(Modifier.width(12.dp))
+        SosButton(onSos)
     }
 }
 
 @Composable
 private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
-    val pill by animateColorAsState(if (selected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
-    val content = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
+    val content by animateColorAsState(if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
     Column(
         modifier = modifier
-            .heightIn(min = 48.dp)
+            .fillMaxHeight()
+            .clip(CircleShape)
             .selectable(
                 selected = selected,
                 interactionSource = remember { MutableInteractionSource() },
-                indication = ripple(bounded = false, radius = 32.dp),
+                indication = ripple(),
                 role = Role.Tab,
                 onClick = onClick,
             ),
@@ -679,18 +723,14 @@ private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Un
         verticalArrangement = Arrangement.Center,
     ) {
         // l'etichetta è sempre visibile: l'icona è decorativa, altrimenti TalkBack la legge due volte
-        Box(
-            Modifier.background(pill, CircleShape).padding(horizontal = 16.dp, vertical = 4.dp),
-            contentAlignment = Alignment.Center,
-        ) {
-            Icon(item.icon, contentDescription = null, tint = content, modifier = Modifier.size(24.dp))
-        }
+        Icon(item.icon, contentDescription = null, tint = content, modifier = Modifier.size(24.dp))
         Text(
             text = stringResource(item.label),
-            style = MaterialTheme.typography.labelSmall,
+            style = MaterialTheme.typography.labelSmall.copy(letterSpacing = 0.sp),
             color = content,
-            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Medium,
-            modifier = Modifier.padding(top = 4.dp),
+            maxLines = 1,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.SemiBold,
+            modifier = Modifier.padding(top = 3.dp),
         )
     }
 }
@@ -699,29 +739,51 @@ private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Un
 private fun SosButton(onClick: () -> Unit) {
     val description = stringResource(Res.string.sos_button_description)
     val haptics = LocalHapticFeedback.current
-    // Capsula con la scritta "SOS": si capisce subito, anche al sole. 72 dp = azione d'emergenza (§2).
-    // Un tocco apre la schermata SOS e basta: lì l'invio vuole 3 secondi di pressione (niente SOS dalla tasca).
-    Surface(
-        onClick = {
-            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-            onClick()
-        },
-        shape = CircleShape,
-        color = EmergencyRed,
-        contentColor = EmergencyOnRed,
-        shadowElevation = 4.dp,
-        modifier = Modifier.semantics { contentDescription = description },
-    ) {
-        Box(Modifier.heightIn(min = 72.dp).widthIn(min = 96.dp), contentAlignment = Alignment.Center) {
-            // lettere da cartello, un po' spaziate: si leggono da lontano
-            Text(
-                text = stringResource(Res.string.sos_button),
-                // 26 sp fissi: la scala dei titoli è scesa (redesign), il pulsante d'emergenza no
-                style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 30.sp),
-                fontWeight = FontWeight.Bold,
-                letterSpacing = 1.5.sp,
-                modifier = Modifier.padding(horizontal = 24.dp),
-            )
+    val still = rememberReduceMotion()
+    // un alone che respira attorno al tondo: si vede anche con la coda dell'occhio. Fermo con "Riduci movimento".
+    val halo = if (still) {
+        0.5f
+    } else {
+        val breathing by rememberInfiniteTransition().animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
+        )
+        breathing
+    }
+    Box(contentAlignment = Alignment.Center, modifier = Modifier.size(84.dp)) {
+        Box(
+            Modifier
+                .size(84.dp)
+                .graphicsLayer {
+                    val scale = 0.86f + 0.14f * halo
+                    scaleX = scale
+                    scaleY = scale
+                    alpha = 0.35f * (1f - halo)
+                }
+                .background(EmergencyRed, CircleShape),
+        )
+        Surface(
+            onClick = {
+                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                onClick()
+            },
+            shape = CircleShape,
+            color = EmergencyRed,
+            contentColor = EmergencyOnRed,
+            shadowElevation = 6.dp,
+            // 72 dp = azione d'emergenza
+            modifier = Modifier.size(72.dp).semantics { contentDescription = description },
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                // lettere da cartello, spaziate: si leggono da lontano. 22 sp fissi, come il pulsante
+                Text(
+                    text = stringResource(Res.string.sos_button),
+                    style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, lineHeight = 26.sp),
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 2.sp,
+                )
+            }
         }
     }
 }

@@ -99,6 +99,24 @@ import geosentinel_mobile.shared.generated.resources.sos_title
 import it.unical.geosentinel_mobile.api.model.SosAlertResponse
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.session.SessionState
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.foundation.layout.width
+import androidx.compose.material3.Icon
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.foundation.layout.Row
+import androidx.compose.material3.Surface
+import it.unical.geosentinel_mobile.core.ui.coordinatesLabel
+import geosentinel_mobile.shared.generated.resources.sos_position_title
+import geosentinel_mobile.shared.generated.resources.sos_position_waiting
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.rememberReduceMotion
+import it.unical.geosentinel_mobile.core.ui.theme.EmergencyTheme
+import it.unical.geosentinel_mobile.core.ui.theme.StatusBarOverDark
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.FooterLink
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
@@ -184,7 +202,23 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
 
     val callFirst = !loggedIn || late || noLocation || state is SosState.Failed
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    // Redesign "Luce di quota": la schermata d'emergenza è sempre scura, con un alone rosso dietro al pulsante
+    StatusBarOverDark(true)
+    EmergencyTheme {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+            .drawBehind {
+                drawRect(
+                    Brush.radialGradient(
+                        listOf(EmergencyRed.copy(alpha = 0.30f), Color.Transparent),
+                        center = Offset(size.width / 2, size.height * 0.42f),
+                        radius = size.width * 0.9f,
+                    ),
+                )
+            },
+    ) {
         Column(
             Modifier
                 .fillMaxSize()
@@ -198,7 +232,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
             Column(Modifier.widthIn(max = 480.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text(
                     stringResource(Res.string.sos_title),
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.displaySmall,
                     modifier = Modifier.semantics { heading() },
                 )
                 // lo stato si annuncia da solo a TalkBack e VoiceOver quando cambia
@@ -246,6 +280,8 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
                     if (noLocation) FormErrorBanner(stringResource(Res.string.sos_no_location))
                 }
 
+                // dove sei, come lo riceverà il soccorso (Figma): da loggati, prima di "Chiama 112"
+                if (loggedIn) PositionCard(location.lastLocation?.position?.let { coordinatesLabel(it.latitude, it.longitude) })
                 Call112Button(prominent = callFirst, onClick = { dial(EmergencyNumber) })
 
                 if (!loggedIn) FooterLink(Res.string.sos_login_question, Res.string.sos_login, onLogin)
@@ -265,6 +301,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
         }
         BackButton(onBack, Modifier.align(Alignment.TopStart))
     }
+    }
 
     if (confirmCancel) {
         AlertDialog(
@@ -278,6 +315,26 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
                 TextButton(onClick = { confirmCancel = false }) { Text(stringResource(Res.string.sos_cancel_dismiss)) }
             },
         )
+    }
+}
+
+// La posizione attuale in una card: il mirino e le coordinate, o l'attesa del GPS
+@Composable
+private fun PositionCard(coordinates: String?) {
+    val colors = MaterialTheme.colorScheme
+    Surface(shape = MaterialTheme.shapes.medium, color = colors.surfaceContainerLowest, modifier = Modifier.fillMaxWidth()) {
+        Row(Modifier.padding(16.dp).semantics(mergeDescendants = true) { }, verticalAlignment = Alignment.CenterVertically) {
+            Icon(AppIcons.Locate, contentDescription = null, tint = colors.primary, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(14.dp))
+            Column {
+                Text(stringResource(Res.string.sos_position_title), style = MaterialTheme.typography.labelMedium, color = colors.onSurfaceVariant)
+                Text(
+                    coordinates ?: stringResource(Res.string.sos_position_waiting),
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+            }
+        }
     }
 }
 
@@ -320,7 +377,10 @@ private fun RaisedStatus(alert: SosAlertResponse) {
 private fun Call112Button(prominent: Boolean, onClick: () -> Unit) {
     val modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
     val label: @Composable () -> Unit = {
-        Text(stringResource(Res.string.sos_call_112), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        // decorativa: l'azione è scritta accanto
+        Icon(AppIcons.Phone, contentDescription = null, modifier = Modifier.size(24.dp))
+        Spacer(Modifier.width(12.dp))
+        Text(stringResource(Res.string.sos_call_112), style = MaterialTheme.typography.titleLarge)
     }
     if (prominent) {
         Button(
@@ -333,8 +393,11 @@ private fun Call112Button(prominent: Boolean, onClick: () -> Unit) {
         OutlinedButton(
             onClick = onClick,
             shape = CircleShape,
-            border = BorderStroke(2.dp, EmergencyRed),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.onSurface),
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.25f)),
+            colors = ButtonDefaults.outlinedButtonColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerHighest,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+            ),
             modifier = modifier,
         ) { label() }
     }
@@ -350,9 +413,21 @@ private fun HoldToSendButton(enabled: Boolean, onTriggered: () -> Unit, modifier
     val scope = rememberCoroutineScope()
     val haptics = LocalHapticFeedback.current
     val description = stringResource(Res.string.sos_hold_description)
+    val still = rememberReduceMotion()
+    // due aloni che si allargano e svaniscono finché il pulsante aspetta: si vede dove toccare
+    val wave = if (still || !enabled) {
+        0f
+    } else {
+        val breathing by rememberInfiniteTransition().animateFloat(
+            initialValue = 0f,
+            targetValue = 1f,
+            animationSpec = infiniteRepeatable(tween(2400, easing = LinearEasing), RepeatMode.Restart),
+        )
+        breathing
+    }
     Box(
         modifier
-            .size(200.dp)
+            .size(260.dp)
             .semantics {
                 contentDescription = description
                 role = Role.Button
@@ -378,18 +453,26 @@ private fun HoldToSendButton(enabled: Boolean, onTriggered: () -> Unit, modifier
                 })
             }
             .drawBehind {
-                val stroke = 10.dp.toPx()
-                drawCircle(EmergencyRed, radius = size.minDimension / 2 - stroke * 1.5f)
-                // l'anello attorno: prima appena accennato, poi pieno man mano che si tiene premuto
-                val inset = stroke / 2
-                val arcSize = Size(size.width - stroke, size.height - stroke)
-                drawArc(EmergencyRed.copy(alpha = 0.25f), 0f, 360f, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
-                drawArc(EmergencyRed, -90f, 360f * progress.value, false, Offset(inset, inset), arcSize, style = Stroke(stroke))
+                val stroke = 6.dp.toPx()
+                val disc = size.minDimension / 2 - 22.dp.toPx()
+                // aloni: due onde sfasate di mezzo giro, dal bordo del disco fino al bordo del pulsante
+                if (progress.value == 0f) {
+                    listOf(wave, (wave + 0.5f) % 1f).forEach { t ->
+                        drawCircle(EmergencyRed.copy(alpha = 0.35f * (1f - t)), radius = disc + (size.minDimension / 2 - disc) * t)
+                    }
+                }
+                drawCircle(EmergencyRed, radius = disc)
+                // l'anello bianco dentro il bordo del disco: prima appena accennato, poi pieno man mano che si tiene premuto
+                val ring = disc - stroke * 1.5f
+                val topLeft = Offset(center.x - ring, center.y - ring)
+                val arcSize = Size(ring * 2, ring * 2)
+                drawArc(Color.White.copy(alpha = 0.25f), 0f, 360f, false, topLeft, arcSize, style = Stroke(stroke))
+                drawArc(Color.White, -90f, 360f * progress.value, false, topLeft, arcSize, style = Stroke(stroke, cap = StrokeCap.Round))
             },
         contentAlignment = Alignment.Center,
     ) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(stringResource(Res.string.sos_button), style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold, color = EmergencyOnRed)
+            Text(stringResource(Res.string.sos_button), style = MaterialTheme.typography.displayMedium, letterSpacing = 4.sp, color = EmergencyOnRed)
             Text(stringResource(Res.string.sos_hold), style = MaterialTheme.typography.labelLarge, color = EmergencyOnRed)
         }
     }

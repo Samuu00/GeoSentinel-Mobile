@@ -28,9 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -68,7 +65,6 @@ import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.api.model.HazardResponse
 import it.unical.geosentinel_mobile.media.ui.HazardPhotoStrip
 import it.unical.geosentinel_mobile.core.ui.BackButton
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.GroupDivider
 import it.unical.geosentinel_mobile.core.ui.PageHeader
 import it.unical.geosentinel_mobile.core.ui.groupedItem
@@ -84,6 +80,8 @@ import kotlinx.datetime.toLocalDateTime
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Instant
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
 
 // Quante righe prima del fondo si chiede la pagina dopo: arriva prima che l'utente se ne accorga
 private const val PrefetchDistance = 3
@@ -148,6 +146,7 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
                 }
             }
         }
+        SkyStatusBarScrim(show = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 120)
         BackButton(onBack)
     }
 }
@@ -177,7 +176,7 @@ private fun HazardRowContent(hazard: HazardResponse, onOpenTrail: (String) -> Un
             .semantics(mergeDescendants = true) { },
     ) {
         // decorativo: tipo e gravità sono scritti accanto
-        Icon(Icons.Filled.Warning, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
+        Icon(AppIcons.Alert, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -208,7 +207,7 @@ private fun HazardRowContent(hazard: HazardResponse, onOpenTrail: (String) -> Un
         }
         if (trailId != null) {
             Icon(
-                Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                AppIcons.ChevronRight,
                 contentDescription = null,
                 tint = colors.onSurfaceVariant,
                 modifier = Modifier.padding(start = 4.dp).align(Alignment.CenterVertically),

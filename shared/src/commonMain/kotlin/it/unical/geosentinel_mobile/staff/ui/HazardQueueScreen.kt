@@ -27,8 +27,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -67,7 +65,6 @@ import it.unical.geosentinel_mobile.api.model.HazardResponse
 import it.unical.geosentinel_mobile.api.model.UpdateHazardStatusRequest
 import it.unical.geosentinel_mobile.core.location.decimals5
 import it.unical.geosentinel_mobile.core.ui.BackButton
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.PageHeader
 import it.unical.geosentinel_mobile.core.ui.pageBottomInset
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
@@ -83,6 +80,9 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Instant
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
+import androidx.compose.foundation.lazy.rememberLazyListState
 
 internal val CardShape = RoundedCornerShape(20.dp)
 
@@ -108,8 +108,10 @@ fun HazardQueueScreen(
         onPauseOrDispose { }
     }
 
+    val listState = rememberLazyListState()
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
+            state = listState,
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(bottom = 24.dp + pageBottomInset()),
@@ -155,6 +157,7 @@ fun HazardQueueScreen(
                 }
             }
         }
+        SkyStatusBarScrim(show = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 120)
         if (onBack != null) BackButton(onBack)
     }
 }
@@ -183,7 +186,7 @@ private fun QueueRow(
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             // decorativa: tipo e gravità sono scritti accanto
-            Icon(Icons.Filled.Warning, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
+            Icon(AppIcons.Alert, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(10.dp))
             Text(
                 stringResource(hazard.type.label()),

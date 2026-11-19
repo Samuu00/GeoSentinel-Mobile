@@ -10,9 +10,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +33,7 @@ import it.unical.geosentinel_mobile.media.ui.HazardPhotoStrip
 import it.unical.geosentinel_mobile.trail.ui.color
 import it.unical.geosentinel_mobile.trail.ui.label
 import org.jetbrains.compose.resources.stringResource
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 /** Il pericolo toccato sulla mappa: tipo, gravità a parole, descrizione e, se c'è, il sentiero. Come la card dei POI. */
 @Composable
@@ -51,7 +49,7 @@ fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -
         Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.Top) {
             // decorativa: tipo e gravità sono scritti accanto
             Icon(
-                Icons.Filled.Warning,
+                AppIcons.Alert,
                 contentDescription = null,
                 tint = hazard.severity.color(),
                 modifier = Modifier.padding(top = 12.dp).size(24.dp),
@@ -83,7 +81,7 @@ fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -
                 }
             }
             IconButton(onClick = onClose, modifier = Modifier.size(48.dp)) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.poi_close))
+                Icon(AppIcons.Close, contentDescription = stringResource(Res.string.poi_close))
             }
         }
     }

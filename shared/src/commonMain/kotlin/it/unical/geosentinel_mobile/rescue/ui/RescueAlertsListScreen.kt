@@ -28,9 +28,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -75,7 +72,6 @@ import geosentinel_mobile.shared.generated.resources.trail_retry
 import it.unical.geosentinel_mobile.api.model.SosAlertResponse
 import it.unical.geosentinel_mobile.core.push.PushEvent
 import it.unical.geosentinel_mobile.core.push.PushManager
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
 import it.unical.geosentinel_mobile.core.ui.GroupDivider
 import it.unical.geosentinel_mobile.core.ui.groupedItem
@@ -95,6 +91,12 @@ import org.koin.compose.viewmodel.koinViewModel
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
+import it.unical.geosentinel_mobile.core.ui.TapCard
+import it.unical.geosentinel_mobile.core.ui.IconTile
+import androidx.compose.material3.HorizontalDivider
+import it.unical.geosentinel_mobile.core.ui.coordinatesLabel
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
 
 private const val PrefetchDistance = 3
 // con la schermata aperta lista e dettaglio si rileggono ogni 30 s, come lo stato nella schermata SOS (M6.2)
@@ -167,7 +169,7 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit, onCreateTeam: (() -> U
                     else -> {
                         item(key = "group-gap") { Spacer(Modifier.height(8.dp)) }
                         itemsIndexed(state.items, key = { _, alert -> alert.id }) { index, alert ->
-                            AlertCard(alert, now, first = index == 0, last = index == state.items.lastIndex) { onOpenAlert(alert.id) }
+                            AlertCard(alert, now, index) { onOpenAlert(alert.id) }
                         }
                         when {
                             state.loadingMore -> item(key = "more") { CenteredProgress(small = true) }
@@ -177,45 +179,47 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit, onCreateTeam: (() -> U
                 }
             }
         }
+        SkyStatusBarScrim(show = listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 120)
     }
 }
 
-// Un'allerta: campanella rossa (piena senza squadra), stato a parole, da quanto è aperta e la squadra.
-// Tutta la card apre il dettaglio.
+// Un'allerta (Figma, "08 Allerte"): una card per allerta, entra a cascata. In alto la tessera della campanella (rossa
+// senza squadra), lo stato e da quanto è aperta; sotto un filo, la squadra o, senza squadra, dove si trova.
 @Composable
-private fun AlertCard(alert: SosAlertResponse, now: Instant, first: Boolean, last: Boolean, onOpen: () -> Unit) {
+private fun AlertCard(alert: SosAlertResponse, now: Instant, index: Int, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val openLabel = stringResource(Res.string.rescue_alert_open)
-    // una riga del gruppo delle allerte (prima una card per allerta)
-    Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
-        if (!first) GroupDivider(GroupIconIndent)
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier
-                .fillMaxWidth()
-                .clickable(onClickLabel = openLabel, role = Role.Button, onClick = onOpen)
-                .padding(16.dp)
-                .semantics(mergeDescendants = true) { },
-        ) {
-            AlertBadge(waiting = alert.status == SosAlertResponse.Status.ACTIVE)
-            Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(stringResource(alert.status.label()), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
-                Text(
-                    stringResource(Res.string.rescue_raised_ago, ago(alert.createdAt, now)),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = colors.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 2.dp),
-                )
-                alert.assignedTeam?.let { team ->
+    val waiting = alert.status == SosAlertResponse.Status.ACTIVE
+    TapCard(
+        onClick = onOpen,
+        index = index,
+        onClickLabel = stringResource(Res.string.rescue_alert_open),
+        modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 16.dp).padding(bottom = 12.dp),
+    ) {
+        Column(Modifier.semantics(mergeDescendants = true) { }) {
+            Row(Modifier.fillMaxWidth().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconTile(AppIcons.Bell, tint = if (waiting) EmergencyRed else colors.primary, size = 44.dp)
+                Spacer(Modifier.width(14.dp))
+                Column(Modifier.weight(1f)) {
+                    Text(stringResource(alert.status.label()), style = MaterialTheme.typography.titleMedium)
                     Text(
-                        stringResource(Res.string.rescue_team_label, "${team.name} (${team.callSign})"),
+                        stringResource(Res.string.rescue_raised_ago, ago(alert.createdAt, now)),
                         style = MaterialTheme.typography.bodyMedium,
+                        color = colors.onSurfaceVariant,
                         modifier = Modifier.padding(top = 2.dp),
                     )
                 }
+                Icon(AppIcons.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(20.dp))
             }
-            Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = colors.onSurfaceVariant)
+            HorizontalDivider(Modifier.padding(horizontal = 16.dp), color = colors.outlineVariant)
+            Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+                val team = alert.assignedTeam
+                Icon(if (team != null) AppIcons.Users else AppIcons.Navigation, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    if (team != null) stringResource(Res.string.rescue_team_label, "${team.name} (${team.callSign})") else coordinatesLabel(alert.location.lat, alert.location.lon),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
     }
 }
@@ -232,7 +236,7 @@ internal fun AlertBadge(waiting: Boolean) {
             .background(if (waiting) EmergencyRed else MaterialTheme.colorScheme.surfaceContainerHigh)
             .border(2.dp, EmergencyRed, CircleShape),
     ) {
-        Icon(Icons.Filled.Notifications, contentDescription = null, tint = if (waiting) Color.White else EmergencyRed, modifier = Modifier.size(22.dp))
+        Icon(AppIcons.Bell, contentDescription = null, tint = if (waiting) Color.White else EmergencyRed, modifier = Modifier.size(22.dp))
     }
 }
 

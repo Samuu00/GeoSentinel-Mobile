@@ -23,11 +23,6 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -92,7 +87,6 @@ import it.unical.geosentinel_mobile.core.ui.CompactBar
 import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.ScrollState
 import androidx.compose.runtime.derivedStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalDensity
 import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.StickyActionBar
@@ -113,6 +107,42 @@ import org.maplibre.compose.map.rememberMapState
 import org.maplibre.compose.util.DpPadding
 import kotlin.time.Clock
 import kotlin.time.Instant
+import androidx.compose.foundation.Canvas
+import androidx.compose.runtime.produceState
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.platform.LocalUriHandler
+import it.unical.geosentinel_mobile.core.ui.GroupCard
+import it.unical.geosentinel_mobile.core.ui.IconTile
+import it.unical.geosentinel_mobile.core.ui.TonalPillButton
+import it.unical.geosentinel_mobile.core.ui.directionsUri
+import it.unical.geosentinel_mobile.trail.data.ElevationProfile
+import it.unical.geosentinel_mobile.trail.data.ElevationRepository
+import it.unical.geosentinel_mobile.trail.data.hikingMinutes
+import org.koin.compose.koinInject
+import geosentinel_mobile.shared.generated.resources.stat_ascent
+import geosentinel_mobile.shared.generated.resources.stat_time
+import geosentinel_mobile.shared.generated.resources.trail_eyebrow
+import geosentinel_mobile.shared.generated.resources.trail_profile_title
+import geosentinel_mobile.shared.generated.resources.trail_profile_description
+import geosentinel_mobile.shared.generated.resources.trail_hours_minutes
+import geosentinel_mobile.shared.generated.resources.trail_minutes
+import geosentinel_mobile.shared.generated.resources.report_short
+import geosentinel_mobile.shared.generated.resources.refuge_directions
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.Stat
+import it.unical.geosentinel_mobile.core.ui.StatStrip
+import it.unical.geosentinel_mobile.core.ui.StatusChip
+import it.unical.geosentinel_mobile.core.ui.theme.MapMutedDark
+import it.unical.geosentinel_mobile.core.ui.theme.MapMutedLight
+import it.unical.geosentinel_mobile.core.ui.theme.emergencySoftColor
+import it.unical.geosentinel_mobile.core.ui.theme.emergencyTextColor
+import it.unical.geosentinel_mobile.core.ui.theme.warningSoftColor
+import it.unical.geosentinel_mobile.core.ui.theme.warningTextColor
 
 
 /**
@@ -199,27 +229,49 @@ private fun TrailContent(
             )
         }
         Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-            Text(trail.name, style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
+            // "Sentiero 404: Camigliatello – Spezzano": il numero va nell'occhiello, il nome resta il titolo
+            val (fromName, title) = remember(trail.name) { splitTrailName(trail.name) }
+            val facts = remember(trail.description) { trailFacts(trail.description) }
+            val number = fromName ?: facts.waymark
+            Text(
+                (stringResource(Res.string.trail_eyebrow) + (number?.let { " $it" } ?: "") + (facts.caiScale?.let { " · CAI $it" } ?: "")).uppercase(),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.size(4.dp))
+            Text(title, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
             Spacer(Modifier.size(12.dp))
-            TrailStateBadge(state)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                TrailStateBadge(state)
+                StatusChip(
+                    stringResource(TrailDifficulty.of(trail.difficulty.value).label),
+                    MaterialTheme.colorScheme.onSurface,
+                    icon = AppIcons.Mountain,
+                    container = MaterialTheme.colorScheme.surfaceContainerHighest,
+                )
+            }
             Spacer(Modifier.size(16.dp))
-            // i numeri del sentiero in tessere: il valore grande, l'etichetta piccola sotto
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                NumberTile(
-                    value = stringResource(Res.string.trail_length_km, formatKm(trail.lengthM)),
-                    label = stringResource(Res.string.trail_tile_length),
-                    modifier = Modifier.weight(1f),
-                )
-                NumberTile(
-                    value = stringResource(TrailDifficulty.of(trail.difficulty.value).label),
-                    label = stringResource(Res.string.trail_tile_difficulty),
-                    modifier = Modifier.weight(1f),
-                )
+            // quote dalle Terrain Tiles del rilievo: dislivello, tempo e profilo; senza (offline) solo la lunghezza
+            val elevation = koinInject<ElevationRepository>()
+            val profile by produceState<ElevationProfile?>(null, trail.id) {
+                value = elevation.profile(trail.path.toPositions().map { it.toGeoPoint() })
+            }
+            val climb = profile
+            StatStrip(
+                listOfNotNull(
+                    Stat(stringResource(Res.string.trail_tile_length), formatKm(trail.lengthM), "km"),
+                    climb?.let { Stat(stringResource(Res.string.stat_ascent), it.ascentM.toString(), "m") },
+                    climb?.let { Stat(stringResource(Res.string.stat_time), durationLabel(hikingMinutes(trail.lengthM.toDouble(), it.ascentM, it.descentM))) },
+                ),
+            )
+            if (climb != null) {
+                SectionTitle(Res.string.trail_profile_title)
+                ElevationChart(climb)
             }
             UpdatedLine(ui.updatedAt, ui.stale, onRetry)
             manage(trail)
 
-            trail.description?.takeIf { it.isNotBlank() }?.let { description ->
+            facts.text?.let { description ->
                 SectionTitle(Res.string.trail_description)
                 Text(description, style = MaterialTheme.typography.bodyLarge)
             }
@@ -273,30 +325,33 @@ private fun TrailContent(
                 }
             }
             // spazio per la barra fissa in basso
-            Spacer(Modifier.size(if (reportFrom != null) 112.dp else 32.dp))
+            Spacer(Modifier.size(112.dp))
         }
     }
     // la mappa del form parte dall'inizio del sentiero
-    reportFrom?.let { start ->
+    // in basso, fissi: segnalare (da loggati) e le indicazioni per l'inizio del sentiero con le mappe del telefono
+    val start = trail.path.toPositions().firstOrNull()
+    val uriHandler = LocalUriHandler.current
+    if (start != null) {
         StickyActionBar(Modifier.align(Alignment.BottomCenter)) {
-            PrimaryPillButton(stringResource(Res.string.report_open), onClick = { onReportHazard(start.toGeoPoint()) })
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (reportFrom != null) {
+                    TonalPillButton(
+                        stringResource(Res.string.report_short),
+                        onClick = { onReportHazard(reportFrom.toGeoPoint()) },
+                        icon = AppIcons.Alert,
+                        modifier = Modifier.weight(1f).heightIn(min = 56.dp),
+                    )
+                }
+                PrimaryPillButton(
+                    stringResource(Res.string.refuge_directions),
+                    onClick = { uriHandler.openUri(directionsUri(start.latitude, start.longitude)) },
+                    icon = AppIcons.Navigation,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     }
-    }
-}
-
-// Un numero del sentiero: il valore (Barlow 22) e cosa misura, su una tessera del colore delle card
-@Composable
-private fun NumberTile(value: String, label: String, modifier: Modifier) {
-    Column(
-        modifier
-            .clip(MaterialTheme.shapes.medium)
-            .background(MaterialTheme.colorScheme.surfaceContainerLowest)
-            .padding(horizontal = 16.dp, vertical = 12.dp)
-            .semantics(mergeDescendants = true) { },
-    ) {
-        Text(value, style = MaterialTheme.typography.headlineSmall)
-        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
 }
 
@@ -338,7 +393,7 @@ private fun PathPreview(trail: TrailDetailResponse, state: TrailState, modifier:
         baseStyle = style,
         initialCameraPosition = CameraPosition(target = positions.firstOrNull() ?: CameraPosition().target, zoom = 12.0),
     ) {
-        TrailPath(positions, state, casing = casing, unknownColor = colors.onSurfaceVariant)
+        TrailPath(positions, state, casing = casing, unknownColor = if (mapIsDark) MapMutedDark else MapMutedLight)
     }
     LaunchedEffect(bounds) {
         // in alto c'è l'Indietro: margine più ampio
@@ -355,28 +410,24 @@ private fun PathPreview(trail: TrailDetailResponse, state: TrailState, modifier:
     }
 }
 
-/** Stato del sentiero con simbolo ed etichetta: si legge anche senza distinguere i colori (§2). */
+/** Stato del sentiero in una capsula con simbolo ed etichetta: si legge anche senza distinguere i colori (§2). */
 @Composable
 internal fun TrailStateBadge(state: TrailState) {
-    val color = state.color()
+    val colors = MaterialTheme.colorScheme
     val icon: ImageVector = when (state) {
-        TrailState.OPEN -> Icons.Filled.CheckCircle
-        TrailState.WARNING -> Icons.Filled.Warning
-        TrailState.CLOSED -> Icons.Filled.Close
-        TrailState.UNKNOWN -> Icons.Filled.Info
+        TrailState.OPEN -> AppIcons.CheckCircle
+        TrailState.WARNING -> AppIcons.Alert
+        TrailState.CLOSED -> AppIcons.Close
+        TrailState.UNKNOWN -> AppIcons.Info
     }
-    // terza passata: niente capsula con il bordo, solo simbolo colorato e parola (come gli stati nelle liste di iOS)
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        // decorativa: l'etichetta dice già lo stato
-        Icon(icon, contentDescription = null, tint = color, modifier = Modifier.size(18.dp))
-        Spacer(Modifier.width(6.dp))
-        Text(
-            stringResource(state.label),
-            style = MaterialTheme.typography.labelLarge,
-            fontWeight = FontWeight.SemiBold,
-            color = MaterialTheme.colorScheme.onSurface,
-        )
+    // testo e fondo con contrasto verificato (almeno 5:1); il rosso solo per "Chiuso"
+    val (content, container) = when (state) {
+        TrailState.OPEN -> colors.primary to colors.primaryContainer
+        TrailState.WARNING -> warningTextColor() to warningSoftColor()
+        TrailState.CLOSED -> emergencyTextColor() to emergencySoftColor()
+        TrailState.UNKNOWN -> colors.onSurfaceVariant to colors.surfaceContainerHighest
     }
+    StatusChip(stringResource(state.label), content, icon = icon, container = container)
 }
 
 @Composable
@@ -399,15 +450,16 @@ private fun PoiRow(poi: PoiResponse) {
 
 @Composable
 private fun HazardRow(hazard: HazardResponse) {
+    val tint = hazard.severity.color()
     Row(
-        Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 10.dp).semantics(mergeDescendants = true) { },
+        Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 14.dp).semantics(mergeDescendants = true) { },
         verticalAlignment = Alignment.Top,
     ) {
         // decorativo: tipo e gravità sono scritti accanto (il rosso solo per CRITICAL)
-        Icon(Icons.Filled.Warning, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
+        IconTile(AppIcons.Alert, tint = tint, size = 40.dp)
         Spacer(Modifier.width(14.dp))
         Column {
-            Text(stringResource(hazard.type.label()), style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
+            Text(stringResource(hazard.type.label()), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(hazard.severity.label()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             hazard.description?.takeIf { it.isNotBlank() }?.let {
                 Spacer(Modifier.size(4.dp))
@@ -416,6 +468,85 @@ private fun HazardRow(hazard: HazardResponse) {
         }
     }
 }
+
+/** Profilo altimetrico: l'area sotto la linea sfuma verso il basso; quota minima e massima negli angoli in alto. */
+@Composable
+private fun ElevationChart(profile: ElevationProfile) {
+    val colors = MaterialTheme.colorScheme
+    val line = colors.primary
+    val description = stringResource(Res.string.trail_profile_description, profile.minM, profile.maxM, profile.ascentM)
+    GroupCard {
+        Box(Modifier.fillMaxWidth().height(132.dp).clearAndSetSemantics { contentDescription = description }) {
+            Canvas(Modifier.fillMaxSize().padding(start = 16.dp, end = 16.dp, top = 32.dp, bottom = 14.dp)) {
+                val values = profile.meters
+                val low = profile.minM.toFloat()
+                val range = (profile.maxM - profile.minM).coerceAtLeast(20).toFloat()
+                fun at(index: Int) = Offset(
+                    size.width * index / (values.size - 1),
+                    size.height * (1f - (values[index].toFloat() - low) / range),
+                )
+                val stroke = Path().apply {
+                    moveTo(at(0).x, at(0).y)
+                    for (i in 1 until values.size) lineTo(at(i).x, at(i).y)
+                }
+                val area = Path().apply {
+                    addPath(stroke)
+                    lineTo(size.width, size.height)
+                    lineTo(0f, size.height)
+                    close()
+                }
+                drawPath(area, Brush.verticalGradient(listOf(line.copy(alpha = 0.32f), line.copy(alpha = 0f))))
+                drawPath(stroke, line, style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round, join = StrokeJoin.Round))
+            }
+            Text(
+                "${profile.minM} m",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.TopStart).padding(start = 16.dp, top = 10.dp),
+            )
+            Text(
+                "${profile.maxM} m",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onSurfaceVariant,
+                modifier = Modifier.align(Alignment.TopEnd).padding(end = 16.dp, top = 10.dp),
+            )
+        }
+    }
+}
+
+// "Sentiero 404: Camigliatello – Spezzano" → ("404", "Camigliatello – Spezzano"); altri nomi restano interi
+internal fun splitTrailName(name: String): Pair<String?, String> {
+    val match = Regex("""^Sentiero\s+([\p{L}\d./-]{1,8})\s*[:–-]\s*(.+)$""", RegexOption.IGNORE_CASE).find(name.trim())
+    return if (match != null) match.groupValues[1] to match.groupValues[2] else null to name
+}
+
+/** Quello che la descrizione importata dice in righe fisse: segnavia e scala CAI vanno nell'occhiello. */
+internal data class TrailFacts(val waymark: String?, val caiScale: String?, val text: String?)
+
+/**
+ * Divide la descrizione importata: "Segnavia 412" e "Scala CAI: T" diventano dati, le righe di attribuzione delle fonti
+ * (OpenStreetMap, ©) si tolgono (stanno in Profilo > Crediti e licenze), il resto resta il testo.
+ */
+internal fun trailFacts(description: String?): TrailFacts {
+    var waymark: String? = null
+    var scale: String? = null
+    val kept = description.orEmpty().lines().filter { line ->
+        val trimmed = line.trim()
+        Regex("""^Segnavia\s+(.+)$""", RegexOption.IGNORE_CASE).find(trimmed)?.let { waymark = it.groupValues[1].trim(); return@filter false }
+        Regex("""^Scala CAI:\s*(.+)$""", RegexOption.IGNORE_CASE).find(trimmed)?.let { scale = it.groupValues[1].trim(); return@filter false }
+        !isSourceCredit(trimmed)
+    }
+    return TrailFacts(waymark, scale, kept.joinToString("\n").trim().ifBlank { null })
+}
+
+/** Una riga che cita la fonte dei dati: si mostra solo nei crediti. */
+internal fun isSourceCredit(line: String): Boolean =
+    line.contains("OpenStreetMap", ignoreCase = true) || line.contains("©") || line.contains("Wikimedia", ignoreCase = true)
+
+// 190 minuti → "3 h 10", 45 → "45 min"
+@Composable
+private fun durationLabel(minutes: Int): String =
+    if (minutes >= 60) stringResource(Res.string.trail_hours_minutes, minutes / 60, (minutes % 60).toString().padStart(2, '0')) else stringResource(Res.string.trail_minutes, minutes)
 
 // Striscia di foto: ognuna chiede il suo URL firmato quando compare, e uno nuovo se il download non riesce (scaduto)
 @Composable
@@ -525,17 +656,9 @@ private fun SectionTitle(text: StringResource) {
     )
 }
 
-// Card come nel Profilo: un passo di tono sopra lo sfondo, senza bordo né ombra (redesign 11/2026)
+// Card del nuovo sistema (GroupCard: bianca, angoli da 24, ombra morbida)
 @Composable
-private fun Card(content: @Composable () -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.medium,
-        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column { content() }
-    }
-}
+private fun Card(content: @Composable () -> Unit) = GroupCard(content = content)
 
 @Composable
 private fun RowDivider() = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)

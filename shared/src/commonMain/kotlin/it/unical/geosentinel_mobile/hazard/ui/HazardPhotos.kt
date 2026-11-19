@@ -26,10 +26,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
@@ -73,6 +69,7 @@ import geosentinel_mobile.shared.generated.resources.report_photo_retry
 import geosentinel_mobile.shared.generated.resources.report_photo_take
 import geosentinel_mobile.shared.generated.resources.report_photo_uploading
 import org.jetbrains.compose.resources.stringResource
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 // Un riquadro da 88 dp: abbastanza per riconoscere la foto, ben sopra i 48 dp di bersaglio
 private val TileSize = 88.dp
@@ -228,7 +225,7 @@ private fun PhotoTile(number: Int, photo: PhotoUpload, onRetry: () -> Unit, onRe
                         .padding(2.dp)
                         .background(MaterialTheme.colorScheme.inverseSurface, CircleShape),
                 ) {
-                    Icon(Icons.Filled.Close, contentDescription = null, tint = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.size(14.dp))
+                    Icon(AppIcons.Close, contentDescription = null, tint = MaterialTheme.colorScheme.inverseOnSurface, modifier = Modifier.size(14.dp))
                 }
             }
         }
@@ -264,9 +261,9 @@ private fun StatusBadge(status: PhotoStatus, modifier: Modifier) {
         ) {
             when (current) {
                 PhotoStatus.UPLOADING, PhotoStatus.REMOVING -> CircularProgressIndicator(modifier = Modifier.size(13.dp), strokeWidth = 2.dp, color = content)
-                PhotoStatus.READY -> Icon(Icons.Filled.Check, contentDescription = null, tint = content, modifier = Modifier.size(15.dp))
-                PhotoStatus.REJECTED -> Icon(Icons.Filled.Close, contentDescription = null, tint = content, modifier = Modifier.size(14.dp))
-                PhotoStatus.FAILED -> Icon(Icons.Filled.Refresh, contentDescription = null, tint = content, modifier = Modifier.size(15.dp))
+                PhotoStatus.READY -> Icon(AppIcons.Check, contentDescription = null, tint = content, modifier = Modifier.size(15.dp))
+                PhotoStatus.REJECTED -> Icon(AppIcons.Close, contentDescription = null, tint = content, modifier = Modifier.size(14.dp))
+                PhotoStatus.FAILED -> Icon(AppIcons.Refresh, contentDescription = null, tint = content, modifier = Modifier.size(15.dp))
             }
         }
     }

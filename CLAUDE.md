@@ -105,7 +105,7 @@ sull'iPhone (build `d793210`, CI verde).
 | Area | Scelta |
 |---|---|
 | Base | Kotlin 2.4.20, Compose Multiplatform 1.12.1, Material 3 1.9.0 (ultima stabile), `material-icons-core` 1.7.3, AGP 9.1, Gradle 9.5. UI tutta in Compose; Swift solo per l'ingresso iOS e Firebase |
-| Stile | Tema "foresta" in stile carta topografica, uguale su Android e iOS (§2 del piano): testata `ForestHeader` (cielo con curve di livello, creste, abeti), titoli Barlow Semi Condensed e testo Atkinson Hyperlegible Next (`composeResources/font`, licenze OFL in `files/`), token in `core/ui/theme`, chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) e salvato in DataStore (`ThemeSettings`) |
+| Stile | Redesign "Luce di quota" (11/2026, Figma "GeoSentinel — Redesign Luce di quota"): testate col cielo dell'ora vera (giorno, luce dorata, notte) sopra le creste e chip "Tramonto · luce che resta" (`core/ui/Sky.kt`, `Daylight.kt`), contenuto su un foglio che sale sulle creste; titoli e numeri in Archivo (`composeResources/font`, licenza OFL in `files/`), testo di sistema; icone a tratto di Lucide in `core/ui/AppIcons.kt` (ISC); token in `core/ui/theme` (fondo salvia, card bianche, felce = `primary`, pino = `tertiary` per l'azione piena); barra in basso a isola con l'SOS da 72 dp su ogni scheda; SOS sempre scuro (`EmergencyTheme`); movimento in `core/ui/Motion.kt`. Chiaro/scuro scelto dall'utente (Sistema/Chiaro/Scuro) in DataStore (`ThemeSettings`). Mappa e icona dell'app invariate (colori della mappa fissati in `Color.kt`, sezione "Mappa") |
 | Architettura | Package per feature in `shared`, ognuna con `data` (repository) e `ui` (Screen + ViewModel). Niente strato `domain` vuoto |
 | Stato | ViewModel + `StateFlow<UiState>` immutabile, flusso unidirezionale |
 | Rete | Client generato da openapi-generator 7.25 (`kotlin`, `multiplatform`, kotlinx-datetime) nel modulo `:apiClient`: si genera in `apiClient/build/` a ogni build, non si committa e non si modifica a mano (si cambia la configurazione in `apiClient/build.gradle.kts`). Date-ora come `kotlin.time.Instant`. Enum generati con un ultimo caso `unknown_default_open_api` (template `apiClient/templates/data_class.mustache`, da ripatchare quando si aggiorna il generatore). Ktor 3 (OkHttp / Darwin), kotlinx.serialization con `ignoreUnknownKeys = true` |
@@ -137,7 +137,7 @@ shared/src/
     core/               config, network, session, db, location, push, ui, di
       ui/theme/         Color, Theme, ThemeSettings, SystemBars (expect)
       ui/navigation/    Route, BottomNavItems
-      ui/               ForestHeader, ContourLines, FormControls, UiMessage, schermate segnaposto (sostituite milestone per milestone)
+      ui/               Sky, Daylight, AppIcons, Motion, PageLayout, FormControls, States, UiMessage
     auth/               data/PasswordRules, ui/ Login e Register (Screen + ViewModel)
     trail/ hazard/ media/ refuge/ sos/ rescue/ staff/ profile/   ognuna con data/ e ui/
   commonMain/composeResources/   stringhe e icone

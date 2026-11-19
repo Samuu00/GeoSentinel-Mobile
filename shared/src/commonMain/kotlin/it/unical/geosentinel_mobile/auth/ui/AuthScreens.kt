@@ -20,8 +20,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -100,7 +98,6 @@ import geosentinel_mobile.shared.generated.resources.auth_register_title
 import geosentinel_mobile.shared.generated.resources.auth_show_password
 import it.unical.geosentinel_mobile.core.ui.BackButton
 import it.unical.geosentinel_mobile.core.ui.FooterLink
-import it.unical.geosentinel_mobile.core.ui.ForestHeader
 import it.unical.geosentinel_mobile.core.ui.FormErrorBanner
 import it.unical.geosentinel_mobile.core.ui.FormScaffold
 import it.unical.geosentinel_mobile.core.ui.FormTextField
@@ -116,6 +113,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 @Composable
 fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (email: String) -> Unit, onLoggedIn: () -> Unit) {
@@ -372,7 +370,7 @@ private fun BirthDateField(date: LocalDate?, error: String?, onClick: () -> Unit
             label = stringResource(Res.string.auth_birth_date),
             error = error,
             readOnly = true,
-            trailing = { Icon(Icons.Filled.DateRange, contentDescription = null, modifier = Modifier.padding(end = 4.dp)) },
+            trailing = { Icon(AppIcons.Calendar, contentDescription = null, modifier = Modifier.padding(end = 4.dp)) },
         )
         Box(
             Modifier

@@ -56,6 +56,7 @@ import it.unical.geosentinel_mobile.staff.ui.TicketListViewModel
 import it.unical.geosentinel_mobile.staff.ui.TrailStatusViewModel
 import it.unical.geosentinel_mobile.trail.data.MapSettings
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
+import it.unical.geosentinel_mobile.trail.data.ElevationRepository
 import it.unical.geosentinel_mobile.trail.ui.TrailDetailViewModel
 import it.unical.geosentinel_mobile.trail.ui.TrailMapViewModel
 import it.unical.geosentinel_mobile.sos.data.SosRepository
@@ -144,6 +145,8 @@ fun coreModule(
         )
     }
     single { ImageEncoder() }
+    // quote per il profilo altimetrico, dalle Terrain Tiles della mappa: client suo, senza Auth (altro host)
+    single { ElevationRepository(client = { HttpClientFactory.createStorageClient(platformHttpEngine()) }) }
     // Push (M7.1): il token arriva dalla piattaforma, la registrazione la decide App in base alla sessione
     single { PushManager(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl, platform = pushPlatform) }
     single<PushTokenSink> { get<PushManager>() }

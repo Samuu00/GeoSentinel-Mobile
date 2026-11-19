@@ -13,8 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Info
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -32,6 +30,7 @@ import androidx.compose.ui.unit.dp
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.photo_credit
 import org.jetbrains.compose.resources.stringResource
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 /**
  * Autore e licenza di una foto importata (le licenze CC BY e CC BY-SA chiedono di citarli): una "i" come quella
@@ -56,7 +55,7 @@ fun PhotoCredit(credit: String?, modifier: Modifier = Modifier) {
                     .border(1.dp, colors.outlineVariant, CircleShape),
                 contentAlignment = Alignment.Center,
             ) {
-                Icon(Icons.Filled.Info, stringResource(Res.string.photo_credit), tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
+                Icon(AppIcons.Info, stringResource(Res.string.photo_credit), tint = colors.onSurfaceVariant, modifier = Modifier.size(18.dp))
             }
         }
         AnimatedVisibility(visible = expanded) {

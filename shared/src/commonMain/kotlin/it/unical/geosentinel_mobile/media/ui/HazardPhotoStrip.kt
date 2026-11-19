@@ -14,8 +14,6 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +49,7 @@ import it.unical.geosentinel_mobile.media.data.MediaRepository
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 private val ThumbShape = RoundedCornerShape(14.dp)
 // il primo URL più due rinnovi, come nel dettaglio del sentiero
@@ -177,7 +176,7 @@ internal fun PhotoViewer(photo: MediaResponse, media: MediaRepository, onClose: 
                     .size(48.dp)
                     .background(MaterialTheme.colorScheme.surfaceContainerLowest, CircleShape),
             ) {
-                Icon(Icons.Filled.Close, contentDescription = stringResource(Res.string.photo_viewer_close))
+                Icon(AppIcons.Close, contentDescription = stringResource(Res.string.photo_viewer_close))
             }
             PhotoCredit(
                 photo.credit,

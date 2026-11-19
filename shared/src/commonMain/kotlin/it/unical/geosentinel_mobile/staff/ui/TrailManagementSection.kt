@@ -37,6 +37,11 @@ import it.unical.geosentinel_mobile.core.location.toPositions
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.hazard.ui.Choices
 import it.unical.geosentinel_mobile.trail.ui.TrailState
+import it.unical.geosentinel_mobile.core.ui.AppIcons
+import it.unical.geosentinel_mobile.core.ui.GroupCard
+import it.unical.geosentinel_mobile.core.ui.GroupDivider
+import it.unical.geosentinel_mobile.core.ui.GroupIconIndent
+import it.unical.geosentinel_mobile.core.ui.GroupRow
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
@@ -61,8 +66,7 @@ fun TrailManagementSection(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text(
                 stringResource(Res.string.staff_manage_title),
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                style = MaterialTheme.typography.titleLarge,
                 modifier = Modifier.semantics { heading() },
             )
             if (state.busy) {
@@ -92,13 +96,18 @@ fun TrailManagementSection(
                 modifier = Modifier.padding(top = 6.dp).semantics { liveRegion = LiveRegionMode.Polite },
             )
         }
-        Spacer(Modifier.size(4.dp))
-        ManageLink(stringResource(Res.string.staff_open_queue), onOpenQueue)
-        // il form parte dall'inizio del sentiero, come la segnalazione
-        trail.path.toPositions().firstOrNull()?.let { start ->
-            ManageLink(stringResource(Res.string.staff_add_poi)) { onCreatePoi(start.toGeoPoint()) }
+        Spacer(Modifier.size(16.dp))
+        // le azioni del gestore come righe di un gruppo, con la loro icona (redesign "Luce di quota")
+        GroupCard {
+            GroupRow(stringResource(Res.string.staff_open_queue), onClick = onOpenQueue, icon = AppIcons.Alert)
+            // il form parte dall'inizio del sentiero, come la segnalazione
+            trail.path.toPositions().firstOrNull()?.let { start ->
+                GroupDivider(GroupIconIndent)
+                GroupRow(stringResource(Res.string.staff_add_poi), onClick = { onCreatePoi(start.toGeoPoint()) }, icon = AppIcons.MapPin)
+            }
+            GroupDivider(GroupIconIndent)
+            GroupRow(stringResource(Res.string.staff_open_ticket), onClick = onCreateTicket, icon = AppIcons.Wrench)
         }
-        ManageLink(stringResource(Res.string.staff_open_ticket), onCreateTicket)
     }
 }
 

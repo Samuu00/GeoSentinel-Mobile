@@ -58,7 +58,7 @@
     <string name="theme_dark">Scuro</string>
 
     <!-- Accesso e registrazione (M2.2) -->
-    <string name="auth_login_title">Accedi</string>
+    <string name="auth_login_title">Bentornato in quota</string>
     <string name="auth_login_body">Con il tuo account puoi segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
     <string name="auth_email">Email</string>
     <string name="auth_password">Password</string>
@@ -661,4 +661,58 @@
     <string name="profile_photo">Foto profilo</string>
     <string name="profile_photo_choose">Scegli una foto</string>
     <string name="profile_photo_remove">Rimuovi foto</string>
+    <!-- Redesign "Luce di quota": il cielo delle testate -->
+    <string name="sky_sunset_light">Tramonto %1$s · %2$s di luce</string>
+    <string name="sky_sunrise">Alba alle %1$s</string>
+    <string name="sky_duration_hm">%1$d h %2$d min</string>
+    <string name="sky_duration_m">%1$d min</string>
+    <string name="stat_altitude">Quota</string>
+    <string name="sos_position_title">La tua posizione</string>
+    <string name="sos_position_waiting">In attesa del GPS…</string>
+    <string name="map_search_hint">Cerca sentieri, rifugi, cime</string>
+    <string name="map_search_scope">Nell'area della mappa</string>
+    <string name="map_search_empty">Niente con questo nome qui intorno. Sposta la mappa e riprova.</string>
+    <string name="map_search_trail">Sentiero</string>
+    <string name="map_search_refuge">Rifugio</string>
+    <string name="sky_sunset_short">Tramonto %1$s</string>
+    <string name="sky_sunrise_short">Alba %1$s</string>
+    <string name="near_peek_open">Apri sentieri e pericoli vicini a te</string>
+    <string name="near_peek_collapse">Chiudi Vicino a te</string>
+    <string name="near_peek_expand">Apri Vicino a te</string>
+    <string name="refuge_nights_tap">Tocca la notte d'arrivo per prenotare</string>
+    <string name="refuge_guests_value">%1$d persone</string>
+    <plurals name="refuge_cell_beds">
+        <item quantity="one">%1$d posto</item>
+        <item quantity="other">%1$d posti</item>
+    </plurals>
+    <string name="stat_ascent">Dislivello</string>
+    <string name="stat_time">Tempo</string>
+    <string name="trail_eyebrow">Sentiero</string>
+    <string name="trail_profile_title">Profilo altimetrico</string>
+    <string name="trail_profile_description">Profilo altimetrico: da %1$d a %2$d m, salita di %3$d m</string>
+    <string name="trail_hours_minutes">%1$d h %2$s</string>
+    <string name="trail_minutes">%1$d min</string>
+    <string name="report_short">Segnala</string>
+    <string name="credits_title">Crediti e licenze</string>
+    <string name="credits_intro">Le fonti dei dati, delle immagini e dei caratteri dell'app.</string>
+    <string name="credits_section_map">Mappa</string>
+    <string name="credits_section_media">Foto</string>
+    <string name="credits_section_app">App</string>
+    <string name="credits_osm">© OpenStreetMap contributors</string>
+    <string name="credits_osm_license">Dati dei sentieri e della mappa, licenza ODbL</string>
+    <string name="credits_ofm">OpenFreeMap · © OpenMapTiles</string>
+    <string name="credits_ofm_license">Tessere vettoriali della mappa stradale</string>
+    <string name="credits_terrain">Mapzen Terrain Tiles</string>
+    <string name="credits_terrain_license">Rilievo ombreggiato e profilo altimetrico</string>
+    <string name="credits_eox">Sentinel-2 cloudless, EOX IT Services</string>
+    <string name="credits_eox_license">Mappa satellitare, CC BY 4.0 (dati Copernicus Sentinel 2016 modificati)</string>
+    <string name="credits_wikimedia">Wikimedia Commons</string>
+    <string name="credits_wikimedia_license">Foto dei rifugi: autore e licenza nella foto a schermo intero</string>
+    <string name="credits_lucide">Lucide</string>
+    <string name="credits_lucide_license">Icone, licenza ISC</string>
+    <string name="credits_archivo">Archivo, The Archivo Project Authors</string>
+    <string name="credits_archivo_license">Carattere dei titoli, SIL Open Font License 1.1</string>
+    <string name="profile_info_section">Informazioni</string>
+    <string name="stat_beds">Posti</string>
+    <string name="stat_season">Stagione</string>
 </resources>
