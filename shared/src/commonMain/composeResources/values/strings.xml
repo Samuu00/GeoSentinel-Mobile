@@ -229,6 +229,19 @@
     <string name="poi_unknown">Punto di interesse</string>
     <string name="poi_close">Chiudi</string>
     <string name="poi_open_trail">Apri il sentiero</string>
+    <string name="route_directions">Indicazioni</string>
+    <string name="route_from">Da</string>
+    <string name="route_to">A</string>
+    <string name="route_from_me">La mia posizione</string>
+    <string name="route_from_map">Centro della mappa</string>
+    <string name="route_loading">Cerco il percorso…</string>
+    <string name="route_none">Nessun percorso sui sentieri aperti. Partenza e arrivo devono stare entro 50 km da sentieri collegati tra loro.</string>
+    <plurals name="route_summary">
+        <item quantity="one">%1$s km a piedi · %2$d sentiero</item>
+        <item quantity="other">%1$s km a piedi · %2$d sentieri</item>
+    </plurals>
+    <string name="route_close">Chiudi il percorso</string>
+    <string name="route_dropped_pin">Punto sulla mappa</string>
     <string name="hazard_landslide">Frana</string>
     <string name="hazard_fallen_tree">Albero caduto</string>
     <string name="hazard_flooding">Allagamento</string>

@@ -120,12 +120,20 @@ import geosentinel_mobile.shared.generated.resources.trails_zoom_in_hint
 import it.unical.geosentinel_mobile.api.model.PoiResponse
 import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
+import it.unical.geosentinel_mobile.core.location.toBoundingBox
+import org.maplibre.compose.util.DpPadding
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.SegmentedControl
 import it.unical.geosentinel_mobile.core.ui.TonalPillButton
+import geosentinel_mobile.shared.generated.resources.route_directions
+import geosentinel_mobile.shared.generated.resources.route_dropped_pin
+import org.maplibre.compose.interaction.MapInteractions
+import org.maplibre.compose.interaction.ClickResult
+import androidx.compose.runtime.rememberUpdatedState
+import it.unical.geosentinel_mobile.core.location.toPositions
 import it.unical.geosentinel_mobile.core.ui.islandShadow
 import androidx.compose.foundation.shape.RoundedCornerShape
 import it.unical.geosentinel_mobile.core.ui.theme.StatusBarOverDark
@@ -247,7 +255,7 @@ private val MaxFixAge = 2.minutes
 private enum class LocationPrompt { None, Rationale, Denied }
 
 // Cosa fare quando arriva il permesso
-private enum class LocationGoal { Center, NearMe, Nearby, NearbyHazards }
+private enum class LocationGoal { Center, NearMe, Nearby, NearbyHazards, Route }
 
 // Le due schede del foglio "Vicino a te"
 private enum class NearTab(val label: StringResource) { Trails(Res.string.near_me_trails), Hazards(Res.string.near_me_hazards) }
@@ -346,7 +354,21 @@ fun MapScreen(
         baseStyle = style,
         initialCameraPosition = CameraPosition(target = DefaultArea.toPosition(), zoom = DefaultZoom),
     ) {
-        TrailLines(ui.trails, casing = casing, unknownColor = if (dark) MapMutedDark else MapMutedLight, onTrailClick = onOpenTrail)
+        TrailLines(ui.trails, unknownColor = if (dark) MapMutedDark else MapMutedLight, onTrailClick = onOpenTrail)
+        // il percorso A→B sopra i sentieri, sotto i simboli
+        val plan = ui.route
+        (plan?.result as? RouteResult.Found)?.let { found ->
+            val positions = remember(found.path) { found.path.toPositions() }
+            val destination = plan.destination.point.toPosition()
+            if (positions.isNotEmpty()) {
+                RouteConnectors(
+                    remember(found, destination) { listOf(found.from.toPosition() to positions.first(), positions.last() to destination) },
+                    color = colors.tertiary,
+                )
+            }
+            RouteLine(positions, color = colors.tertiary, casing = casing)
+            RouteDestination(destination)
+        }
         PoiMarkers(
             ui.pois,
             label = mapLabelInk(mapIsDark),
@@ -387,11 +409,15 @@ fun MapScreen(
     // "La mia posizione" toccato: si centra appena arriva un fix (subito, se c'è già)
     var centerOnFix by remember { mutableStateOf(false) }
 
+    // Il centro della mappa ferma, per "Vicino a te": leggere mapState.cameraPosition nella composizione la rifaceva
+    // tutta a ogni fotogramma del trascinamento (lag)
+    var idleCenter by remember { mutableStateOf(DefaultArea) }
     // Mappa ferma: sentieri e POI dell'area visibile (il ViewModel aspetta 400 ms e salta le aree già caricate)
     LaunchedEffect(mapState) {
         snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport }.filterNotNull().collect { viewport ->
             val bounds = viewport.visibleBounds
             val view = GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north)
+            idleCenter = viewport.cameraPosition.target.toGeoPoint()
             viewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
             hazardViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
             refugeViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
@@ -442,6 +468,31 @@ fun MapScreen(
         hazardViewModel.onNearbyNoFix()
     }
 
+    // Percorso A→B: la partenza è un fix recente (con la stessa attesa di "Sentieri vicini") o il centro della mappa
+    val route = ui.route
+    val waitingForRouteOrigin = route?.result == RouteResult.WaitingForOrigin
+    LaunchedEffect(waitingForRouteOrigin, route?.origin, location.lastLocation) {
+        if (!waitingForRouteOrigin) return@LaunchedEffect
+        when (route?.origin) {
+            RouteOrigin.MapCenter -> viewModel.onRouteOrigin(mapState.cameraPosition.target.toGeoPoint())
+            // l'ultima posizione nota basta per partire: aspettare un fix nuovo rallentava il percorso
+            else -> location.lastLocation?.position?.toGeoPoint()?.let(viewModel::onRouteOrigin)
+        }
+    }
+    // l'attesa del fix parte solo col permesso: mentre l'utente legge i dialoghi scadeva e dava "posizione non disponibile"
+    LaunchedEffect(waitingForRouteOrigin, route?.origin, location.permission) {
+        if (!waitingForRouteOrigin || route?.origin != RouteOrigin.MyLocation) return@LaunchedEffect
+        if (location.permission !is LocationPermission.Granted) return@LaunchedEffect
+        delay(FixWait)
+        viewModel.onRouteNoFix()
+    }
+    // percorso trovato: si inquadra tutto, lasciando spazio alla ricerca in alto e al pannello in basso
+    val foundPath = (route?.result as? RouteResult.Found)?.path
+    LaunchedEffect(foundPath) {
+        val bounds = foundPath?.let { GeoBounds.around(it.toPositions()) } ?: return@LaunchedEffect
+        mapState.fitCameraToBounds(bounds.toBoundingBox(), fitPadding = DpPadding(left = 48.dp, top = 120.dp, right = 48.dp, bottom = bottomBar + 200.dp))
+    }
+
     // "Vicino a te": le due ricerche partono insieme, così cambiare scheda è immediato; resta l'ultima scheda scelta
     var nearTab by rememberSaveable { mutableStateOf(NearTab.Trails) }
     fun openNearMe() {
@@ -467,9 +518,33 @@ fun MapScreen(
         }
     }
 
+    fun directionsTo(place: Place) {
+        selectedPoiId = null
+        hazardViewModel.clearSelection()
+        viewModel.routeTo(place)
+        // senza il permesso si spiega e si chiede; intanto si può scegliere "Centro della mappa"
+        withLocation(LocationGoal.Route) {}
+    }
+
     Box(Modifier.fillMaxSize()) {
+        val pinLabel = stringResource(Res.string.route_dropped_pin)
+        val onLongPress by rememberUpdatedState { at: GeoPoint -> directionsTo(Place(pinLabel, at)) }
+        // Tenendo premuto un punto qualsiasi, il percorso fin lì (come Google Maps)
+        val interactions = remember {
+            MapInteractions {
+                callbacks {
+                    longClick {
+                        onEvent { event ->
+                            event.position?.let { onLongPress(it.toGeoPoint()) }
+                            ClickResult.Consume
+                        }
+                    }
+                }
+            }
+        }
         MaplibreMap(
             state = mapState,
+            interactions = interactions,
             // la mappa arriva sotto la barra di stato e sotto la barra in basso; scala, bussola e attribuzione restano
             // visibili sopra la barra e sopra il pulsante SOS
             viewportInsets = PaddingValues(
@@ -587,10 +662,20 @@ fun MapScreen(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         )
         // "Vicino a te": i sentieri dell'area in card; nascosto quando c'è la card di un punto toccato, che sta lì
-        if (selectedPoiId == null && hazardUi.selected == null) {
+        if (route != null && selectedPoiId == null && hazardUi.selected == null) {
+            RoutePanel(
+                plan = route,
+                onOrigin = viewModel::setRouteOrigin,
+                onClose = viewModel::closeRoute,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal))
+                    .padding(start = 12.dp, end = 12.dp, bottom = bottomBar + 8.dp),
+            )
+        } else if (route == null && selectedPoiId == null && hazardUi.selected == null) {
             NearMePeek(
                 trails = ui.trails,
-                center = mapState.cameraPosition.target.toGeoPoint(),
+                center = idleCenter,
                 zoomTooLow = ui.zoomTooLow,
                 expanded = nearMeOpen,
                 onToggle = { scope.launch { mapSettings.setNearMeOpen(!nearMeOpen) } },
@@ -608,6 +693,7 @@ fun MapScreen(
             PoiCard(
                 poi = poi,
                 onOpenTrail = poi.trailId?.let { trailId -> { onOpenTrail(trailId) } },
+                onDirections = { directionsTo(Place(poi.name, poi.location.toGeoPoint())) },
                 onClose = { selectedPoiId = null },
                 modifier = Modifier
                     .align(Alignment.BottomStart)
@@ -711,6 +797,8 @@ fun MapScreen(
                     LocationGoal.NearMe -> openNearMe()
                     LocationGoal.Nearby -> viewModel.onNearbyRequested()
                     LocationGoal.NearbyHazards -> hazardViewModel.onNearbyRequested()
+                    // ricomincia l'attesa del fix, che nel frattempo può essere scaduta
+                    LocationGoal.Route -> viewModel.setRouteOrigin(RouteOrigin.MyLocation)
                 }
                 location.requestPermission()
             },
@@ -757,7 +845,7 @@ private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> U
 }
 
 @Composable
-private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onClose: () -> Unit, modifier: Modifier) {
+private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onDirections: () -> Unit, onClose: () -> Unit, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
     // la scheda di un luogo come in Apple Maps (11/2026): bollino della categoria (lo stesso della mappa), nome grande,
     // tipo, la X grigia in alto a destra e l'azione a capsula sotto. Isola con angoli da 28 e ombra tinta
@@ -790,9 +878,10 @@ private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onClose: () ->
                     }
                 }
             }
-            if (onOpenTrail != null) {
-                Spacer(Modifier.size(12.dp))
-                TonalPillButton(stringResource(Res.string.poi_open_trail), onClick = onOpenTrail, modifier = Modifier.padding(end = 12.dp))
+            Spacer(Modifier.size(12.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(end = 12.dp)) {
+                TonalPillButton(stringResource(Res.string.route_directions), onClick = onDirections)
+                if (onOpenTrail != null) TonalPillButton(stringResource(Res.string.poi_open_trail), onClick = onOpenTrail)
             }
         }
     }

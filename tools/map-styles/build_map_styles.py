@@ -127,6 +127,11 @@ def peaks(pal):
     }
 
 
+# Edifici in 3D (fill-extrusion, il livello più pesante su Metal), campi sportivi, scuole e ospedali; con i nomi
+# sopra (in recolor) anche treni tratteggiati, frecce dei sensi unici, aeroporti e cartelli delle strade americani (quelli italiani restano)
+COSTLY = {"building-3d", "landuse_pitch", "landuse_track", "landuse_school", "landuse_hospital", "airport"}
+
+
 def recolor(style, pal, dark):
     s = copy.deepcopy(style)
     s["name"] = "GeoSentinel " + ("scura" if dark else "chiara")
@@ -143,6 +148,9 @@ def recolor(style, pal, dark):
             continue
         # i punti d'interesse generici di OpenStreetMap: sulla mappa ci sono i POI del parco, gli altri erano rumore
         if layer.get("source-layer") == "poi":
+            continue
+        # dettagli che costano e in montagna non si vedono (lag su iPhone, 11/2026)
+        if layer["id"] in COSTLY or any(part in layer["id"] for part in ("hatching", "one_way_arrow", "aeroway", "shield-us", "shield_us")):
             continue
         # il rilievo prima dei fiumi: ombreggia terra e boschi, non l'acqua né le strade
         if layer["id"] == "waterway_tunnel":

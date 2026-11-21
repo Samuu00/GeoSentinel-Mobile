@@ -50,6 +50,8 @@ import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.State
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -741,25 +743,25 @@ private fun SosButton(onClick: () -> Unit) {
     val haptics = LocalHapticFeedback.current
     val still = rememberReduceMotion()
     // un alone che respira attorno al tondo: si vede anche con la coda dell'occhio. Fermo con "Riduci movimento".
-    val halo = if (still) {
-        0.5f
+    // Letto solo dentro graphicsLayer: a ogni fotogramma si ridisegna l'alone, senza ricomporre il pulsante (lag su iPhone)
+    val halo: State<Float> = if (still) {
+        remember { mutableFloatStateOf(0.5f) }
     } else {
-        val breathing by rememberInfiniteTransition().animateFloat(
+        rememberInfiniteTransition().animateFloat(
             initialValue = 0f,
             targetValue = 1f,
             animationSpec = infiniteRepeatable(tween(1600, easing = LinearEasing), RepeatMode.Restart),
         )
-        breathing
     }
     Box(contentAlignment = Alignment.Center, modifier = Modifier.size(84.dp)) {
         Box(
             Modifier
                 .size(84.dp)
                 .graphicsLayer {
-                    val scale = 0.86f + 0.14f * halo
+                    val scale = 0.86f + 0.14f * halo.value
                     scaleX = scale
                     scaleY = scale
-                    alpha = 0.35f * (1f - halo)
+                    alpha = 0.35f * (1f - halo.value)
                 }
                 .background(EmergencyRed, CircleShape),
         )

@@ -52,3 +52,7 @@ Se lo script resta su `Waiting for device to be connected...` con il telefono sb
 Apple, controlla `netstat -an | Select-String 27015`: se manca `172.17.x.1:27015 LISTENING`, l'inoltro è configurato
 ma il servizio IP Helper non lo applica (la scheda di WSL è nata dopo di lui). Da PowerShell come amministratore:
 `Restart-Service iphlpsvc -Force` (provato il 19/10).
+
+Se il provisioning fallisce con `409 ... There are no current IOS devices on this team matching the provided device
+IDs`, Apple non ha ancora aggiornato la registrazione del telefono sul team: basta rilanciare lo script (provato il
+19/11, al secondo tentativo è andata).

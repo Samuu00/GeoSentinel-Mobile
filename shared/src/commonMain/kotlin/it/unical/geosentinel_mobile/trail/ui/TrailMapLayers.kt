@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import it.unical.geosentinel_mobile.api.model.PoiResponse
 import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
+import it.unical.geosentinel_mobile.core.ui.AppIcons
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.location.toPositions
 import androidx.compose.ui.geometry.Offset
@@ -63,6 +64,7 @@ import org.maplibre.compose.expressions.dsl.interpolate
 import org.maplibre.compose.expressions.dsl.linear
 import org.maplibre.compose.expressions.dsl.switch
 import org.maplibre.compose.expressions.dsl.zoom
+import org.maplibre.compose.expressions.value.DpValue
 import org.maplibre.compose.expressions.value.FloatValue
 import org.maplibre.compose.expressions.value.LineCap
 import org.maplibre.compose.expressions.value.LineJoin
@@ -86,16 +88,19 @@ import org.maplibre.spatialk.geojson.Position
 
 private const val IdProperty = "id"
 
-/** Le linee dei sentieri, una sorgente per stato: in MapLibre il tratteggio non può dipendere da un dato. */
+/**
+ * Le linee dei sentieri, una sorgente per stato: in MapLibre il tratteggio non può dipendere da un dato. Discrete come
+ * nel Figma (11/2026): sottili, senza bordo chiaro, così un percorso evidenziato risalta sopra di loro.
+ */
 @Composable
 @MaplibreComposable
-fun TrailLines(trails: List<TrailSummaryResponse>, casing: Color, unknownColor: Color, onTrailClick: (String) -> Unit) {
+fun TrailLines(trails: List<TrailSummaryResponse>, unknownColor: Color, onTrailClick: (String) -> Unit) {
     val byState = remember(trails) { trails.groupBy { TrailState.of(it.status.value) } }
     val onClick = remember(onTrailClick) { idClickHandler(onTrailClick) }
     TrailState.entries.forEach { state ->
         val features = remember(byState, state) { byState[state].orEmpty().mapNotNull { it.toFeature() } }
         val source = rememberGeoJsonSource(GeoJsonData.Features(FeatureCollection(features)))
-        PathLayers("sentieri-${state.name.lowercase()}", source, state.lineColor(unknownColor), casing, state == TrailState.CLOSED, onClick, TrailMapViewModel.MinTrailZoom)
+        PathLayers("sentieri-${state.name.lowercase()}", source, state.lineColor(unknownColor), casing = null, state == TrailState.CLOSED, onClick, TrailMapViewModel.MinTrailZoom, width = QuietLineWidth)
     }
 }
 
@@ -108,6 +113,47 @@ fun TrailPath(positions: List<Position>, state: TrailState, casing: Color, unkno
     PathLayers("percorso", source, state.lineColor(unknownColor), casing, state == TrailState.CLOSED, onClick = null)
 }
 
+/**
+ * Il percorso A→B evidenziato come su Google Maps: spesso, con il bordo chiaro, sopra i sentieri discreti della mappa.
+ * [color] è il pino del tema (`tertiary`, l'azione piena): non è un colore di stato.
+ */
+@Composable
+@MaplibreComposable
+fun RouteLine(positions: List<Position>, color: Color, casing: Color) {
+    if (positions.size < 2) return
+    val source = rememberGeoJsonSource(GeoJsonData.Features(LineString(positions)))
+    PathLayers("percorso-ab", source, color, casing, dashed = false, onClick = null)
+}
+
+/**
+ * I tratti fuori dai sentieri, dalla partenza al primo sentiero e dall'ultimo all'arrivo: tratteggiati, come il tratto
+ * a piedi di Google Maps.
+ */
+@Composable
+@MaplibreComposable
+fun RouteConnectors(segments: List<Pair<Position, Position>>, color: Color) {
+    val features = remember(segments) {
+        segments.map { (from, to) -> Feature(geometry = LineString(listOf(from, to)), properties = buildJsonObject {}) }
+    }
+    val source = rememberGeoJsonSource(GeoJsonData.Features(FeatureCollection(features)))
+    PathLayers("percorso-fuori", source, color, casing = null, dashed = true, onClick = null)
+}
+
+/** Il segnaposto dell'arrivo, sempre visibile (niente collisioni): è il punto che l'utente ha scelto. */
+@Composable
+@MaplibreComposable
+fun RouteDestination(at: Position) {
+    val source = rememberGeoJsonSource(GeoJsonData.Features(Point(at)))
+    val pin = rememberBadge(AppIcons.MapPin, TrailOpen)
+    SymbolLayer(
+        id = "percorso-arrivo",
+        source = source,
+        iconImage = image(pin, PoiBadge),
+        iconAllowOverlap = const(true),
+        iconIgnorePlacement = const(true),
+    )
+}
+
 private fun TrailState.lineColor(unknown: Color): Color = when (this) {
     TrailState.OPEN -> TrailOpen
     TrailState.WARNING -> TrailWarning
@@ -117,6 +163,8 @@ private fun TrailState.lineColor(unknown: Color): Color = when (this) {
 
 // Spessore che cresce con lo zoom: da lontano linee sottili, così i sentieri vicini restano distinti (prima 4 dp sempre)
 private val LineWidth = interpolate(exponential(1.4f), zoom(), 7 to const(1.dp), 11 to const(2.dp), 14 to const(3.5.dp), 17 to const(5.dp))
+// I sentieri della mappa: più sottili del percorso evidenziato
+private val QuietLineWidth = interpolate(exponential(1.4f), zoom(), 9 to const(1.dp), 12 to const(1.5.dp), 14 to const(2.5.dp), 17 to const(3.5.dp))
 // Il bordo chiaro sotto la linea: sempre un po' più largo, per staccarla dalla mappa
 private val CasingWidth = interpolate(exponential(1.4f), zoom(), 7 to const(2.5.dp), 11 to const(3.5.dp), 14 to const(6.dp), 17 to const(8.dp))
 
@@ -129,26 +177,37 @@ internal const val FadeZoom = 0.6
 
 @Composable
 @MaplibreComposable
-private fun PathLayers(id: String, source: GeoJsonSource, color: Color, casing: Color, dashed: Boolean, onClick: FeaturesClickHandler?, minZoom: Double? = null) {
+private fun PathLayers(
+    id: String,
+    source: GeoJsonSource,
+    color: Color,
+    casing: Color?,
+    dashed: Boolean,
+    onClick: FeaturesClickHandler?,
+    minZoom: Double? = null,
+    width: Expression<DpValue> = LineWidth,
+) {
     // senza soglia (dettaglio del sentiero) sempre pieno
     val opacity = minZoom?.let(::fadeInFrom) ?: const(1f)
     val from = minZoom?.toFloat() ?: 0f
-    LineLayer(
-        id = "$id-bordo",
-        source = source,
-        minZoom = from,
-        color = const(casing),
-        width = CasingWidth,
-        opacity = opacity,
-        cap = const(LineCap.Round),
-        join = const(LineJoin.Round),
-    )
+    if (casing != null) {
+        LineLayer(
+            id = "$id-bordo",
+            source = source,
+            minZoom = from,
+            color = const(casing),
+            width = CasingWidth,
+            opacity = opacity,
+            cap = const(LineCap.Round),
+            join = const(LineJoin.Round),
+        )
+    }
     LineLayer(
         id = id,
         source = source,
         minZoom = from,
         color = const(color),
-        width = LineWidth,
+        width = width,
         opacity = opacity,
         cap = const(if (dashed) LineCap.Butt else LineCap.Round),
         join = const(LineJoin.Round),

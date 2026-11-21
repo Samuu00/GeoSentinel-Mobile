@@ -7,6 +7,7 @@ import it.unical.geosentinel_mobile.api.TrailsApi
 import it.unical.geosentinel_mobile.api.model.GeoJsonLineString
 import it.unical.geosentinel_mobile.api.model.GeoPointDto
 import it.unical.geosentinel_mobile.api.model.PoiResponse
+import it.unical.geosentinel_mobile.api.model.RouteResponse
 import it.unical.geosentinel_mobile.api.model.TrailDetailResponse
 import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
@@ -91,6 +92,11 @@ class TrailRepository(
         apiCall {
             trailsApi.findTrailsNearby(lon = at.lon, lat = at.lat, radius = radiusMeters.coerceIn(1.0, MAX_RADIUS_METERS), limit = MAX_NEARBY_RESULTS)
         }
+
+    // Percorso A→B sui sentieri aperti (ADR-0027 del backend): solo rete, come "Sentieri vicini". 422 no-route se un
+    // punto è a più di 2 km dai sentieri o i due punti stanno su sentieri non collegati
+    suspend fun route(from: GeoPoint, to: GeoPoint): Result<RouteResponse> =
+        apiCall { trailsApi.findRoute(fromLon = from.lon, fromLat = from.lat, toLon = to.lon, toLat = to.lat) }
 
     fun observePoisInBounds(bounds: GeoBounds): Flow<List<PoiResponse>> =
         dao.observePoisInBox(bounds.minLon, bounds.minLat, bounds.maxLon, bounds.maxLat)

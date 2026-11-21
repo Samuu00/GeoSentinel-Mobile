@@ -36,6 +36,8 @@ class FakeCatalog(private val backend: FakeBackend) {
     var hazards = listOf("""{"id":"h1","trailId":"$SEED_TRAIL_ID","type":"FALLEN_TREE","severity":"HIGH","status":"VERIFIED","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-04T09:00:00Z"}""")
     var media = listOf(mediaJson("m1", "READY"), mediaJson("m2", "QUARANTINED"), mediaJson("m3", "READY"))
     var offline = false
+    // GET /trails/route: false = 422 no-route
+    var routeFound = true
     // una richiesta della bbox ancora in volo (per i test di annullamento)
     var bboxDelayMillis = 0L
     var downloadUrlFails = false
@@ -68,6 +70,13 @@ class FakeCatalog(private val backend: FakeBackend) {
                 ok(list(trails))
             }
             path == "/api/v1/trails/nearby" -> record("nearby").let { ok(list(trails)) }
+            path == "/api/v1/trails/route" -> record("route").let {
+                if (routeFound) {
+                    ok("""{"path":$SEED_TRAIL_PATH,"lengthM":4210.0,"trailIds":["$SEED_TRAIL_ID","t2"]}""")
+                } else {
+                    with(backend) { problem(HttpStatusCode.UnprocessableEntity, "no-route") }
+                }
+            }
             path == "/api/v1/pois/nearby" -> record("pois-nearby").let { ok(list(pois)) }
             path.startsWith("/api/v1/pois/trail/") -> record("pois").let { conditional(request, "W/\"p$poisVersion\"") { list(pois) } }
             path.startsWith("/api/v1/trails/") -> record("detail").let {

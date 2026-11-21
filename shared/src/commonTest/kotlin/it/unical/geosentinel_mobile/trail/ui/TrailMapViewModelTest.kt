@@ -1,5 +1,7 @@
 package it.unical.geosentinel_mobile.trail.ui
 
+import geosentinel_mobile.shared.generated.resources.route_none
+import geosentinel_mobile.shared.generated.resources.Res
 import io.ktor.http.decodeURLQueryComponent
 import it.unical.geosentinel_mobile.core.location.GeoBounds
 import it.unical.geosentinel_mobile.core.location.GeoPoint
@@ -227,5 +229,54 @@ class TrailMapViewModelTest {
         advanceUntilIdle()
         assertEquals(1, viewModel.state.value.trails.size)
         assertEquals(1, catalog.count("bbox"))
+    }
+
+    // ---- Percorso A→B ----
+
+    private val rifugio = Place("Rifugio", GeoPoint(lat = 39.31, lon = 16.52))
+
+    @Test
+    fun `il percorso parte dal fix e chiede al server partenza e arrivo in lon lat`() = runTest {
+        val viewModel = viewModel()
+        viewModel.routeTo(rifugio)
+        assertEquals(RouteResult.WaitingForOrigin, viewModel.state.value.route?.result)
+        assertEquals(RouteOrigin.MyLocation, viewModel.state.value.route?.origin)
+
+        viewModel.onRouteOrigin(GeoPoint(lat = 39.30, lon = 16.45))
+        advanceUntilIdle()
+
+        val found = assertIs<RouteResult.Found>(viewModel.state.value.route?.result)
+        assertEquals(4210.0, found.lengthM)
+        assertEquals(2, found.trailCount)
+        assertEquals("fromLon=16.45&fromLat=39.3&toLon=16.52&toLat=39.31", catalog.queries("route").single())
+    }
+
+    @Test
+    fun `nessun percorso dal server diventa il messaggio del percorso`() = runTest {
+        catalog.routeFound = false
+        val viewModel = viewModel()
+        viewModel.routeTo(rifugio)
+        viewModel.onRouteOrigin(GeoPoint(lat = 39.30, lon = 16.45))
+        advanceUntilIdle()
+
+        val failed = assertIs<RouteResult.Failed>(viewModel.state.value.route?.result)
+        assertEquals(Res.string.route_none, failed.message.text)
+    }
+
+    @Test
+    fun `chiudere il percorso scarta la risposta in volo e cambiare partenza riparte dall attesa`() = runTest {
+        val viewModel = viewModel()
+        viewModel.routeTo(rifugio)
+        viewModel.onRouteOrigin(GeoPoint(lat = 39.30, lon = 16.45))
+        viewModel.closeRoute()
+        advanceUntilIdle()
+        assertNull(viewModel.state.value.route)
+
+        viewModel.routeTo(rifugio)
+        viewModel.onRouteNoFix()
+        assertIs<RouteResult.Failed>(viewModel.state.value.route?.result)
+        viewModel.setRouteOrigin(RouteOrigin.MapCenter)
+        assertEquals(RouteResult.WaitingForOrigin, viewModel.state.value.route?.result)
+        assertEquals(RouteOrigin.MapCenter, viewModel.state.value.route?.origin)
     }
 }

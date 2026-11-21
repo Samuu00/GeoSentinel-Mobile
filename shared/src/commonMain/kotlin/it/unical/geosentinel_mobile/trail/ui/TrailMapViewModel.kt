@@ -4,15 +4,19 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.error_generic
+import geosentinel_mobile.shared.generated.resources.route_none
 import geosentinel_mobile.shared.generated.resources.trails_nearby_no_fix
+import it.unical.geosentinel_mobile.api.model.GeoJsonLineString
 import it.unical.geosentinel_mobile.api.model.PoiResponse
 import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
 import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.core.ui.uiMessage
 import it.unical.geosentinel_mobile.trail.data.TrailRepository
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +38,27 @@ sealed interface NearbyTrails {
     data class Failed(val message: UiMessage) : NearbyTrails
 }
 
+/** Un punto con un nome: la destinazione del percorso (un POI toccato o un punto tenuto premuto sulla mappa). */
+data class Place(val name: String, val point: GeoPoint)
+
+/** Da dove parte il percorso: dalla posizione dell'utente o dal centro della mappa (un posto scelto spostandola). */
+enum class RouteOrigin { MyLocation, MapCenter }
+
+sealed interface RouteResult {
+    // la schermata deve dare il punto di partenza (un fix recente o il centro della mappa)
+    data object WaitingForOrigin : RouteResult
+    data object Loading : RouteResult
+    // from: la partenza vera, per il tratto fuori dai sentieri fino all'inizio del percorso
+    data class Found(val from: GeoPoint, val path: GeoJsonLineString, val lengthM: Double, val trailCount: Int) : RouteResult
+    data class Failed(val message: UiMessage) : RouteResult
+}
+
+/** Il percorso A→B come su Google Maps: destinazione, partenza e risultato. */
+data class RoutePlan(val destination: Place, val origin: RouteOrigin, val result: RouteResult) {
+    // niente nomi né posizioni nei log
+    override fun toString() = "RoutePlan(origin=$origin, result=${result::class.simpleName})"
+}
+
 data class TrailMapUiState(
     val trails: List<TrailSummaryResponse> = emptyList(),
     val pois: List<PoiResponse> = emptyList(),
@@ -44,6 +69,7 @@ data class TrailMapUiState(
     val truncated: Boolean = false,
     val zoomTooLow: Boolean = false,
     val nearby: NearbyTrails = NearbyTrails.Hidden,
+    val route: RoutePlan? = null,
 ) {
     // niente nomi né posizioni nei log
     override fun toString() = "TrailMapUiState(trails=${trails.size}, pois=${pois.size}, loading=$loading, failed=$failed)"
@@ -175,10 +201,49 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
 
     fun closeNearby() = _state.update { it.copy(nearby = NearbyTrails.Hidden) }
 
+    // ---- Percorso A→B ----
+
+    private var routeJob: Job? = null
+
+    /** "Indicazioni": si parte dalla posizione dell'utente, la schermata aspetta il fix. */
+    fun routeTo(destination: Place) = startRoute(RoutePlan(destination, RouteOrigin.MyLocation, RouteResult.WaitingForOrigin))
+
+    fun setRouteOrigin(origin: RouteOrigin) {
+        val plan = _state.value.route ?: return
+        startRoute(plan.copy(origin = origin, result = RouteResult.WaitingForOrigin))
+    }
+
+    fun onRouteOrigin(from: GeoPoint) {
+        val plan = _state.value.route?.takeIf { it.result == RouteResult.WaitingForOrigin } ?: return
+        _state.update { it.copy(route = plan.copy(result = RouteResult.Loading)) }
+        routeJob = viewModelScope.launch {
+            val result = repository.route(from, plan.destination.point).fold(
+                onSuccess = { RouteResult.Found(from, it.path, it.lengthM, it.trailIds.size) },
+                onFailure = { RouteResult.Failed(it.toRouteMessage()) },
+            )
+            _state.update { state ->
+                // chiuso o cambiato nel frattempo: la risposta vecchia non vale più
+                if (state.route != plan.copy(result = RouteResult.Loading)) state else state.copy(route = plan.copy(result = result))
+            }
+        }
+    }
+
+    fun onRouteNoFix() = _state.update { state ->
+        val plan = state.route?.takeIf { it.result == RouteResult.WaitingForOrigin } ?: return@update state
+        state.copy(route = plan.copy(result = RouteResult.Failed(UiMessage(Res.string.trails_nearby_no_fix))))
+    }
+
+    fun closeRoute() = startRoute(null)
+
+    private fun startRoute(plan: RoutePlan?) {
+        routeJob?.cancel()
+        _state.update { it.copy(route = plan) }
+    }
+
     companion object {
         val Debounce = 400.milliseconds
-        // A 7 la Calabria intera sta sullo schermo, e i suoi sentieri in una richiesta (fino a 500)
-        const val MinTrailZoom = 7.0
+        // A 9 la vista è di circa 50 km: si disegnano solo i sentieri vicini, non tutta la Calabria (a 7 laggava su iPhone)
+        const val MinTrailZoom = 9.0
         // I POI da un massiccio in giù. A 9 la vista supera i 50 km del server: la risposta è parziale (fino a 300, i
         // più vicini al centro) e quelli ai bordi arrivano avvicinandosi; quelli che si sovrappongono si nascondono
         const val MinPoiZoom = 9.0
@@ -186,5 +251,8 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         private const val Margin = 0.5
     }
 }
+
+private fun Throwable.toRouteMessage(): UiMessage =
+    if (((this as? ApiException)?.error as? ApiError.BusinessRule)?.slug == "no-route") UiMessage(Res.string.route_none) else toUiMessage()
 
 private fun Throwable.toUiMessage(): UiMessage = (this as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic)
