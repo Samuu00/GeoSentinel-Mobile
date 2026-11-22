@@ -1899,6 +1899,9 @@ una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del te
 - [x] **Percorso col nostro motore** (backend, ADR-0028): GraphHopper sull'estratto OSM della Calabria, stessa
   `GET /trails/route` e stessa risposta. Sentieri `CLOSED` evitati, `trailIds` ricavati in PostGIS, nuovo slug
   503 `routing-unavailable` (contratto copiato in `api/openapi.json`).
+- [x] **Solo sui sentieri del parco** (deciso il 22/11, backend): niente strade; partenza e arrivo entro 1 km da un
+  sentiero, altrimenti "nessun percorso" (422 `no-route`, messaggio `route_none`). Nessun cambio nell'app oltre al
+  contratto.
 - [x] **Tutte le "Indicazioni" nell'app** (dettaglio e lista dei rifugi, partenza del sentiero): tornano alla mappa e
   aprono il percorso, mai le mappe del telefono. `LocalDirections` in `core/ui/Directions.kt`, fornito da `App` (che
   tiene la destinazione in attesa e torna alla mappa con `popBackStack<Route.Map>`); `directionsUri` e i suoi `actual`
@@ -1914,6 +1917,7 @@ una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del te
 - [ ] Emulatore, posizione finta lontana dalla Calabria: mappa vuota, nessuna richiesta; tornando in Calabria i
   sentieri ricompaiono.
 - [ ] "Indicazioni" dalla lista dei rifugi (prossimo soggiorno, foglio della prenotazione) e dalla partenza del sentiero.
+- [ ] Percorso solo sui sentieri sulla mappa; da un paese lontano dai sentieri, il messaggio "nessun percorso".
 - [ ] Un sentiero chiuso dall'app (`manager@`): il percorso lo evita e non compare tra i sentieri.
 - [ ] GraphHopper spento: il pannello del percorso mostra l'errore, l'app non si blocca.
 - [ ] Sull'iPhone: limite dei 50 km e percorso.

@@ -235,7 +235,7 @@
     <string name="route_from_me">La mia posizione</string>
     <string name="route_from_map">Centro della mappa</string>
     <string name="route_loading">Cerco il percorso…</string>
-    <string name="route_none">Nessun percorso sui sentieri aperti. Partenza e arrivo devono stare entro 50 km da sentieri collegati tra loro.</string>
+    <string name="route_none">Nessun percorso sui sentieri. Partenza e arrivo devono stare entro 1 km da un sentiero, e i sentieri devono essere collegati tra loro.</string>
     <plurals name="route_summary">
         <item quantity="one">%1$s km a piedi · %2$d sentiero</item>
         <item quantity="other">%1$s km a piedi · %2$d sentieri</item>

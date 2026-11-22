@@ -102,12 +102,12 @@ def text_group(layer):
 def hillshade(pal, dark):
     """Il rilievo ombreggiato sopra boschi e prati, sotto acqua e strade: luce da nord-ovest come sulle carte."""
     return {
-        "id": "hillshade", "type": "hillshade", "source": "terrain",
+        "id": "hillshade", "type": "hillshade", "source": "terrain", "minzoom": HILLSHADE_MIN_ZOOM,
         "paint": {
             "hillshade-shadow-color": pal["hill_shadow"],
             "hillshade-highlight-color": pal["hill_highlight"],
             "hillshade-accent-color": pal["hill_accent"],
-            "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 6, 0.45, 12, 0.3, 15, 0.2] if not dark else 0.5,
+            "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 11, 0.4, 15, 0.2] if not dark else 0.5,
         },
     }
 
@@ -127,9 +127,33 @@ def peaks(pal):
     }
 
 
-# Edifici in 3D (fill-extrusion, il livello più pesante su Metal), campi sportivi, scuole e ospedali; con i nomi
-# sopra (in recolor) anche treni tratteggiati, frecce dei sensi unici, aeroporti e cartelli delle strade americani (quelli italiani restano)
-COSTLY = {"building-3d", "landuse_pitch", "landuse_track", "landuse_school", "landuse_hospital", "airport"}
+# Stile leggero (22/11, lag su iPhone): solo i livelli che servono in montagna, da 89 a circa 30. Restano aree
+# naturali e acqua, le strade senza i doppioni di ponti, tunnel e svincoli, e le scritte di località, cime e acqua.
+# Tolti: edifici, confini, ferrovie leggere, aree sportive, nomi e cartelli delle strade, regioni e stati.
+KEEP = {
+    "background", "park", "landuse_residential", "landcover_wood", "landcover_grass", "landcover_wetland",
+    "landcover_ice", "landcover_sand", "waterway_river", "waterway_other", "water",
+    "road_service_track_casing", "road_minor_casing", "road_secondary_tertiary_casing", "road_trunk_primary_casing",
+    "road_motorway_casing", "road_path_pedestrian", "road_service_track", "road_minor", "road_secondary_tertiary",
+    "road_trunk_primary", "road_motorway", "road_major_rail",
+    "water_name_point_label", "label_other", "label_village", "label_town", "label_city", "label_city_capital",
+}
+# Il rilievo solo da vicino, dove si guarda un versante: da lontano è il livello che costa di più (tile delle quote da
+# decodificare e ombreggiare a ogni zoom)
+HILLSHADE_MIN_ZOOM = 11
+
+
+def bridges_as_roads(layer):
+    """Senza i livelli bridge_*, i ponti li disegnano le strade normali: dal filtro si toglie solo "bridge". I tunnel
+    restano fuori: una galleria disegnata come strada sembrerebbe un passaggio attraverso la montagna."""
+    def fix(f):
+        if isinstance(f, list):
+            if len(f) == 5 and f[0] == "match" and f[1] == ["get", "brunnel"] and f[2] == ["bridge", "tunnel"]:
+                return ["match", ["get", "brunnel"], ["tunnel"], False, True]
+            return [fix(x) for x in f]
+        return f
+    if "filter" in layer:
+        layer["filter"] = fix(layer["filter"])
 
 
 def recolor(style, pal, dark):
@@ -149,11 +173,12 @@ def recolor(style, pal, dark):
         # i punti d'interesse generici di OpenStreetMap: sulla mappa ci sono i POI del parco, gli altri erano rumore
         if layer.get("source-layer") == "poi":
             continue
-        # dettagli che costano e in montagna non si vedono (lag su iPhone, 11/2026)
-        if layer["id"] in COSTLY or any(part in layer["id"] for part in ("hatching", "one_way_arrow", "aeroway", "shield-us", "shield_us")):
+        # stile leggero: tutto il resto si toglie (lag su iPhone, 22/11)
+        if layer["id"] not in KEEP:
             continue
+        bridges_as_roads(layer)
         # il rilievo prima dei fiumi: ombreggia terra e boschi, non l'acqua né le strade
-        if layer["id"] == "waterway_tunnel":
+        if layer["id"] == "waterway_river":
             layers.append(hillshade(pal, dark))
         # le cime prima delle località: a parità di posto vince il nome del paese
         if layer["id"] == "label_other":

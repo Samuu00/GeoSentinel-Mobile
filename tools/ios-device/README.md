@@ -22,7 +22,9 @@ WSL lo raggiunge sull'IP del suo gateway (es. `172.17.16.1`) grazie a un `netsh 
   API private di Apple, va bene anche un Apple ID secondario).
 - iPhone collegato e sbloccato: "Autorizza questo computer" (vale per Windows). Deve comparire in Dispositivi Apple.
 - Firewall, da PowerShell come amministratore (l'inoltro `portproxy` lo crea lo script quando manca):
-  `New-NetFirewallRule -DisplayName "WSL usbmuxd 27015" -Direction Inbound -InterfaceAlias "vEthernet (WSL (Hyper-V firewall))" -Protocol TCP -LocalPort 27015 -Action Allow`
+  `New-NetFirewallRule -DisplayName "WSL usbmuxd 27015" -Direction Inbound -Protocol TCP -LocalPort 27015 -RemoteAddress 172.16.0.0/12 -Action Allow -Profile Any`
+  (per indirizzi di WSL, non per scheda: la scheda `vEthernet (WSL …)` si ricrea ai riavvii e una regola legata a
+  lei smette di valere; provato il 22/11)
 - Backend raggiungibile dall'iPhone (stessa rete Wi-Fi), rete del PC impostata come **Privata**:
   `New-NetFirewallRule -DisplayName "GeoSentinel backend 8080" -Direction Inbound -Protocol TCP -LocalPort 8080 -Action Allow -Profile Private`
 - Sull'iPhone, dopo il primo install: Impostazioni → Generali → VPN e gestione dispositivi → autorizza il tuo
@@ -43,10 +45,10 @@ WSL lo raggiunge sull'IP del suo gateway (es. `172.17.16.1`) grazie a un `netsh 
 Se xtool dice `noDevice` o non trova il telefono: sblocca l'iPhone, controlla che compaia in Dispositivi Apple
 (se chiede di nuovo l'autorizzazione, accetta) e rilancia lo script.
 
-Se xtool dice `Operation now in progress`, WSL non raggiunge la porta 27015: la regola del firewall resta legata
-alla scheda `vEthernet (WSL …)` per GUID, che Windows può ricreare dopo un riavvio. Da PowerShell come
-amministratore: `Set-NetFirewallRule -DisplayName "WSL usbmuxd 27015" -InterfaceAlias "vEthernet (WSL (Hyper-V firewall))"`
-(provato il 12/10).
+Se xtool dice `Operation now in progress` (o `porta-KO` con `bash -c '</dev/tcp/172.17.16.1/27015'` da WSL), WSL
+non raggiunge la porta 27015. Da PowerShell come amministratore si rifà la regola per indirizzi (sopra), dopo
+`Remove-NetFirewallRule -DisplayName "WSL usbmuxd 27015"`, e `Restart-Service iphlpsvc -Force` (22/11: la vecchia regola
+per scheda, anche ricollegata con `Set-NetFirewallRule -InterfaceAlias`, non bastava più).
 
 Se lo script resta su `Waiting for device to be connected...` con il telefono sbloccato e visibile in Dispositivi
 Apple, controlla `netstat -an | Select-String 27015`: se manca `172.17.x.1:27015 LISTENING`, l'inoltro è configurato
