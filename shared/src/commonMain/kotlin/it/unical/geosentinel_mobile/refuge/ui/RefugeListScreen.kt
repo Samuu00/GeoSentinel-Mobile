@@ -38,7 +38,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.LiveRegionMode
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
@@ -111,7 +110,7 @@ import it.unical.geosentinel_mobile.core.ui.TapCard
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import it.unical.geosentinel_mobile.core.ui.SkyPicture
-import it.unical.geosentinel_mobile.core.ui.directionsUri
+import it.unical.geosentinel_mobile.core.ui.LocalDirections
 import it.unical.geosentinel_mobile.core.ui.groupedItem
 import it.unical.geosentinel_mobile.core.ui.rememberDialer
 import it.unical.geosentinel_mobile.core.ui.resolve
@@ -537,7 +536,7 @@ private fun BookingRow(
 @Composable
 private fun NextStay(booking: BookingResponse, refuge: RefugeResponse?, today: LocalDate, onClick: () -> Unit) {
     val dial = rememberDialer()
-    val uriHandler = LocalUriHandler.current
+    val directions = LocalDirections.current
     val days = (booking.checkIn.toEpochDays() - today.toEpochDays()).toInt()
     val note = when {
         days < 0 -> stringResource(Res.string.my_bookings_in_progress)
@@ -560,7 +559,7 @@ private fun NextStay(booking: BookingResponse, refuge: RefugeResponse?, today: L
                     }
                     TonalPillButton(
                         stringResource(Res.string.refuge_directions),
-                        onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
+                        onClick = { directions(refuge.name, refuge.location.lat, refuge.location.lon) },
                         icon = AppIcons.MapPin,
                         modifier = Modifier.weight(1f),
                     )
@@ -617,7 +616,7 @@ private fun BookingActionsSheet(
     val sheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     val dial = rememberDialer()
-    val uriHandler = LocalUriHandler.current
+    val directions = LocalDirections.current
     val close: (() -> Unit) -> Unit = { then -> scope.launch { sheetState.hide() }.invokeOnCompletion { then() } }
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheetState, containerColor = MaterialTheme.colorScheme.background) {
         Column(
@@ -641,7 +640,7 @@ private fun BookingActionsSheet(
                             stringResource(Res.string.refuge_directions),
                             icon = AppIcons.MapPin,
                             chevron = false,
-                            onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
+                            onClick = { close { directions(refuge.name, refuge.location.lat, refuge.location.lon) } },
                         )
                         refuge.phone?.let { phone ->
                             GroupDivider(60.dp)

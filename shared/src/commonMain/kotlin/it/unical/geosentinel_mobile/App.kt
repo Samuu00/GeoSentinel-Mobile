@@ -49,6 +49,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import it.unical.geosentinel_mobile.trail.ui.Place
+import it.unical.geosentinel_mobile.core.ui.LocalDirections
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.mutableFloatStateOf
@@ -269,6 +271,8 @@ fun App() {
 
     // Scheda Rifugi (redesign 11/2026): Esplora | Prenotazioni. Il segmento sta qui perché "Vedi le prenotazioni" (dal
     // foglio Prenota) e il Profilo aprono direttamente le prenotazioni
+    // la destinazione di "Indicazioni" chiesta da un'altra schermata, finché la mappa non la prende
+    var pendingRoute by remember { mutableStateOf<Place?>(null) }
     var refugesSegment by rememberSaveable { mutableStateOf(REFUGES_EXPLORE) }
     val openMyBookings: () -> Unit = {
         refugesSegment = REFUGES_BOOKINGS
@@ -312,7 +316,16 @@ fun App() {
             val bottomBar = innerPadding.calculateBottomPadding()
             // solo le schede: le schermate spinte con la barra visibile (SOS) si fermano sopra la barra come prima
             val barShown = BottomNavItems.any { item -> destination?.hasRoute(item.route::class) == true }
-            CompositionLocalProvider(LocalBottomBarInset provides if (barShown) bottomBar else 0.dp) {
+            // "Indicazioni" da un rifugio o da un sentiero: si torna alla mappa (la destinazione di partenza, sempre in fondo
+            // allo stack) e la mappa chiede il percorso al nostro motore
+            val directions: (String, Double, Double) -> Unit = { name, lat, lon ->
+                pendingRoute = Place(name, GeoPoint(lat = lat, lon = lon))
+                navController.popBackStack<Route.Map>(inclusive = false)
+            }
+            CompositionLocalProvider(
+                LocalBottomBarInset provides if (barShown) bottomBar else 0.dp,
+                LocalDirections provides directions,
+            ) {
             NavHost(
                 navController = navController,
                 startDestination = Route.Map,
@@ -376,6 +389,8 @@ fun App() {
                         },
                         avatarInitial = (sessionState as? SessionState.LoggedIn)?.profile?.displayName?.trim()?.firstOrNull(),
                         avatarMediaId = (sessionState as? SessionState.LoggedIn)?.profile?.avatarMediaId,
+                        pendingRoute = pendingRoute,
+                        onPendingRouteTaken = { pendingRoute = null },
                     )
                 }
                 composable<Route.TrailDetail>(

@@ -85,7 +85,11 @@ sull'iPhone (build `d793210`, CI verde). Poi (21/11, mappa): stile alleggerito p
 `tools/map-styles`: niente edifici 3D, cartelli, sensi unici, aeroporti; 108 → 88 livelli), alone dell'SOS letto solo in
 `graphicsLayer`, sentieri da zoom 9 e senza bordo (come il Figma), percorso A→B: `GET /trails/route` nel backend
 (ADR-0027, grafo in memoria con JTS, 422 `no-route`), "Indicazioni" nella card del POI, `RoutePanel` (Da: la mia
-posizione o il centro della mappa) e `RouteLine` nel pino del tema, 375 test host. Da provare sull'emulatore e sull'iPhone.
+posizione o il centro della mappa) e `RouteLine` nel pino del tema, 375 test host. Da provare sull'emulatore e sull'iPhone. Poi (22/11): sentieri, POI,
+rifugi e pericoli solo entro 50 km dalla posizione (dal centro della mappa senza permesso), cache ripulita fuori
+(`GeoBounds.around`/`within`, `CatalogDao.deleteOutsideBox`), allerte escluse, 379 test host. Percorso A→B con
+GraphHopper nel backend (ADR-0028); tutte le "Indicazioni" usano il nostro motore sulla mappa (`LocalDirections` in
+`core/ui/Directions.kt`), mai più le mappe del telefono; verificato sull'emulatore.
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e

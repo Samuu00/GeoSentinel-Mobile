@@ -11,6 +11,7 @@ import it.unical.geosentinel_mobile.api.model.PoiResponse
 import it.unical.geosentinel_mobile.api.model.TrailSummaryResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
 import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.core.location.within
 import it.unical.geosentinel_mobile.core.network.ApiError
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.ui.UiMessage
@@ -84,7 +85,12 @@ data class TrailMapUiState(
  */
 class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
 
-    private data class Request(val bounds: GeoBounds, val zoom: Double, val force: Boolean, val attempt: Int)
+    private data class Request(val bounds: GeoBounds, val zoom: Double, val force: Boolean, val attempt: Int, val limit: GeoBounds?) {
+        // La vista dentro il limite (i 50 km attorno all'utente) e il margine caricato, anch'esso dentro; null = vista
+        // tutta fuori dal limite, niente da mostrare né da chiedere
+        val view: GeoBounds? get() = bounds.within(limit)
+        val area: GeoBounds? get() = view?.expandedBy(Margin)?.within(limit)
+    }
 
     private val _state = MutableStateFlow(TrailMapUiState())
     val state: StateFlow<TrailMapUiState> = _state.asStateFlow()
@@ -95,6 +101,7 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
     // Aree già caricate (vista più margine); null = da caricare
     private var trailsArea: GeoBounds? = null
     private var poisArea: GeoBounds? = null
+    private var prunedLimit: GeoBounds? = null
     private var attempts = 0
 
     init {
@@ -107,10 +114,14 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         // La UI legge sempre dalla cache: ogni aggiornamento della rete arriva da qui
         viewModelScope.launch {
             visible.filterNotNull().collectLatest { view ->
-                val area = view.bounds.expandedBy(Margin)
-                // Anche da lontano: la cache ha solo quello già scaricato (la Calabria intera sono circa 350 sentieri).
-                // Sotto le soglie li nascondono i livelli, con una dissolvenza (minZoom e opacità in TrailMapLayers):
-                // svuotare la lista qui li faceva sparire di colpo
+                val area = view.area
+                if (area == null) {
+                    _state.update { it.copy(trails = emptyList(), pois = emptyList()) }
+                    return@collectLatest
+                }
+                // Solo dentro il limite: la cache può avere anche quello scaricato prima altrove (vecchie versioni,
+                // l'utente che si è spostato). Sotto le soglie li nascondono i livelli, con una dissolvenza (minZoom e
+                // opacità in TrailMapLayers): svuotare la lista qui li faceva sparire di colpo
                 val trails = repository.observeInBounds(area)
                 val pois = repository.observePoisInBounds(area)
                 combine(trails, pois) { trailList, poiList -> trailList to poiList }.collect { (trails, poiList) ->
@@ -120,9 +131,10 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         }
     }
 
-    fun onCameraIdle(bounds: GeoBounds, zoom: Double) {
+    /** [limit]: fin dove si mostra e si carica (i [NearRadiusMeters] attorno all'utente); null = nessun limite. */
+    fun onCameraIdle(bounds: GeoBounds, zoom: Double, limit: GeoBounds? = null) {
         if (!bounds.isValid) return
-        val request = Request(bounds, zoom, force = false, attempt = attempts)
+        val request = Request(bounds, zoom, force = false, attempt = attempts, limit = limit)
         visible.value = request
         requests.value = request
     }
@@ -143,17 +155,33 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
             trailsArea = null
             poisArea = null
         }
-        loadTrails(request.bounds)
-        if (request.zoom >= MinPoiZoom) loadPois(request.bounds)
+        // limite nuovo (l'utente si è spostato, o senza posizione la mappa): la cache butta quello che è fuori, e le
+        // aree caricate valgono solo dentro (tornando indietro quello cancellato si deve richiedere)
+        val limit = request.limit
+        if (limit != null && limit != prunedLimit) {
+            trailsArea = trailsArea?.let { it intersect limit }
+            poisArea = poisArea?.let { it intersect limit }
+            repository.pruneOutside(limit).onSuccess { prunedLimit = limit }
+        }
+        // vista tutta fuori dal limite: niente da chiedere (e un errore di prima non vale più qui)
+        val view = request.view
+        val area = request.area
+        if (view == null || area == null) {
+            _state.update { it.copy(loading = false, failed = null, truncated = false) }
+            return
+        }
+        loadTrails(view, area)
+        if (request.zoom >= MinPoiZoom) loadPois(view, area)
     }
 
-    private suspend fun loadTrails(view: GeoBounds) {
+    // view e area già ritagliate sul limite: il confronto con l'area caricata (ritagliata anche lei) regge anche
+    // quando la vista vera supera il limite, altrimenti si richiederebbe a ogni fermata della mappa
+    private suspend fun loadTrails(view: GeoBounds, area: GeoBounds) {
         // vista già coperta da un caricamento riuscito: niente rete, e un errore di un'altra area non vale più qui
         if (trailsArea?.contains(view) == true) {
             _state.update { it.copy(loading = false, failed = null) }
             return
         }
-        val area = view.expandedBy(Margin)
         _state.update { it.copy(loading = true) }
         try {
             repository.refreshInBounds(area).fold(
@@ -171,9 +199,8 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         }
     }
 
-    private suspend fun loadPois(view: GeoBounds) {
+    private suspend fun loadPois(view: GeoBounds, area: GeoBounds) {
         if (poisArea?.contains(view) == true) return
-        val area = view.expandedBy(Margin)
         // I POI arrivano per raggio: quello che copre l'area, fino ai 50 km del server
         repository.refreshPoisIn(area).onSuccess { complete -> poisArea = if (complete) area else null }
         // un errore sui POI non si mostra: quello dei sentieri, se c'è, dice già che la rete manca
@@ -249,6 +276,9 @@ class TrailMapViewModel(private val repository: TrailRepository) : ViewModel() {
         const val MinPoiZoom = 9.0
         // Margine caricato attorno alla vista, su ogni lato
         private const val Margin = 0.5
+        // Sentieri, POI, rifugi e pericoli si mostrano e si caricano solo entro questa distanza dall'utente (dal centro
+        // della mappa senza posizione): il riquadro è in MapScreen, uguale per i tre ViewModel
+        const val NearRadiusMeters = 50_000.0
     }
 }
 

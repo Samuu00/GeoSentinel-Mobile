@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import it.unical.geosentinel_mobile.api.model.RefugeResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
+import it.unical.geosentinel_mobile.core.location.within
 import it.unical.geosentinel_mobile.refuge.data.MAX_NEARBY_REFUGES
 import it.unical.geosentinel_mobile.refuge.data.MAX_REFUGES_RADIUS_METERS
 import it.unical.geosentinel_mobile.refuge.data.RefugeRepository
@@ -22,7 +23,8 @@ import kotlin.time.Duration.Companion.milliseconds
  */
 class RefugeMapViewModel(private val refuges: RefugeRepository) : ViewModel() {
 
-    private data class Request(val bounds: GeoBounds, val zoom: Double)
+    // limit: i 50 km attorno all'utente (TrailMapViewModel.NearRadiusMeters); null = nessun limite
+    private data class Request(val bounds: GeoBounds, val zoom: Double, val limit: GeoBounds?)
 
     private val _state = MutableStateFlow<List<RefugeResponse>>(emptyList())
     val state: StateFlow<List<RefugeResponse>> = _state.asStateFlow()
@@ -54,9 +56,9 @@ class RefugeMapViewModel(private val refuges: RefugeRepository) : ViewModel() {
         }
     }
 
-    fun onCameraIdle(bounds: GeoBounds, zoom: Double) {
+    fun onCameraIdle(bounds: GeoBounds, zoom: Double, limit: GeoBounds? = null) {
         if (!bounds.isValid) return
-        val request = Request(bounds, zoom)
+        val request = Request(bounds, zoom, limit)
         lastView = request
         if (enabled) requests.value = request
     }
@@ -68,8 +70,15 @@ class RefugeMapViewModel(private val refuges: RefugeRepository) : ViewModel() {
             loaded = null
             return
         }
-        if (loaded?.contains(request.bounds) == true) return
-        val area = request.bounds.expandedBy(Margin)
+        // vista e area ritagliate sul limite (anche l'area caricata lo è: il confronto regge oltre il bordo)
+        val view = request.bounds.within(request.limit)
+        val area = view?.expandedBy(Margin)?.within(request.limit)
+        if (view == null || area == null) {
+            _state.value = emptyList()
+            loaded = null
+            return
+        }
+        if (loaded?.contains(view) == true) return
         val radius = area.radiusMeters
         refuges.nearby(area.center, radius).onSuccess { list ->
             val complete = list.size < MAX_NEARBY_REFUGES && radius <= MAX_REFUGES_RADIUS_METERS

@@ -87,14 +87,24 @@ class TrailRepository(
         }
     }
 
+    /**
+     * La cache tiene solo [area] (i 50 km attorno all'utente): sentieri e POI fuori si cancellano. Un sentiero che
+     * tocca l'area resta tutto; il dettaglio dei sentieri aperti resta (si rilegge quando si apre).
+     */
+    suspend fun pruneOutside(area: GeoBounds): Result<Unit> = guarded {
+        dao.deleteOutsideBox(area.minLon, area.minLat, area.maxLon, area.maxLat)
+        Result.success(Unit)
+    }
+
     // "Sentieri vicini": solo rete, è una ricerca del momento. Raggio in metri, il server lo accetta fino a 50 km.
     suspend fun nearby(at: GeoPoint, radiusMeters: Double = NEARBY_RADIUS_METERS): Result<List<TrailSummaryResponse>> =
         apiCall {
             trailsApi.findTrailsNearby(lon = at.lon, lat = at.lat, radius = radiusMeters.coerceIn(1.0, MAX_RADIUS_METERS), limit = MAX_NEARBY_RESULTS)
         }
 
-    // Percorso A→B sui sentieri aperti (ADR-0027 del backend): solo rete, come "Sentieri vicini". 422 no-route se un
-    // punto è a più di 2 km dai sentieri o i due punti stanno su sentieri non collegati
+    // Percorso A→B a piedi (ADR-0028 del backend: GraphHopper su sentieri e strade OSM, lontano dai sentieri chiusi):
+    // solo rete, come "Sentieri vicini". 422 no-route se un punto è fuori dalla Calabria o non c'è un percorso;
+    // 503 routing-unavailable se il motore è giù (non si ritenta da soli: lo fa l'utente)
     suspend fun route(from: GeoPoint, to: GeoPoint): Result<RouteResponse> =
         apiCall { trailsApi.findRoute(fromLon = from.lon, fromLat = from.lat, toLon = to.lon, toLat = to.lat) }
 

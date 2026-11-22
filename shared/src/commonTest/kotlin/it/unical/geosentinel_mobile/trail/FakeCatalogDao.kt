@@ -60,6 +60,19 @@ class FakeCatalogDao : CatalogDao() {
     }
     override suspend fun deletePoisOfTrail(trailId: String) { pois.value = pois.value.filterValues { it.trailId != trailId } }
 
+    // come le query di deleteOutsideBox
+    private fun PoiEntity.outside(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) =
+        lon !in minLon..maxLon || lat !in minLat..maxLat
+    override suspend fun deleteSummariesOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) {
+        summaries.value = summaries.value.filterValues { it.touches(minLon, minLat, maxLon, maxLat) }
+    }
+    override suspend fun deletePoiEtagsOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) {
+        pois.value.values.filter { it.trailId != null && it.outside(minLon, minLat, maxLon, maxLat) }.forEach { etags.remove("pois/${it.trailId}") }
+    }
+    override suspend fun deletePoisOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) {
+        pois.value = pois.value.filterValues { !it.outside(minLon, minLat, maxLon, maxLat) }
+    }
+
     override suspend fun etagOf(key: String): String? = etags[key]
     override suspend fun saveEtag(entity: CatalogEtagEntity) { etags[entity.key] = entity.etag }
 }

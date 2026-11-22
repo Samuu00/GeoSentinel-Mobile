@@ -124,6 +124,7 @@ import it.unical.geosentinel_mobile.core.location.toBoundingBox
 import org.maplibre.compose.util.DpPadding
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.location.toGeoPoint
+import it.unical.geosentinel_mobile.core.location.distanceTo
 import it.unical.geosentinel_mobile.core.location.toPosition
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.SegmentedControl
@@ -202,6 +203,8 @@ import it.unical.geosentinel_mobile.core.ui.AppIcons
 internal val DefaultArea = GeoPoint(lat = 39.33, lon = 16.55)
 private const val DefaultZoom = 9.5
 private const val MyLocationZoom = 14.0
+// Di quanto si deve spostare l'utente perché il riquadro dei 50 km lo segua
+private const val ReAnchorMeters = 5_000.0
 // La mappa del form della segnalazione parte almeno da qui: abbastanza vicina per mettere il segnaposto
 private const val ReportZoom = 13.0
 
@@ -290,6 +293,9 @@ fun MapScreen(
     onOpenProfile: () -> Unit = {},
     avatarInitial: Char? = null,
     avatarMediaId: String? = null,
+    // "Indicazioni" chieste da un rifugio o da un sentiero (LocalDirections in App): si avvia il percorso e si avvisa App
+    pendingRoute: Place? = null,
+    onPendingRouteTaken: () -> Unit = {},
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
@@ -412,17 +418,30 @@ fun MapScreen(
     // Il centro della mappa ferma, per "Vicino a te": leggere mapState.cameraPosition nella composizione la rifaceva
     // tutta a ogni fotogramma del trascinamento (lag)
     var idleCenter by remember { mutableStateOf(DefaultArea) }
-    // Mappa ferma: sentieri e POI dell'area visibile (il ViewModel aspetta 400 ms e salta le aree già caricate)
+    // Centro dei 50 km: la posizione dell'utente, solo se il permesso c'è già (qui non si chiede). Si sposta solo dopo
+    // ReAnchorMeters: a ogni fix nuovo i ViewModel ricaricherebbero
+    var anchor by remember { mutableStateOf<GeoPoint?>(null) }
+    LaunchedEffect(location.lastLocation, location.permission) {
+        if (location.permission !is LocationPermission.Granted) return@LaunchedEffect
+        val fix = location.lastLocation?.position?.toGeoPoint() ?: return@LaunchedEffect
+        if (anchor?.let { it.distanceTo(fix) < ReAnchorMeters } != true) anchor = fix
+    }
+    // Mappa ferma (o centro dei 50 km spostato): sentieri e POI dell'area visibile (il ViewModel aspetta 400 ms e salta
+    // le aree già caricate). Sentieri, POI, rifugi e pericoli solo entro 50 km dall'utente, o dal centro della mappa
+    // senza posizione; le allerte no, l'operatore le vede in tutto il parco
     LaunchedEffect(mapState) {
-        snapshotFlow { if (mapState.isCameraMoving) null else mapState.viewport }.filterNotNull().collect { viewport ->
-            val bounds = viewport.visibleBounds
-            val view = GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north)
-            idleCenter = viewport.cameraPosition.target.toGeoPoint()
-            viewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
-            hazardViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
-            refugeViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
-            alertViewModel.onCameraIdle(view, viewport.cameraPosition.zoom)
-        }
+        snapshotFlow { (if (mapState.isCameraMoving) null else mapState.viewport)?.let { it to anchor } }.filterNotNull()
+            .collect { (viewport, near) ->
+                val bounds = viewport.visibleBounds
+                val view = GeoBounds.of(bounds.west, bounds.south, bounds.east, bounds.north)
+                val zoom = viewport.cameraPosition.zoom
+                idleCenter = viewport.cameraPosition.target.toGeoPoint()
+                val limit = GeoBounds.around(near ?: idleCenter, TrailMapViewModel.NearRadiusMeters)
+                viewModel.onCameraIdle(view, zoom, limit)
+                hazardViewModel.onCameraIdle(view, zoom, limit)
+                refugeViewModel.onCameraIdle(view, zoom, limit)
+                alertViewModel.onCameraIdle(view, zoom)
+            }
     }
 
     LaunchedEffect(centerOnFix, location.lastLocation) {
@@ -524,6 +543,11 @@ fun MapScreen(
         viewModel.routeTo(place)
         // senza il permesso si spiega e si chiede; intanto si può scegliere "Centro della mappa"
         withLocation(LocationGoal.Route) {}
+    }
+    LaunchedEffect(pendingRoute) {
+        val place = pendingRoute ?: return@LaunchedEffect
+        onPendingRouteTaken()
+        directionsTo(place)
     }
 
     Box(Modifier.fillMaxSize()) {

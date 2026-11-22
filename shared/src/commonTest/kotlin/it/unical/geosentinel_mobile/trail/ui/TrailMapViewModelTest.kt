@@ -106,6 +106,40 @@ class TrailMapViewModelTest {
     }
 
     @Test
+    fun `una vista oltre i 50 km chiede solo la parte dentro e una volta sola`() = runTest {
+        val viewModel = viewModel()
+        val limit = GeoBounds.around(GeoPoint(39.3, 16.5), TrailMapViewModel.NearRadiusMeters)
+        // supera il bordo est del limite
+        val view = GeoBounds.of(16.9, 39.2, 17.3, 39.4)
+
+        viewModel.onCameraIdle(view, zoom = 10.0, limit = limit)
+        advanceUntilIdle()
+        viewModel.onCameraIdle(view, zoom = 10.0, limit = limit)
+        advanceUntilIdle()
+
+        assertEquals(1, catalog.count("bbox"), "l'area caricata è ritagliata come la vista: la seconda volta è coperta")
+        val (_, _, maxLon, _) = bboxValues(catalog.queries("bbox").single())
+        assertTrue(maxLon <= limit.maxLon + 1e-6)
+    }
+
+    @Test
+    fun `fuori dai 50 km non si mostra e non si chiede nulla e la cache si svuota`() = runTest {
+        val viewModel = viewModel()
+        viewModel.onCameraIdle(sila, zoom = 10.0)
+        advanceUntilIdle()
+        assertEquals(1, dao.summaries.value.size)
+
+        // l'utente è a Roma: la Sila è a più di 50 km
+        val limit = GeoBounds.around(GeoPoint(41.9, 12.5), TrailMapViewModel.NearRadiusMeters)
+        viewModel.onCameraIdle(sila, zoom = 10.0, limit = limit)
+        advanceUntilIdle()
+
+        assertEquals(1, catalog.count("bbox"))
+        assertTrue(viewModel.state.value.trails.isEmpty())
+        assertTrue(dao.summaries.value.isEmpty(), "la cache tiene solo quello entro 50 km")
+    }
+
+    @Test
     fun `con il massimo dei sentieri l'area non è completa e si avvisa`() = runTest {
         catalog.trails = (1..TrailRepository.MAX_BBOX_RESULTS).map { trailJson(id = "t$it") }
         val viewModel = viewModel()

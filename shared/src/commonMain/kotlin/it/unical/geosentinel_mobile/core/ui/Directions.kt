@@ -1,7 +1,9 @@
 package it.unical.geosentinel_mobile.core.ui
 
+import androidx.compose.runtime.staticCompositionLocalOf
+
 /**
- * L'indirizzo che apre le mappe del telefono con le indicazioni fino a ([lat], [lon]): `geo:` su Android (sceglie l'utente
- * l'app), Apple Mappe su iOS. Si apre con `LocalUriHandler`.
+ * "Indicazioni" fino a un punto con un nome: porta alla mappa e chiede il percorso al nostro motore (`GET /trails/route`,
+ * ADR-0028 del backend), mai le mappe del telefono. Lo fornisce `App`; fuori da `App` (anteprime, test) non fa nulla.
  */
-expect fun directionsUri(lat: Double, lon: Double): String
+val LocalDirections = staticCompositionLocalOf<(name: String, lat: Double, lon: Double) -> Unit> { { _, _, _ -> } }

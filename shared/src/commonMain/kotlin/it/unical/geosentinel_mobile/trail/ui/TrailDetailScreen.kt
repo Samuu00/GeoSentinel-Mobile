@@ -115,11 +115,10 @@ import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.StrokeJoin
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.platform.LocalUriHandler
 import it.unical.geosentinel_mobile.core.ui.GroupCard
 import it.unical.geosentinel_mobile.core.ui.IconTile
 import it.unical.geosentinel_mobile.core.ui.TonalPillButton
-import it.unical.geosentinel_mobile.core.ui.directionsUri
+import it.unical.geosentinel_mobile.core.ui.LocalDirections
 import it.unical.geosentinel_mobile.trail.data.ElevationProfile
 import it.unical.geosentinel_mobile.trail.data.ElevationRepository
 import it.unical.geosentinel_mobile.trail.data.hikingMinutes
@@ -329,9 +328,9 @@ private fun TrailContent(
         }
     }
     // la mappa del form parte dall'inizio del sentiero
-    // in basso, fissi: segnalare (da loggati) e le indicazioni per l'inizio del sentiero con le mappe del telefono
+    // in basso, fissi: segnalare (da loggati) e le indicazioni fino all'inizio del sentiero, col nostro motore sulla mappa
     val start = trail.path.toPositions().firstOrNull()
-    val uriHandler = LocalUriHandler.current
+    val directions = LocalDirections.current
     if (start != null) {
         StickyActionBar(Modifier.align(Alignment.BottomCenter)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -345,7 +344,7 @@ private fun TrailContent(
                 }
                 PrimaryPillButton(
                     stringResource(Res.string.refuge_directions),
-                    onClick = { uriHandler.openUri(directionsUri(start.latitude, start.longitude)) },
+                    onClick = { directions(trail.name, start.latitude, start.longitude) },
                     icon = AppIcons.Navigation,
                     modifier = Modifier.weight(1f),
                 )

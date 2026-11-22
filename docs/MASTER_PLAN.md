@@ -21,6 +21,10 @@
 > **12/11: redesign dell'interfaccia e della mappa** ("Dopo M11", in fondo a §5; scritto da Claude su richiesta):
 > stile Apple con l'atmosfera montana, foglio "Prenota" al posto della schermata, mappa tipo Apple Maps con rilievo
 > ombreggiato. §2 descrive lo stato nuovo. 358 test host, provato sull'emulatore; manca la prova su iPhone.
+> **21–22/11: mappa entro 50 km e percorso A→B col nostro motore** ("Dopo il redesign", in fondo a §5): sentieri,
+> POI, rifugi e pericoli solo entro 50 km dall'utente, cache ripulita; percorso con GraphHopper nel backend (ADR-0028)
+> e tutte le "Indicazioni" dentro l'app. 379 test host, provato sull'emulatore.
+> **Cosa manca, in ordine: §9.**
 
 ---
 
@@ -1873,6 +1877,48 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
 - [ ] Job `ios` della CI e prova sull'iPhone: fogli, gesto indietro, safe area, rilievo e nomi sulla mappa (Metal).
 - [ ] Review del redesign (§6).
 
+### Dopo il redesign (21–22/11): mappa entro 50 km e percorso A→B
+
+> Scritto da Claude su richiesta. Backend: ADR-0027 (21/11, rete in memoria) sostituita dall'ADR-0028 (22/11, GraphHopper).
+
+**Perché:** la cache e la mappa tenevano tutti i sentieri già scaricati (anche tutta la Calabria), e il percorso A→B
+dell'ADR-0027 conosceva solo i 351 sentieri del database, in circa 57 gruppi non collegati: tra due gruppi tirava
+una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del telefono.
+
+**Fatto:**
+- [x] **Solo entro 50 km.** Il centro è la **posizione dell'utente**, se il permesso c'è già (la mappa non lo chiede);
+  senza, il centro della mappa. `GeoBounds.around(center, radius)` (quadrato, angoli a ~70 km), `intersect` e
+  `within(limit)` in `core/location/GeoBounds.kt`. `MapScreen` calcola il limite (`TrailMapViewModel.NearRadiusMeters`)
+  e lo sposta solo dopo 5 km (`ReAnchorMeters`), anche a mappa ferma.
+- [x] `TrailMapViewModel`, `RefugeMapViewModel` e `HazardMapViewModel` ritagliano vista e margine sul limite, sia per
+  la cache sia per le richieste. Anche l'area caricata è ritagliata, così oltre il bordo non si richiede a ogni
+  fermata. Vista tutta fuori: liste vuote e nessuna richiesta. Le allerte dell'operatore restano senza limite.
+- [x] **Cache ripulita:** sentieri e POI fuori dal limite si cancellano (`CatalogDao.deleteOutsideBox`), insieme agli
+  ETag `pois/<trailId>` dei POI tolti (altrimenti un 304 lascerebbe il dettaglio senza POI). I dettagli dei sentieri
+  restano. Nessuna migrazione.
+- [x] **Percorso col nostro motore** (backend, ADR-0028): GraphHopper sull'estratto OSM della Calabria, stessa
+  `GET /trails/route` e stessa risposta. Sentieri `CLOSED` evitati, `trailIds` ricavati in PostGIS, nuovo slug
+  503 `routing-unavailable` (contratto copiato in `api/openapi.json`).
+- [x] **Tutte le "Indicazioni" nell'app** (dettaglio e lista dei rifugi, partenza del sentiero): tornano alla mappa e
+  aprono il percorso, mai le mappe del telefono. `LocalDirections` in `core/ui/Directions.kt`, fornito da `App` (che
+  tiene la destinazione in attesa e torna alla mappa con `popBackStack<Route.Map>`); `directionsUri` e i suoi `actual`
+  tolti.
+
+**Checkpoint**
+- [x] `./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug` verde, 379 test (nuovi: riquadro e
+  intersezione in `GeoBoundsTest`; vista oltre il bordo con una sola richiesta e cache svuotata fuori dai 50 km in
+  `TrailMapViewModelTest`).
+- [x] `./gradlew :apiClient:checkApiContract` verde con il contratto nuovo.
+- [x] Emulatore, backend locale con GraphHopper: dalla pagina del rifugio "Indicazioni" apre il percorso nell'app.
+  Camigliatello → Lo Scoiattolo: 16,7 km su 8 sentieri, tracciato continuo.
+- [ ] Emulatore, posizione finta lontana dalla Calabria: mappa vuota, nessuna richiesta; tornando in Calabria i
+  sentieri ricompaiono.
+- [ ] "Indicazioni" dalla lista dei rifugi (prossimo soggiorno, foglio della prenotazione) e dalla partenza del sentiero.
+- [ ] Un sentiero chiuso dall'app (`manager@`): il percorso lo evita e non compare tra i sentieri.
+- [ ] GraphHopper spento: il pannello del percorso mostra l'errore, l'app non si blocca.
+- [ ] Sull'iPhone: limite dei 50 km e percorso.
+- [ ] Review (§6): `ecc:kotlin-reviewer,ecc:code-reviewer`.
+
 ---
 
 ## 6. Ordine e review
@@ -1937,3 +1983,48 @@ Scelte esplicite, non dimenticanze:
 2. Scrivi il codice. Se un contratto di questo piano non regge, dimmelo prima di cambiarlo: si aggiorna il piano.
 3. Chiedimi "review <task>": leggo i file e ti segnalo i problemi con file e riga, senza riscrivere il codice.
 4. Spunta i checkpoint e, a fine milestone, lancia la catena di review di §6.
+
+## 9. Cosa manca (aggiornato al 22/11)
+
+In ordine di priorità. I dettagli stanno nei checkpoint dei singoli task; qui solo l'elenco, per non perdere niente.
+
+### 9.1 Prima di un rilascio
+1. **GraphHopper nella produzione del backend** (`docker-compose.prod.yml`, piano del backend §7): senza, il percorso
+   risponde 503.
+2. **Release vera** su un telefono contro il backend HTTPS (M9.3).
+3. **Review non ancora lanciate** (§6): M9; redesign ("Dopo M11"); mappa entro 50 km e percorso ("Dopo il redesign").
+
+### 9.2 Prove sull'emulatore (si fanno da qui)
+1. Limite dei 50 km, "Indicazioni" dagli altri punti, sentiero chiuso, GraphHopper spento: checkpoint aperti di "Dopo il
+   redesign".
+2. Dopo il redesign: accesso, registrazione e reset; schermate del gestore e dell'operatore; testo al 200% e
+   TalkBack su calendario e fogli.
+3. Login Google riuscito su Android: serve un account Google sull'emulatore ("Dopo M9", 18/10).
+4. Accessibilità a mano: Accessibility Scanner su chiaro e scuro (M0), TalkBack su tutto il flusso (M9).
+
+### 9.3 iPhone e iOS
+1. Job `ios` della CI sui commit del 21–22/11.
+2. Sull'iPhone (build da `xtool`): redesign (fogli, gesto indietro, safe area, rilievo e nomi sulla mappa), lag della
+   mappa con lo stile alleggerito del 21/11, satellite nero, limite dei 50 km e percorso, foto e crediti.
+3. Login Google sull'iPhone: il bundle id riscritto da `xtool` deve combaciare con il client iOS.
+4. Push su iOS: chiave APNs (serve un account Apple a pagamento), `PushBridge` e `AppDelegate` mai compilati qui (M7).
+5. Con un Mac: le prove sul simulatore segnate "(con il Mac)" in M0–M8 (Keychain, Dynamic Island, HEIC → JPEG,
+   gesti e schermate).
+
+### 9.4 Debito tecnico (valutazione del 22/11)
+1. **Query di Room testate solo con un finto:** `FakeCatalogDao` riscrive l'SQL in Kotlin (anche `deleteOutsideBox`).
+   Servono test sul database vero (Room in memoria su JVM o `androidDeviceTest`).
+2. **File troppo grossi:** `trail/ui/MapScreen.kt` (circa 1000 righe, cinque ViewModel, posizione e percorso insieme)
+   e `App.kt` (circa 800, NavHost con molta logica). Da dividere in parti più piccole.
+3. **Pulizia della cache senza posizione:** il limite segue il centro della mappa, quindi la pulizia gira a ogni
+   spostamento. Da fare solo quando il centro si sposta di qualche km, come con la posizione.
+4. Da decidere: controlli della mappa in orizzontale (fine di M8.3).
+
+### 9.5 Checkpoint del backend che si chiudono dall'app
+1. Flusso completo da Android e iOS (M7 del backend): registrazione → login → sentieri vicini → segnalazione con foto
+   → SOS → push all'operatore → cancellazione dell'account.
+2. Login Google dal vivo con un account vero (M7.2.3 del backend).
+
+### 9.6 Dopo
+- Strato del rischio frane, quando le rotte di M10 del backend sono stabili (§6).
+

@@ -35,6 +35,11 @@ class GeoBounds private constructor(val minLon: Double, val minLat: Double, val 
         return of(minLon - dLon, minLat - dLat, maxLon + dLon, maxLat + dLat)
     }
 
+    /** La parte comune dei due riquadri, o null se non si toccano (il backend darebbe 400 su un riquadro vuoto). */
+    infix fun intersect(other: GeoBounds): GeoBounds? =
+        of(maxOf(minLon, other.minLon), maxOf(minLat, other.minLat), minOf(maxLon, other.maxLon), minOf(maxLat, other.maxLat))
+            .takeIf { it.isValid }
+
     val center: GeoPoint get() = GeoPoint(lat = (minLat + maxLat) / 2, lon = (minLon + maxLon) / 2)
 
     /** Metà della diagonale: il raggio che copre tutto il rettangolo dal centro. */
@@ -56,6 +61,16 @@ class GeoBounds private constructor(val minLon: Double, val minLat: Double, val 
             maxLat.coerceIn(-90.0, 90.0),
         )
 
+        /**
+         * Il quadrato di ±[radiusMeters] attorno a [center] (un grado di latitudine ≈ 111 km, quello di longitudine
+         * si stringe con cos(lat)). Gli angoli stanno a circa 1,4 volte il raggio: per la mappa va bene.
+         */
+        fun around(center: GeoPoint, radiusMeters: Double): GeoBounds {
+            val dLat = radiusMeters / METERS_PER_DEGREE_LAT
+            val dLon = radiusMeters / (METERS_PER_DEGREE_LAT * cos(center.lat.toRadians()).coerceAtLeast(0.01))
+            return of(center.lon - dLon, center.lat - dLat, center.lon + dLon, center.lat + dLat)
+        }
+
         /** Il riquadro che contiene tutte le [positions], o null se non ce ne sono. */
         fun around(positions: List<Position>): GeoBounds? {
             if (positions.isEmpty()) return null
@@ -68,6 +83,9 @@ class GeoBounds private constructor(val minLon: Double, val minLat: Double, val 
         }
     }
 }
+
+/** La parte dentro [limit] (null = nessun limite), o null se è tutta fuori. */
+fun GeoBounds.within(limit: GeoBounds?): GeoBounds? = if (limit == null) this else this intersect limit
 
 // MapLibre (spatialk) e il backend ordinano allo stesso modo: ovest, sud, est, nord
 fun GeoBounds.toBoundingBox(): BoundingBox = BoundingBox(west = minLon, south = minLat, east = maxLon, north = maxLat)
@@ -99,5 +117,6 @@ fun GeoPoint.distanceTo(other: GeoPoint): Double {
 }
 
 private const val EARTH_RADIUS_METERS = 6_371_000.0
+private const val METERS_PER_DEGREE_LAT = 111_320.0
 
 private fun Double.toRadians() = this * PI / 180

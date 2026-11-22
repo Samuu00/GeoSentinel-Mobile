@@ -73,6 +73,25 @@ class GeoBoundsTest {
     }
 
     @Test
+    fun `il riquadro attorno a un punto ha i lati alla distanza chiesta`() {
+        val center = GeoPoint(39.3, 16.5)
+        val box = GeoBounds.around(center, 50_000.0)
+        // a metà dei lati 50 km, in latitudine e in longitudine
+        assertTrue(abs(center.distanceTo(GeoPoint(box.maxLat, center.lon)) - 50_000) < 200)
+        assertTrue(abs(center.distanceTo(GeoPoint(center.lat, box.minLon)) - 50_000) < 200)
+        assertEquals(center.lat, box.center.lat, 1e-9)
+        assertEquals(center.lon, box.center.lon, 1e-9)
+    }
+
+    @Test
+    fun `l'intersezione è la parte comune e null se i riquadri non si toccano`() {
+        val a = GeoBounds.of(16.0, 39.0, 17.0, 40.0)
+        assertEquals(GeoBounds.of(16.5, 39.5, 17.0, 40.0), a intersect GeoBounds.of(16.5, 39.5, 18.0, 41.0))
+        assertNull(a intersect GeoBounds.of(17.5, 39.0, 18.0, 40.0))
+        assertEquals(a, a.within(null))
+    }
+
+    @Test
     fun `la distanza è in metri`() {
         // un grado di latitudine: circa 111 km
         val meters = GeoPoint(39.0, 16.0).distanceTo(GeoPoint(40.0, 16.0))

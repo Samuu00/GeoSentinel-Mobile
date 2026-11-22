@@ -42,7 +42,6 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
@@ -114,7 +113,7 @@ import it.unical.geosentinel_mobile.core.ui.PrimaryPillButton
 import it.unical.geosentinel_mobile.core.ui.SectionHeader
 import it.unical.geosentinel_mobile.core.ui.StickyActionBar
 import it.unical.geosentinel_mobile.core.ui.TonalPillButton
-import it.unical.geosentinel_mobile.core.ui.directionsUri
+import it.unical.geosentinel_mobile.core.ui.LocalDirections
 import it.unical.geosentinel_mobile.core.ui.rememberDialer
 import it.unical.geosentinel_mobile.core.ui.resolve
 import it.unical.geosentinel_mobile.core.ui.skeleton
@@ -450,7 +449,7 @@ private fun formatThousands(value: Int): String =
 @Composable
 private fun Contacts(refuge: RefugeResponse) {
     val dial = rememberDialer()
-    val uriHandler = LocalUriHandler.current
+    val directions = LocalDirections.current
     Row(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(top = 16.dp),
@@ -460,7 +459,7 @@ private fun Contacts(refuge: RefugeResponse) {
         }
         TonalPillButton(
             stringResource(Res.string.refuge_directions),
-            onClick = { uriHandler.openUri(directionsUri(refuge.location.lat, refuge.location.lon)) },
+            onClick = { directions(refuge.name, refuge.location.lat, refuge.location.lon) },
             icon = AppIcons.MapPin,
             modifier = Modifier.weight(1f),
         )

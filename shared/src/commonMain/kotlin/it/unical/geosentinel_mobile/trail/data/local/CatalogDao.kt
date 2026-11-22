@@ -110,6 +110,33 @@ abstract class CatalogDao {
         upsertPois(pois)
     }
 
+    // ---- fuori dal limite (i 50 km attorno all'utente) ----
+
+    @Query("DELETE FROM trail_summary WHERE maxLon < :minLon OR minLon > :maxLon OR maxLat < :minLat OR minLat > :maxLat")
+    protected abstract suspend fun deleteSummariesOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double)
+
+    // Prima dei POI: l'ETag di "pois/<trailId>" senza più le righe darebbe un 304 e il dettaglio resterebbe senza POI
+    @Query(
+        """
+        DELETE FROM catalog_etag WHERE `key` IN (
+            SELECT 'pois/' || trailId FROM poi
+            WHERE trailId IS NOT NULL AND (lon < :minLon OR lon > :maxLon OR lat < :minLat OR lat > :maxLat)
+        )
+        """
+    )
+    protected abstract suspend fun deletePoiEtagsOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double)
+
+    @Query("DELETE FROM poi WHERE lon < :minLon OR lon > :maxLon OR lat < :minLat OR lat > :maxLat")
+    protected abstract suspend fun deletePoisOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double)
+
+    /** Toglie i sentieri il cui riquadro non tocca l'area e i POI fuori: la cache tiene solo quello vicino all'utente. */
+    @Transaction
+    open suspend fun deleteOutsideBox(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) {
+        deleteSummariesOutsideBox(minLon, minLat, maxLon, maxLat)
+        deletePoiEtagsOutsideBox(minLon, minLat, maxLon, maxLat)
+        deletePoisOutsideBox(minLon, minLat, maxLon, maxLat)
+    }
+
     // ---- ETag per rotta ----
 
     @Query("SELECT etag FROM catalog_etag WHERE `key` = :key")

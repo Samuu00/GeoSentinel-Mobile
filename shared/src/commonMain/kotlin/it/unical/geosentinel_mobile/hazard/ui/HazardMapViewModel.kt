@@ -8,6 +8,7 @@ import geosentinel_mobile.shared.generated.resources.trails_nearby_no_fix
 import it.unical.geosentinel_mobile.api.model.HazardResponse
 import it.unical.geosentinel_mobile.core.location.GeoBounds
 import it.unical.geosentinel_mobile.core.location.GeoPoint
+import it.unical.geosentinel_mobile.core.location.within
 import it.unical.geosentinel_mobile.core.network.ApiException
 import it.unical.geosentinel_mobile.core.ui.UiMessage
 import it.unical.geosentinel_mobile.core.ui.uiMessage
@@ -67,7 +68,8 @@ data class HazardMapUiState(
  */
 class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
 
-    private data class Request(val bounds: GeoBounds, val zoom: Double, val attempt: Int)
+    // limit: i 50 km attorno all'utente (TrailMapViewModel.NearRadiusMeters); null = nessun limite
+    private data class Request(val bounds: GeoBounds, val zoom: Double, val attempt: Int, val limit: GeoBounds?)
     private class LoadedArea(val bounds: GeoBounds, val at: TimeSource.Monotonic.ValueTimeMark)
 
     private val _state = MutableStateFlow(HazardMapUiState())
@@ -105,9 +107,9 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
         }
     }
 
-    fun onCameraIdle(bounds: GeoBounds, zoom: Double) {
+    fun onCameraIdle(bounds: GeoBounds, zoom: Double, limit: GeoBounds? = null) {
         if (!bounds.isValid) return
-        val request = Request(bounds, zoom, attempts)
+        val request = Request(bounds, zoom, attempts, limit)
         lastView = request
         if (enabled) requests.value = request
     }
@@ -126,9 +128,16 @@ class HazardMapViewModel(private val hazards: HazardRepository) : ViewModel() {
             loaded = null
             return
         }
+        // vista e area ritagliate sul limite (anche l'area caricata lo è: il confronto regge oltre il bordo)
+        val view = request.bounds.within(request.limit)
+        val area = view?.expandedBy(Margin)?.within(request.limit)
+        if (view == null || area == null) {
+            _state.update { it.copy(hazards = emptyList(), failed = false) }
+            loaded = null
+            return
+        }
         val previous = loaded
-        if (previous != null && request.bounds in previous.bounds && previous.at.elapsedNow() < MaxAge) return
-        val area = request.bounds.expandedBy(Margin)
+        if (previous != null && view in previous.bounds && previous.at.elapsedNow() < MaxAge) return
         val radius = area.radiusMeters
         hazards.nearby(area.center, radius).fold(
             onSuccess = { list ->
