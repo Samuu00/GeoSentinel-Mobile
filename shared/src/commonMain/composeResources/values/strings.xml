@@ -716,7 +716,7 @@
     <string name="credits_ofm">OpenFreeMap · © OpenMapTiles</string>
     <string name="credits_ofm_license">Tessere vettoriali della mappa stradale</string>
     <string name="credits_terrain">Mapzen Terrain Tiles</string>
-    <string name="credits_terrain_license">Rilievo ombreggiato e profilo altimetrico</string>
+    <string name="credits_terrain_license">Profilo altimetrico dei sentieri e quota dei rifugi</string>
     <string name="credits_eox">Sentinel-2 cloudless, EOX IT Services</string>
     <string name="credits_eox_license">Mappa satellitare, CC BY 4.0 (dati Copernicus Sentinel 2016 modificati)</string>
     <string name="credits_wikimedia">Wikimedia Commons</string>

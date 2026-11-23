@@ -250,7 +250,7 @@ private fun TrailContent(
                 )
             }
             Spacer(Modifier.size(16.dp))
-            // quote dalle Terrain Tiles del rilievo: dislivello, tempo e profilo; senza (offline) solo la lunghezza
+            // quote dalle Terrain Tiles: dislivello, tempo e profilo; senza (offline) solo la lunghezza
             val elevation = koinInject<ElevationRepository>()
             val profile by produceState<ElevationProfile?>(null, trail.id) {
                 value = elevation.profile(trail.path.toPositions().map { it.toGeoPoint() })

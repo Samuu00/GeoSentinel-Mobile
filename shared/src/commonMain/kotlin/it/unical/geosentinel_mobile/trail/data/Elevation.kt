@@ -20,8 +20,8 @@ import kotlin.math.ln
 import kotlin.math.roundToInt
 import kotlin.math.tan
 
-// Profilo altimetrico di un sentiero (redesign "Luce di quota"). Il backend non ha le quote: si leggono dalle stesse
-// Terrain Tiles di Mapzen che la mappa usa per il rilievo (PNG "terrarium": la quota è codificata nei colori del
+// Profilo altimetrico di un sentiero (redesign "Luce di quota"). Il backend non ha le quote: si leggono dalle
+// Terrain Tiles di Mapzen (PNG "terrarium", non più sulla mappa dal 23/11: la quota è codificata nei colori del
 // pixel). Poche tessere a zoom 12 (circa 30 m per pixel alle nostre latitudini) bastano per un sentiero.
 
 /** Quote a passo costante lungo il percorso, con dislivelli e tempo di cammino stimato. */
@@ -110,7 +110,7 @@ internal fun hikingMinutes(lengthM: Double, ascentM: Int, descentM: Int): Int {
 }
 
 /**
- * Scarica le tessere del rilievo (una volta per processo: le stesse servono a più sentieri vicini) e calcola il
+ * Scarica le tessere delle quote (una volta per processo: le stesse servono a più sentieri vicini) e calcola il
  * profilo. null se una tessera non arriva: la pagina del sentiero mostra solo i dati del server.
  * [client]: un client senza bearer, il token non va mai verso altri host.
  */
@@ -141,7 +141,7 @@ class ElevationRepository(
         return ElevationProfile(meters, up, down, meters.min().roundToInt(), meters.max().roundToInt())
     }
 
-    /** Quota di un punto (m), dal rilievo; null se la tessera non arriva. Per i rifugi senza quota nei dati. */
+    /** Quota di un punto (m), dalle Terrain Tiles; null se la tessera non arriva. Per i rifugi senza quota nei dati. */
     suspend fun metersAt(point: GeoPoint): Int? = try {
         val pixel = tilePixel(point)
         tile(pixel.tileX, pixel.tileY)?.let { terrariumMeters(it[pixel.py * TileSize + pixel.px]).roundToInt() }

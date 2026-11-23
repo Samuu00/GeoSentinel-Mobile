@@ -27,4 +27,12 @@ class MapStylesTest {
             assertFalse("arcgisonline" in json || "mapbox.com" in json, name)
         }
     }
+
+    @Test
+    fun `nessuno stile carica il rilievo - zoomando faceva laggare l'iPhone`() {
+        for (name in listOf("streets_light", "streets_dark", "satellite")) {
+            val json = style(name)
+            assertFalse("hillshade" in json || "raster-dem" in json || "elevation-tiles" in json, name)
+        }
+    }
 }

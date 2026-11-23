@@ -93,7 +93,6 @@ import geosentinel_mobile.shared.generated.resources.map_type_satellite
 import geosentinel_mobile.shared.generated.resources.map_type_streets
 import geosentinel_mobile.shared.generated.resources.map_type_title
 import geosentinel_mobile.shared.generated.resources.poi_close
-import geosentinel_mobile.shared.generated.resources.poi_open_trail
 import geosentinel_mobile.shared.generated.resources.trail_length_km
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import geosentinel_mobile.shared.generated.resources.trails_load_failed

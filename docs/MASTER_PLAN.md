@@ -24,6 +24,8 @@
 > **21–22/11: mappa entro 50 km e percorso A→B col nostro motore** ("Dopo il redesign", in fondo a §5): sentieri,
 > POI, rifugi e pericoli solo entro 50 km dall'utente, cache ripulita; percorso con GraphHopper nel backend (ADR-0028)
 > e tutte le "Indicazioni" dentro l'app. 379 test host, provato sull'emulatore.
+> Il 22/11, sempre: stile leggero della mappa (31 livelli, rilievo da zoom 11) e percorso **solo sui sentieri del
+> parco** (entro 1 km), provati sull'iPhone (build `ab7150e`). Prossima volta: togliere del tutto il rilievo (§9.1).
 > **Cosa manca, in ordine: §9.**
 
 ---
@@ -202,7 +204,7 @@ verde, `islandShadow`). Nelle schede il contenuto scorre sotto l'isola (`LocalBo
 - un POI toccato apre una scheda di luogo nello stesso posto: bollino della categoria, nome, tipo, X grigia,
   "Apri il sentiero" a capsula;
 - stile stradale tipo Apple Maps (terra crema, boschi salvia, strade bianche, statali gialle; grafite di notte) con
-  rilievo ombreggiato e cime con nome e quota; POI come bollini colorati per categoria e rifugi come bollini verdi
+  cime con nome e quota (rilievo ombreggiato tolto il 23/11, §9.1); POI come bollini colorati per categoria e rifugi come bollini verdi
   più grandi, con il nome sotto da vicino; pallino della posizione blu con anello bianco (dettagli in M3 e in
   "Dopo M11").
 
@@ -1907,6 +1909,11 @@ una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del te
   tiene la destinazione in attesa e torna alla mappa con `popBackStack<Route.Map>`); `directionsUri` e i suoi `actual`
   tolti.
 
+- [x] **Stile leggero della mappa** (lag su iPhone): Stradale da 89 a 31 livelli, Satellite da 22 a 13 (`KEEP` in
+  `tools/map-styles/build_map_styles.py`). Restano aree naturali, acqua, strade senza i doppioni di ponti, tunnel e
+  svincoli (i ponti li disegnano le strade normali, le gallerie no), località, cime con quota e acqua. Tolti edifici,
+  confini, ferrovie leggere, aree sportive, nomi e cartelli delle strade. Rilievo ombreggiato solo da zoom 11.
+
 **Checkpoint**
 - [x] `./gradlew :shared:testAndroidHostTest :androidApp:assembleDebug` verde, 379 test (nuovi: riquadro e
   intersezione in `GeoBoundsTest`; vista oltre il bordo con una sola richiesta e cache svuotata fuori dai 50 km in
@@ -1920,7 +1927,9 @@ una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del te
 - [ ] Percorso solo sui sentieri sulla mappa; da un paese lontano dai sentieri, il messaggio "nessun percorso".
 - [ ] Un sentiero chiuso dall'app (`manager@`): il percorso lo evita e non compare tra i sentieri.
 - [ ] GraphHopper spento: il pannello del percorso mostra l'errore, l'app non si blocca.
-- [ ] Sull'iPhone: limite dei 50 km e percorso.
+- [x] Sull'iPhone (build `ab7150e`, 22/11): limite dei 50 km, percorso solo sui sentieri, mappa più fluida.
+- [x] Rilievo ombreggiato tolto dagli stili (23/11, 31 → 30 livelli, `MapStylesTest` lo controlla).
+- [ ] Sull'iPhone: la mappa non lagga più zoomando.
 - [ ] Review (§6): `ecc:kotlin-reviewer,ecc:code-reviewer`.
 
 ---
@@ -1930,8 +1939,7 @@ una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del te
 ```
 M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 → M11
 ```
-M10 e M11 (18/10) seguono M8 e M9 del backend, che vengono prima del calcolo delle frane (M10 del backend). Lo strato
-di rischio frane nell'app sarà una milestone successiva, quando le sue rotte sono stabili.
+M10 e M11 (18/10) seguono M8 e M9 del backend.
 L'SOS (M6) viene subito dopo la mappa: è la funzione per cui l'app esiste, e i suoi problemi conviene scoprirli presto.
 Eccezione decisa il 04/10: la segnalazione (M4.1, già fatta) e "Le mie segnalazioni" (M4.3) vengono prima; le foto
 (M4.2) e i pericoli vicini (M4.4) restano dopo M6.
@@ -1992,13 +2000,25 @@ Scelte esplicite, non dimenticanze:
 
 In ordine di priorità. I dettagli stanno nei checkpoint dei singoli task; qui solo l'elenco, per non perdere niente.
 
-### 9.1 Prima di un rilascio
+### 9.1 Prossimo lavoro: mappa senza rilievo, backend senza Mailpit
+1. **Rilievo ombreggiato tolto** (23/11): via `hillshade` e la sorgente `terrain` da `build_map_styles.py`, stili
+   rigenerati (Stradale 31 → 30 livelli, il resto identico), `MapStylesTest` controlla che non torni. Le Terrain
+   Tiles restano per il profilo altimetrico e la quota dei rifugi (`ElevationRepository`). **Da fare:** prova
+   sull'iPhone. Se lagga ancora: profilare i livelli dell'app (sentieri, POI con le collisioni, dati rimandati a ogni
+   fermata) prima di togliere altro.
+2. **Mailpit tolto dal backend** (23/11): servizio via da `docker-compose.yml`, commenti e `CLAUDE.md` del backend
+   aggiornati, build e `docker compose config` verdi, container e immagine rimossi. Da sapere: le prove in locale di
+   reset e 2FA mandano email vere.
+
+### 9.2 Prima di un rilascio
 1. **GraphHopper nella produzione del backend** (`docker-compose.prod.yml`, piano del backend §7): senza, il percorso
    risponde 503.
 2. **Release vera** su un telefono contro il backend HTTPS (M9.3).
 3. **Review non ancora lanciate** (§6): M9; redesign ("Dopo M11"); mappa entro 50 km e percorso ("Dopo il redesign").
 
-### 9.2 Prove sull'emulatore (si fanno da qui)
+### 9.3 Prove sull'emulatore (si fanno da qui)
+L'emulatore `Medium_Phone` dal 22/11 si chiude da solo (crash della grafica con `-gpu auto`; anche con
+`swiftshader_indirect` dopo qualche minuto): da sistemare prima (immagine di sistema o AVD nuovo).
 1. Limite dei 50 km, "Indicazioni" dagli altri punti, sentiero chiuso, GraphHopper spento: checkpoint aperti di "Dopo il
    redesign".
 2. Dopo il redesign: accesso, registrazione e reset; schermate del gestore e dell'operatore; testo al 200% e
@@ -2006,29 +2026,25 @@ In ordine di priorità. I dettagli stanno nei checkpoint dei singoli task; qui s
 3. Login Google riuscito su Android: serve un account Google sull'emulatore ("Dopo M9", 18/10).
 4. Accessibilità a mano: Accessibility Scanner su chiaro e scuro (M0), TalkBack su tutto il flusso (M9).
 
-### 9.3 iPhone e iOS
+### 9.4 iPhone e iOS
 1. Job `ios` della CI sui commit del 21–22/11.
-2. Sull'iPhone (build da `xtool`): redesign (fogli, gesto indietro, safe area, rilievo e nomi sulla mappa), lag della
-   mappa con lo stile alleggerito del 21/11, satellite nero, limite dei 50 km e percorso, foto e crediti.
+2. Sull'iPhone (build da `xtool`): redesign (fogli, gesto indietro, safe area, nomi sulla mappa), satellite nero, foto
+   e crediti. Limite dei 50 km, percorso solo sui sentieri e stile leggero provati il 22/11 (build `ab7150e`).
 3. Login Google sull'iPhone: il bundle id riscritto da `xtool` deve combaciare con il client iOS.
 4. Push su iOS: chiave APNs (serve un account Apple a pagamento), `PushBridge` e `AppDelegate` mai compilati qui (M7).
 5. Con un Mac: le prove sul simulatore segnate "(con il Mac)" in M0–M8 (Keychain, Dynamic Island, HEIC → JPEG,
    gesti e schermate).
 
-### 9.4 Debito tecnico (valutazione del 22/11)
-1. **Query di Room testate solo con un finto:** `FakeCatalogDao` riscrive l'SQL in Kotlin (anche `deleteOutsideBox`).
-   Servono test sul database vero (Room in memoria su JVM o `androidDeviceTest`).
+### 9.5 Debito tecnico (valutazione del 22/11)
+1. ~~Query di Room testate solo con un finto~~ (23/11): `CatalogDaoTest` e `OutboxDaoTest` in `androidHostTest`
+   provano la SQL vera di Room in memoria (Robolectric). `FakeCatalogDao` e `FakeOutboxDao` restano per `commonTest`.
 2. **File troppo grossi:** `trail/ui/MapScreen.kt` (circa 1000 righe, cinque ViewModel, posizione e percorso insieme)
    e `App.kt` (circa 800, NavHost con molta logica). Da dividere in parti più piccole.
 3. **Pulizia della cache senza posizione:** il limite segue il centro della mappa, quindi la pulizia gira a ogni
    spostamento. Da fare solo quando il centro si sposta di qualche km, come con la posizione.
 4. Da decidere: controlli della mappa in orizzontale (fine di M8.3).
 
-### 9.5 Checkpoint del backend che si chiudono dall'app
+### 9.6 Checkpoint del backend che si chiudono dall'app
 1. Flusso completo da Android e iOS (M7 del backend): registrazione → login → sentieri vicini → segnalazione con foto
    → SOS → push all'operatore → cancellazione dell'account.
 2. Login Google dal vivo con un account vero (M7.2.3 del backend).
-
-### 9.6 Dopo
-- Strato del rischio frane, quando le rotte di M10 del backend sono stabili (§6).
-

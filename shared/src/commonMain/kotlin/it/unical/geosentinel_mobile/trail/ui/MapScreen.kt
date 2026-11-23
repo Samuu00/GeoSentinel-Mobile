@@ -108,7 +108,6 @@ import geosentinel_mobile.shared.generated.resources.map_type_satellite
 import geosentinel_mobile.shared.generated.resources.map_type_streets
 import geosentinel_mobile.shared.generated.resources.map_type_title
 import geosentinel_mobile.shared.generated.resources.poi_close
-import geosentinel_mobile.shared.generated.resources.poi_open_trail
 import geosentinel_mobile.shared.generated.resources.trail_length_km
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import geosentinel_mobile.shared.generated.resources.trails_load_failed
@@ -716,7 +715,6 @@ fun MapScreen(
         ui.pois.firstOrNull { it.id == selectedPoiId }?.let { poi ->
             PoiCard(
                 poi = poi,
-                onOpenTrail = poi.trailId?.let { trailId -> { onOpenTrail(trailId) } },
                 onDirections = { directionsTo(Place(poi.name, poi.location.toGeoPoint())) },
                 onClose = { selectedPoiId = null },
                 modifier = Modifier
@@ -869,7 +867,7 @@ private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> U
 }
 
 @Composable
-private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onDirections: () -> Unit, onClose: () -> Unit, modifier: Modifier) {
+private fun PoiCard(poi: PoiResponse, onDirections: () -> Unit, onClose: () -> Unit, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
     // la scheda di un luogo come in Apple Maps (11/2026): bollino della categoria (lo stesso della mappa), nome grande,
     // tipo, la X grigia in alto a destra e l'azione a capsula sotto. Isola con angoli da 28 e ombra tinta
@@ -903,10 +901,8 @@ private fun PoiCard(poi: PoiResponse, onOpenTrail: (() -> Unit)?, onDirections: 
                 }
             }
             Spacer(Modifier.size(12.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(end = 12.dp)) {
-                TonalPillButton(stringResource(Res.string.route_directions), onClick = onDirections)
-                if (onOpenTrail != null) TonalPillButton(stringResource(Res.string.poi_open_trail), onClick = onOpenTrail)
-            }
+            // solo "Indicazioni": il sentiero si apre toccandolo sulla mappa (23/11)
+            TonalPillButton(stringResource(Res.string.route_directions), onClick = onDirections)
         }
     }
 }

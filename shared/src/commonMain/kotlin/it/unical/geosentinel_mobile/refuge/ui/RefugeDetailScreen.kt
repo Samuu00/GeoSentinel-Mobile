@@ -423,7 +423,7 @@ private fun MapHero(refuge: RefugeResponse) {
 // Il nome grande in Archivo e, sotto, le tessere dei dati: quota, posti, stagione (quelle che ci sono)
 @Composable
 private fun Title(refuge: RefugeResponse) {
-    // la quota dei dati o, se manca (rifugi importati), quella del rilievo nel punto del rifugio
+    // la quota dei dati o, se manca (rifugi importati), quella delle Terrain Tiles nel punto del rifugio
     val elevation = koinInject<ElevationRepository>()
     val altitude by produceState(refuge.altitudeM, refuge.id) {
         if (value == null) value = elevation.metersAt(refuge.location.toGeoPoint())

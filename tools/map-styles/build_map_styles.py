@@ -2,8 +2,9 @@
 Genera gli stili della mappa in shared/src/commonMain/composeResources/files/map/.
 
 Parte dallo stile "liberty" di OpenFreeMap (tile vettoriali OpenMapTiles, licenza BSD dello stile, dati ODbL)
-e lo ricolora con una palette tipo Apple Maps, in chiaro e in scuro, con il rilievo ombreggiato (Mapzen Terrain Tiles) e
-le cime con la quota; toglie i POI generici di OpenStreetMap. Produce anche:
+e lo ricolora con una palette tipo Apple Maps, in chiaro e in scuro, con le cime con la quota; toglie i POI generici
+di OpenStreetMap. Niente rilievo ombreggiato (tolto il 23/11: zoomando, le tile delle quote facevano laggare l'iPhone).
+Produce anche:
 - satellite.json: immagini Sentinel-2 cloudless di EOX (2016, CC BY 4.0, gratuite e senza chiave; 10 m, nitide
   fino allo zoom 15) con sopra strade, sentieri ed etichette (vista "ibrida");
 
@@ -24,10 +25,6 @@ EOX_ATTRIBUTION = (
     '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX IT Services GmbH '
     '(contiene dati Copernicus Sentinel 2016 modificati)'
 )
-# Rilievo ombreggiato (11/2026): Terrain Tiles di Mapzen su AWS Open Data, gratuite e senza chiave (formato terrarium).
-# È quello che fa sembrare montagna la montagna: senza, la Sila era una macchia verde piatta.
-TERRAIN_TILES = "https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
-TERRAIN_ATTRIBUTION = '<a href="https://github.com/tilezen/joerd/blob/master/docs/attribution.md">Mapzen Terrain Tiles</a>'
 
 # Palette tipo Apple Maps (11/2026): terra calda e chiara, boschi verde salvia, acqua azzurra, strade bianche con un filo
 # di bordo, statali gialle. Di notte grafite con i boschi appena verdi. Chiave = gruppo di livelli (vedi group()).
@@ -43,7 +40,6 @@ LIGHT = {
     "text": "#6f6a61", "text_place": "#48443e", "text_city": "#1d1c1a", "text_water": "#3f78a8",
     "text_transit": "#3a6fb0", "halo": "#ffffff",
     "peak": "#7a5a3a",
-    "hill_shadow": "#5f6e57", "hill_highlight": "#ffffff", "hill_accent": "#7f8a73",
 }
 DARK = {
     "land": "#1c1e1d", "park": "#1e2e22", "wood": "#1b2c1f", "grass": "#203124", "residential": "#232524",
@@ -57,7 +53,6 @@ DARK = {
     "text": "#a19e97", "text_place": "#c9c6bf", "text_city": "#ecebe7", "text_water": "#7fa9d1",
     "text_transit": "#8cb0e0", "halo": "#1c1e1d",
     "peak": "#cdb08c",
-    "hill_shadow": "#000000", "hill_highlight": "#3b403c", "hill_accent": "#0d0f0e",
 }
 
 
@@ -99,19 +94,6 @@ def text_group(layer):
     return "text"
 
 
-def hillshade(pal, dark):
-    """Il rilievo ombreggiato sopra boschi e prati, sotto acqua e strade: luce da nord-ovest come sulle carte."""
-    return {
-        "id": "hillshade", "type": "hillshade", "source": "terrain", "minzoom": HILLSHADE_MIN_ZOOM,
-        "paint": {
-            "hillshade-shadow-color": pal["hill_shadow"],
-            "hillshade-highlight-color": pal["hill_highlight"],
-            "hillshade-accent-color": pal["hill_accent"],
-            "hillshade-exaggeration": ["interpolate", ["linear"], ["zoom"], 11, 0.4, 15, 0.2] if not dark else 0.5,
-        },
-    }
-
-
 def peaks(pal):
     """Le cime (OpenMapTiles "mountain_peak") con nome e quota, in corsivo marrone come sulle carte escursionistiche."""
     name = ["coalesce", ["get", "name:it"], ["get", "name"]]
@@ -138,9 +120,6 @@ KEEP = {
     "road_trunk_primary", "road_motorway", "road_major_rail",
     "water_name_point_label", "label_other", "label_village", "label_town", "label_city", "label_city_capital",
 }
-# Il rilievo solo da vicino, dove si guarda un versante: da lontano è il livello che costa di più (tile delle quote da
-# decodificare e ombreggiare a ogni zoom)
-HILLSHADE_MIN_ZOOM = 11
 
 
 def bridges_as_roads(layer):
@@ -159,12 +138,8 @@ def bridges_as_roads(layer):
 def recolor(style, pal, dark):
     s = copy.deepcopy(style)
     s["name"] = "GeoSentinel " + ("scura" if dark else "chiara")
-    # rilievo vero al posto di quello di Natural Earth (solo zoom bassi)
+    # niente rilievo: né quello di Natural Earth né le Terrain Tiles (tolte il 23/11, lag su iPhone zoomando)
     s["sources"].pop("ne2_shaded", None)
-    s["sources"]["terrain"] = {
-        "type": "raster-dem", "tiles": [TERRAIN_TILES], "encoding": "terrarium",
-        "tileSize": 256, "maxzoom": 15, "attribution": TERRAIN_ATTRIBUTION,
-    }
     layers = []
     for layer in s["layers"]:
         paint = layer.setdefault("paint", {})
@@ -177,9 +152,6 @@ def recolor(style, pal, dark):
         if layer["id"] not in KEEP:
             continue
         bridges_as_roads(layer)
-        # il rilievo prima dei fiumi: ombreggia terra e boschi, non l'acqua né le strade
-        if layer["id"] == "waterway_river":
-            layers.append(hillshade(pal, dark))
         # le cime prima delle località: a parità di posto vince il nome del paese
         if layer["id"] == "label_other":
             layers.append(peaks(pal))

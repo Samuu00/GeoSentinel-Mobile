@@ -145,7 +145,7 @@ fun coreModule(
         )
     }
     single { ImageEncoder() }
-    // quote per il profilo altimetrico, dalle Terrain Tiles della mappa: client suo, senza Auth (altro host)
+    // quote per il profilo altimetrico, dalle Terrain Tiles di Mapzen: client suo, senza Auth (altro host)
     single { ElevationRepository(client = { HttpClientFactory.createStorageClient(platformHttpEngine()) }) }
     // Push (M7.1): il token arriva dalla piattaforma, la registrazione la decide App in base alla sessione
     single { PushManager(httpClient = { get<HttpClient>() }, apiBaseUrl = config.apiBaseUrl, platform = pushPlatform) }
