@@ -1,15 +1,17 @@
+<!-- Testi dell'interfaccia condivisa (Compose Multiplatform), in italiano come lingua base. Sono raggruppati per
+ funzione dell'app; il codice li usa tramite la classe Res generata. -->
 <resources>
-    <!-- Barra in basso -->
+    <!-- Voci della barra di navigazione in basso. -->
     <string name="nav_map">Mappa</string>
     <string name="nav_refuges">Rifugi</string>
     <string name="nav_alerts">Allerte</string>
     <string name="nav_management">Gestione</string>
     <string name="nav_profile">Profilo</string>
 
-    <!-- Comuni -->
+    <!-- Testi comuni a più schermate. -->
     <string name="back">Indietro</string>
 
-    <!-- SOS -->
+    <!-- Schermata SOS e pulsante SOS sempre presente. -->
     <string name="sos_button">SOS</string>
     <string name="sos_button_description">SOS, richiedi soccorso</string>
     <string name="sos_title">Richiesta di soccorso</string>
@@ -41,23 +43,22 @@
     <string name="sos_cancel_confirm">Sì, annulla</string>
     <string name="sos_cancel_dismiss">No, mantieni</string>
 
-    <!-- Schermate segnaposto, sostituite milestone per milestone -->
 
-    <!-- Ruoli -->
+    <!-- Nomi dei ruoli dell'utente, restituiti dal server in GET /users/me. -->
     <string name="role_guest">Ospite</string>
     <string name="role_hiker">Escursionista</string>
     <string name="role_park_manager">Gestore del parco</string>
     <string name="role_rescue_operator">Operatore di soccorso</string>
     <string name="role_admin">Amministratore</string>
 
-    <!-- Aspetto -->
+    <!-- Scelta del tema (Sistema, Chiaro, Scuro) nel Profilo. -->
     <string name="theme_section">Aspetto</string>
     <string name="theme_title">Tema</string>
     <string name="theme_system">Sistema</string>
     <string name="theme_light">Chiaro</string>
     <string name="theme_dark">Scuro</string>
 
-    <!-- Accesso e registrazione (M2.2) -->
+    <!-- Accesso, registrazione, login con Google e recupero della password. -->
     <string name="auth_login_title">Bentornato in quota</string>
     <string name="auth_login_body">Con il tuo account puoi segnalare pericoli, prenotare un rifugio e chiedere soccorso dall'app.</string>
     <string name="auth_email">Email</string>
@@ -111,7 +112,7 @@
     <string name="error_field_display_name">Il nome deve avere da 2 a 100 caratteri.</string>
     <string name="error_field_birth_date">Inserisci la data di nascita.</string>
 
-    <!-- Mappa e posizione (M3.1) -->
+    <!-- Mappa: posizione dell'utente e scelta del tipo di mappa. -->
     <string name="map_my_location">La mia posizione</string>
     <string name="map_type_button">Tipo di mappa</string>
     <string name="map_type_title">Tipo di mappa</string>
@@ -124,7 +125,7 @@
     <string name="location_denied_body">Hai negato l'accesso alla posizione. Puoi consentirlo dalle impostazioni dell'app.</string>
     <string name="location_open_settings">Apri impostazioni</string>
 
-    <!-- Profilo -->
+    <!-- Profilo dell'utente. -->
     <string name="profile_guest_body">Segnala pericoli, prenota un rifugio e chiedi soccorso dall'app.</string>
     <string name="profile_session_expired">La sessione è scaduta: accedi di nuovo.</string>
     <string name="profile_account_section">Account</string>
@@ -138,7 +139,7 @@
     <string name="profile_delete_account">Elimina account</string>
     <string name="profile_deleting">Eliminazione in corso…</string>
 
-    <!-- Profilo: nome, password, cancellazione (M2.3) -->
+    <!-- Profilo: modifica del nome, cambio password e cancellazione dell'account. -->
     <string name="edit_name_title">Il tuo nome</string>
     <string name="edit_name_body">È il nome con cui compari nell'app.</string>
     <string name="edit_name_button">Salva</string>
@@ -159,7 +160,8 @@
     <string name="delete_confirm_body">L'operazione non si può annullare.</string>
     <string name="delete_confirm_button">Elimina definitivamente</string>
 
-    <!-- Errori dell'API (M1.3): uno per slug della guida all'API, mai il title o il detail del server -->
+    <!-- Messaggi degli errori dell'API: uno per ogni slug della guida all'API, mai il titolo o il dettaglio
+         inviati dal server, che sono in inglese e pensati per gli sviluppatori. -->
     <string name="error_network">Nessuna connessione. Controlla la rete e riprova.</string>
     <string name="error_unauthorized">La sessione è scaduta. Accedi di nuovo.</string>
     <string name="error_forbidden">Il tuo profilo non permette questa operazione.</string>
@@ -183,7 +185,7 @@
     <string name="error_server">Errore del server. Riprova più tardi.</string>
     <string name="error_generic">Operazione non riuscita. Riprova.</string>
 
-    <!-- M3.2: sentieri, POI, pericoli e foto -->
+    <!-- Sentieri, POI, pericoli e foto sulla mappa e nel dettaglio del sentiero. -->
     <string name="trails_loading">Carico i sentieri…</string>
     <string name="trails_load_failed">Sentieri non aggiornati. Tocca per riprovare.</string>
     <string name="trails_zoom_in_hint">Avvicinati per vedere i sentieri</string>
@@ -191,7 +193,7 @@
     <string name="trails_nearby_empty">Nessun sentiero entro 10 km.</string>
     <string name="trails_nearby_waiting">Cerco la tua posizione…</string>
     <string name="trails_nearby_no_fix">Posizione non disponibile. Controlla che la localizzazione sia attiva e riprova.</string>
-    <!-- M4.4: pericoli vicino a me -->
+    <!-- Pericoli vicini alla posizione dell'utente. -->
     <string name="hazards_nearby_empty">Nessun pericolo attivo entro 5 km.</string>
     <string name="hazards_loading">Carico i pericoli…</string>
     <string name="hazards_load_failed">Pericoli non aggiornati. Tocca per riprovare.</string>
@@ -255,7 +257,7 @@
     <string name="hazard_severity_critical">Gravità critica</string>
     <string name="hazard_severity_unknown">Gravità non indicata</string>
 
-    <!-- Segnalazione di un pericolo (M4.1) -->
+    <!-- Segnalazione di un pericolo, con foto allegate. -->
     <string name="report_open">Segnala un pericolo</string>
     <string name="report_title">Segnala un pericolo</string>
     <string name="report_body">La segnalazione arriva ai gestori del parco e compare sul sentiero dopo la loro verifica.</string>
@@ -313,7 +315,7 @@
     <string name="report_photo_rejected_message">Una foto non è stata accettata: il server non la riconosce come immagine.</string>
     <string name="report_photo_unreadable">Non riesco a leggere la foto scelta. Prova con un'altra.</string>
 
-    <!-- M5.1: rifugi -->
+    <!-- Foglio "Vicino a te" della mappa e scheda dei rifugi. -->
     <string name="near_me_button">Vicino a te: sentieri e pericoli</string>
     <string name="near_me_title">Vicino a te</string>
     <string name="near_me_trails">Sentieri</string>
@@ -363,7 +365,7 @@
     <string name="weekday_6">sab</string>
     <string name="weekday_7">dom</string>
 
-    <!-- M5.2: prenotazioni -->
+    <!-- Prenotazioni dei rifugi e "Le mie prenotazioni". -->
     <string name="booking_open">Prenota</string>
     <string name="booking_title">Prenota</string>
     <string name="booking_body">Scegli quando arrivi, quante notti resti e quante persone siete.</string>
@@ -410,7 +412,7 @@
     <string name="booking_cancel_body">Il posto torna libero per altri escursionisti.</string>
     <string name="booking_keep">Tienila</string>
 
-    <!-- Redesign (11/2026): pagina del rifugio, foglio "Prenota", scheda Rifugi -->
+    <!-- Pagina del rifugio e del sentiero, foglio "Prenota" con il calendario e scheda Rifugi. -->
     <string name="trail_tile_length">Lunghezza</string>
     <string name="trail_tile_difficulty">Difficoltà</string>
     <string name="refuge_few_beds">ultimi</string>
@@ -474,7 +476,7 @@
     <string name="month_11">novembre</string>
     <string name="month_12">dicembre</string>
 
-    <!-- Soccorso (M7.2): scheda Allerte e dettaglio dell'operatore -->
+    <!-- Soccorso: scheda Allerte e dettaglio dell'allerta per l'operatore. -->
     <string name="rescue_alerts_title">Allerte SOS</string>
     <string name="rescue_alerts_intro">Le richieste aperte, chi aspetta da più tempo in cima.</string>
     <string name="rescue_alerts_empty_title">Nessuna allerta aperta</string>
@@ -505,20 +507,20 @@
     <string name="rescue_resolve_body">Fallo quando l'escursionista è al sicuro o l'allerta era un falso allarme. La squadra torna libera.</string>
     <string name="rescue_resolve_confirm">Chiudi</string>
     <string name="rescue_resolve_dismiss">Non ancora</string>
-    <!-- Uscita con un SOS in corso -->
+    <!-- Avviso all'uscita dall'account con un SOS ancora in corso. -->
     <string name="profile_logout_sos_title">Hai un SOS in corso</string>
     <string name="profile_logout_sos_sending">La richiesta non è ancora arrivata al soccorso. Se esci smette di partire e viene tolta da questo telefono.</string>
     <string name="profile_logout_sos_raised">Il soccorso ha la tua allerta, che resta attiva. Se esci la tua posizione non si aggiorna più e non vedi la squadra in arrivo.</string>
     <string name="profile_logout_anyway">Esci lo stesso</string>
     <string name="profile_logout_stay">Resta</string>
-    <!-- Uscita con foto ancora in caricamento -->
+    <!-- Avviso all'uscita dalla segnalazione con foto ancora in caricamento. -->
     <string name="report_leave_uploading_title">Foto ancora in caricamento</string>
     <string name="report_leave_uploading_body">Se esci il caricamento continua da solo, ma non vedrai se arriva. Le foto non riuscite si perdono.</string>
     <string name="report_leave_anyway">Esci lo stesso</string>
     <string name="report_leave_stay">Resta</string>
     <string name="rescue_map_partial">Avvicina la mappa per vedere tutte le allerte (la lista in Allerte le ha tutte)</string>
 
-    <!-- Staff -->
+    <!-- Funzioni per il personale: coda delle segnalazioni, stato dei sentieri, posti dei rifugi e squadre. -->
     <string name="staff_queue_title">Segnalazioni del sentiero</string>
     <string name="staff_queue_intro">Verifica le nuove, risolvi le confermate quando il pericolo è sparito.</string>
     <string name="staff_queue_empty_title">Nessuna segnalazione</string>
@@ -553,7 +555,7 @@
     <string name="staff_team_name_taken">Esiste già una squadra con questo nome.</string>
     <string name="staff_team_open">Nuova squadra di soccorso</string>
 
-    <!-- POI -->
+    <!-- Creazione di un nuovo punto di interesse. -->
     <string name="poi_create_title">Nuovo punto</string>
     <string name="poi_create_body">Il punto compare subito sulla mappa per tutti gli escursionisti.</string>
     <string name="poi_create_type">Tipo</string>
@@ -563,7 +565,7 @@
     <string name="poi_create_save">Salva il punto</string>
     <string name="poi_location_hint">Sposta la mappa finché il segnaposto non è sul punto.</string>
 
-    <!-- Ticket di manutenzione (M8.2) -->
+    <!-- Ticket di manutenzione dei sentieri. -->
     <string name="staff_tab_hazards">Segnalazioni</string>
     <string name="staff_tab_tickets">Ticket</string>
     <string name="staff_open_ticket">Apri un ticket</string>
@@ -615,7 +617,7 @@
     <string name="ticket_create_body">Il ticket resta legato al sentiero. Lo vedono tutti i gestori del parco nella scheda Gestione.</string>
     <string name="ticket_create_save">Apri il ticket</string>
 
-    <!-- Verifica in due passaggi (M10) -->
+    <!-- Verifica in due passaggi: codice al login, attivazione, codici di recupero e azzeramento da parte di un ADMIN. -->
     <string name="mfa_login_title">Codice di verifica</string>
     <string name="mfa_login_body">Apri l'app di autenticazione e scrivi il codice a 6 cifre di GeoSentinel.</string>
     <string name="mfa_login_body_recovery">Scrivi uno dei codici di recupero che hai salvato quando hai attivato la verifica. Ognuno vale una volta sola.</string>
@@ -670,11 +672,11 @@
     <string name="staff_mfa_reset_done_body">L'utente ora entra con la sola password e può riattivare la verifica dal suo Profilo.</string>
     <string name="staff_mfa_reset_done_button">Fine</string>
 
-    <!-- Foto profilo (M11) -->
+    <!-- Foto profilo. -->
     <string name="profile_photo">Foto profilo</string>
     <string name="profile_photo_choose">Scegli una foto</string>
     <string name="profile_photo_remove">Rimuovi foto</string>
-    <!-- Redesign "Luce di quota": il cielo delle testate -->
+    <!-- Testate con il cielo dell'ora reale: chip con il tramonto, la luce che resta e l'alba. -->
     <string name="sky_sunset_light">Tramonto %1$s · %2$s di luce</string>
     <string name="sky_sunrise">Alba alle %1$s</string>
     <string name="sky_duration_hm">%1$d h %2$d min</string>

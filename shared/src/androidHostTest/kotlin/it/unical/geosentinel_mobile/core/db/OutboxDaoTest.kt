@@ -1,3 +1,5 @@
+// Test della DAO dell'outbox (tabella pending_actions) con le query SQL vere: Room in memoria sopra l'SQLite che
+// Robolectric fornisce sulla JVM. L'outbox contiene le azioni dell'utente (SOS, prenotazioni) in attesa di invio.
 package it.unical.geosentinel_mobile.core.db
 
 import androidx.room.Room
@@ -13,21 +15,28 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFails
 import kotlin.time.Instant
 
-// La SQL vera dell'outbox (pending_actions) sulla JVM, come CatalogDaoTest: Room in memoria sopra l'SQLite di Robolectric
+/** Verifica inserimento, lettura, aggiornamento e pulizia delle azioni in attesa. */
 @RunWith(RobolectricTestRunner::class)
 class OutboxDaoTest {
 
     private val db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()).build()
     private val dao = db.outboxDao()
 
+    /** Chiude il database dopo ogni test. */
     @After
     fun close() = db.close()
 
+    /**
+     * Crea un'azione con la chiave di idempotenza [key], il tipo [kind] e il proprietario [owner]; [second] sposta la
+     * data di creazione per controllare l'ordinamento.
+     */
     private fun action(key: String, kind: ActionKind, owner: String = "anna", second: Long = 0) =
         PendingActionEntity(key, kind, owner, "{}", Instant.fromEpochSeconds(1_790_000_000 + second))
 
+    /** Restituisce le chiavi delle azioni in attesa di un tipo e di un utente, nell'ordine della query. */
     private suspend fun keys(kind: ActionKind, owner: String = "anna") = dao.pending(kind, owner).map { it.idempotencyKey }
 
+    /** La lettura restituisce solo le azioni del tipo e dell'utente richiesti, dalla più vecchia alla più recente. */
     @Test
     fun `pending filtra per tipo e utente in ordine di creazione`() = runBlocking {
         dao.insert(action("b2", ActionKind.BOOKING, second = 20))
@@ -40,6 +49,10 @@ class OutboxDaoTest {
         assertEquals(listOf("altro"), keys(ActionKind.BOOKING, owner = "bruno"))
     }
 
+    /**
+     * Inserire due volte la stessa chiave di idempotenza è un errore e non sovrascrive la prima azione: una richiesta
+     * già in coda non deve essere sostituita da un'altra con la stessa chiave.
+     */
     @Test
     fun `stessa chiave due volte e un errore non una sovrascrittura`() = runBlocking {
         dao.insert(action("k", ActionKind.SOS))
@@ -47,6 +60,10 @@ class OutboxDaoTest {
         assertEquals(listOf("k"), keys(ActionKind.SOS))
     }
 
+    /**
+     * Il contatore dei tentativi cresce, la sostituzione cambia tipo e contenuto mantenendo chiave e tentativi, e la
+     * cancellazione per chiave tocca solo l'azione indicata.
+     */
     @Test
     fun `tentativi tipo cambiato e cancellazione per chiave`() = runBlocking {
         dao.insert(action("k", ActionKind.BOOKING))
@@ -66,6 +83,11 @@ class OutboxDaoTest {
         assertEquals(listOf("resta"), keys(ActionKind.BOOKING))
     }
 
+    /**
+     * Pulizia a fine sessione secondo il motivo: alla scadenza della sessione non si cancella nulla; al logout resta
+     * solo la verifica dell'annullamento dell'SOS; alla cancellazione dell'account sparisce tutto dell'utente. Le
+     * azioni di altri utenti non vengono mai toccate.
+     */
     @Test
     fun `fine sessione - logout tiene solo la verifica dell'SOS e la cancellazione toglie tutto dell'utente`() = runBlocking {
         for (kind in ActionKind.entries) dao.insert(action("anna-$kind", kind))

@@ -1,3 +1,4 @@
+// Schermata con cui un amministratore crea una nuova squadra di soccorso.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.compose.foundation.text.KeyboardOptions
@@ -27,7 +28,10 @@ import it.unical.geosentinel_mobile.hazard.ui.LocationPicker
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
-/** Nuova squadra di soccorso (M8.3), solo ADMIN. La base è il centro della mappa, come per i POI. */
+/**
+ * Form della nuova squadra di soccorso, solo per gli amministratori: nome, nominativo radio, numero di contatto e
+ * posizione della base, che è il centro della mappa come per i POI. [onCreated] viene chiamata a creazione riuscita.
+ */
 @Composable
 fun RescueTeamCreateScreen(start: GeoPoint, zoom: Double, onBack: () -> Unit, onCreated: () -> Unit) {
     val viewModel = koinViewModel<RescueTeamCreateViewModel>()

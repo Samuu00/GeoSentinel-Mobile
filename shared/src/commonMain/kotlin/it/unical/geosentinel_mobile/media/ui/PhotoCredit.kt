@@ -1,3 +1,5 @@
+// Componente che mostra l'attribuzione (autore e licenza) delle foto importate da fonti esterne, come quelle dei rifugi
+// prese da Wikimedia Commons.
 package it.unical.geosentinel_mobile.media.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -33,9 +35,10 @@ import org.jetbrains.compose.resources.stringResource
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 /**
- * Autore e licenza di una foto importata (le licenze CC BY e CC BY-SA chiedono di citarli): una "i" come quella
- * dell'attribuzione della mappa, che al tocco apre un riquadro accanto. Niente se la foto non ha un credito
- * (quelle caricate dagli utenti). [credit] cambia con la foto: il riquadro si richiude.
+ * Mostra autore e licenza di una foto importata, come richiesto dalle licenze CC BY e CC BY-SA. Appare come una "i",
+ * simile a quella dell'attribuzione della mappa, che al tocco apre un riquadro accanto con il testo. Non mostra nulla
+ * se la foto non ha un credito (per esempio quelle caricate dagli utenti). Lo stato aperto/chiuso è legato a [credit]:
+ * quando si passa a un'altra foto il riquadro si richiude.
  */
 @Composable
 fun PhotoCredit(credit: String?, modifier: Modifier = Modifier) {
@@ -43,7 +46,8 @@ fun PhotoCredit(credit: String?, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
     var expanded by remember(credit) { mutableStateOf(false) }
     Row(modifier, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        // bersaglio da 48 dp, disegno da 28: si nota senza coprire la foto
+        // L'area toccabile è di 48 dp (minimo per l'accessibilità), ma il cerchio disegnato è di 28 dp, così si nota
+        // senza coprire troppo la foto.
         Box(
             Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button) { expanded = !expanded },
             contentAlignment = Alignment.Center,

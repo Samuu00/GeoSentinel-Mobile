@@ -1,3 +1,4 @@
+// ViewModel della schermata "Le mie segnalazioni": carica a pagine le segnalazioni dell'utente dal server.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import androidx.lifecycle.ViewModel
@@ -16,37 +17,43 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
 /**
- * "Le mie segnalazioni" (M4.3): solo rete, niente cache. La prima pagina all'apertura, le altre quando la lista arriva
- * in fondo ([loadMore]), da capo trascinando in basso ([refresh]).
+ * ViewModel di "Le mie segnalazioni". I dati arrivano solo dalla rete, senza cache. Carica la prima pagina alla
+ * creazione, le successive quando la lista arriva in fondo ([loadMore]) e tutto da capo quando l'utente trascina in
+ * basso ([refresh]). Espone lo stato come StateFlow immutabile.
  */
 class MyHazardsViewModel(private val hazards: HazardRepository) : ViewModel() {
 
     private val _state = MutableStateFlow(MyHazardsUiState(loading = true))
     val state: StateFlow<MyHazardsUiState> = _state.asStateFlow()
 
-    // la pagina da chiedere con loadMore (0 = la prima)
+    /** Indice della prossima pagina da chiedere con loadMore (0 è la prima). */
     private var nextPage = 0
+
+    /** Caricamento in corso, conservato per poterlo annullare quando si ricomincia da capo. */
     private var loadJob: Job? = null
 
     init {
         load(reset = true)
     }
 
+    /** Chiede la pagina successiva, se non c'è già un caricamento in corso, un errore o la fine della lista. */
     fun loadMore() {
         val current = _state.value
-        // i flag si controllano e si alzano qui, prima del launch: due chiamate di fila non chiedono due volte la pagina
+        // I flag si controllano e si impostano qui, in modo sincrono prima del launch: così due chiamate ravvicinate
+        // non chiedono due volte la stessa pagina.
         if (current.loading || current.loadingMore || current.refreshing || current.endReached || current.error != null) return
         _state.update { it.copy(loadingMore = true) }
         load(reset = false)
     }
 
+    /** Ricarica la lista da capo (gesto di trascinamento verso il basso). */
     fun refresh() {
         if (_state.value.refreshing) return
         _state.update { it.copy(refreshing = true, error = null) }
         load(reset = true)
     }
 
-    /** "Riprova": la prima pagina se la lista è vuota, altrimenti quella che non è arrivata. */
+    /** Azione "Riprova": richiede la prima pagina se la lista è vuota, altrimenti la pagina che non è arrivata. */
     fun retry() {
         val current = _state.value
         if (current.loading || current.loadingMore || current.refreshing) return
@@ -59,8 +66,13 @@ class MyHazardsViewModel(private val hazards: HazardRepository) : ViewModel() {
         }
     }
 
+    /**
+     * Carica una pagina: la prima se [reset] è true (sostituendo la lista), altrimenti la successiva (accodandola).
+     * In caso di errore lascia la lista com'è e imposta il messaggio.
+     */
     private fun load(reset: Boolean) {
-        // da capo vince su una pagina in corso: le sue righe non si mescolano alla lista nuova
+        // Un caricamento da capo annulla quello di una pagina in corso, così le sue righe non si mescolano alla lista
+        // nuova.
         if (reset) loadJob?.cancel()
         val page = if (reset) 0 else nextPage
         loadJob = viewModelScope.launch {
@@ -69,8 +81,9 @@ class MyHazardsViewModel(private val hazards: HazardRepository) : ViewModel() {
             _state.update { state ->
                 result.fold(
                     onSuccess = { paged ->
-                        // le pagine sono a offset: se nel frattempo ne arriva una nuova in cima, l'ultima di prima
-                        // ricompare nella pagina dopo. distinctBy toglie il doppione
+                        // La paginazione del server è a offset: se nel frattempo si aggiunge una segnalazione in
+                        // cima, l'ultima della pagina precedente ricompare all'inizio della successiva. distinctBy
+                        // elimina il doppione.
                         val items = if (reset) paged.content else (state.items + paged.content).distinctBy { it.id }
                         state.copy(
                             items = items,

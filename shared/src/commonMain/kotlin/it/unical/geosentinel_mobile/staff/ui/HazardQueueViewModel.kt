@@ -1,3 +1,5 @@
+// ViewModel della coda delle segnalazioni di pericolo per il gestore del parco, con le azioni per verificarle o
+// rifiutarle.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
@@ -17,23 +19,25 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Stato della coda delle segnalazioni. */
 data class HazardQueueUiState(
-    // dal server: per il gestore anche le SUBMITTED di tutti (max 50, dalla più recente)
+    /** Segnalazioni ricevute dal server; per il gestore comprendono anche quelle `SUBMITTED` di tutti gli utenti. */
     val hazards: List<HazardResponse> = emptyList(),
     val loading: Boolean = true,
     val loadError: UiMessage? = null,
-    // una sola azione alla volta: i pulsanti delle righe si disattivano
+    /** Id della segnalazione su cui è in corso un'azione: se ne esegue una alla volta e i pulsanti delle righe si disattivano. */
     val busyHazardId: String? = null,
     val actionError: UiMessage? = null,
 )
 
-// ponytail: solo la prima pagina, le 50 più recenti; paginare come "Le mie segnalazioni" se la coda cresce
+// Numero di segnalazioni da verificare chieste al server. Limite noto: si legge solo la prima pagina, cioè le 50 più
+// recenti; se la coda dovesse crescere andrebbe paginata come "Le mie segnalazioni".
 const val PENDING_QUEUE_SIZE = 50
 
 /**
- * Coda delle segnalazioni del gestore: quelle di un sentiero ([trailId], verificate e da verificare) o, con [trailId]
- * null, le da verificare di tutto il parco (scheda Gestione). Il server decide le transizioni: 409/422 si mostrano e la
- * lista si rilegge.
+ * ViewModel della coda delle segnalazioni del gestore. Con [trailId] mostra quelle di un sentiero (verificate e da
+ * verificare); con [trailId] null quelle da verificare di tutto il parco, nella scheda Gestione. Le transizioni ammesse
+ * le decide il server: un 409 o un 422 si mostra e la lista si rilegge.
  */
 class HazardQueueViewModel(
     private val trailId: String?,
@@ -48,18 +52,22 @@ class HazardQueueViewModel(
 
     init { reload() }
 
+    /** Ricarica la coda mostrando il caricamento, per esempio con "Riprova". */
     fun reload() {
         _state.update { it.copy(loading = true, loadError = null) }
         load()
     }
 
-    // Al ritorno sulla coda (da un sentiero, dove la segnalazione si può gestire): si rilegge, ma non sopra una lettura
-    // o un'azione in corso (la prima lettura è quella di init)
+    /**
+     * Rilegge in silenzio la coda al ritorno da un sentiero, dove la segnalazione si può gestire. Non fa nulla se è in
+     * corso una lettura (come la prima, avviata in init) o un'azione.
+     */
     fun refresh() {
         if (loadJob?.isActive == true || _state.value.busyHazardId != null) return
         load()
     }
 
+    /** Porta la segnalazione [hazard] allo stato [status], poi rilegge la coda. */
     fun change(hazard: HazardResponse, status: UpdateHazardStatusRequest.Status) {
         if (_state.value.busyHazardId != null) return
         _state.update { it.copy(busyHazardId = hazard.id, actionError = null) }
@@ -67,17 +75,18 @@ class HazardQueueViewModel(
             val result = safely { staff.changeHazardStatus(hazard.id, status) }
             _state.update { state ->
                 result.fold(
-                    // la riga prende subito lo stato nuovo; la rilettura sotto toglie quelle che non sono più in coda
+                    // La riga mostra subito il nuovo stato; la rilettura successiva toglie quelle non più in coda.
                     onSuccess = { updated -> state.copy(hazards = state.hazards.map { if (it.id == updated.id) updated else it }, busyHazardId = null) },
                     onFailure = { failure -> state.copy(busyHazardId = null, actionError = failure.toUiMessage(onRuleViolation = Res.string.staff_queue_already_handled)) },
                 )
             }
-            // dopo un 409/422 la lista è vecchia (un collega l'ha già gestita); dopo un successo la riga può uscire dalla coda
+            // Dopo un 409 o un 422 la lista è superata (un collega ha già gestito la segnalazione); dopo un successo la
+            // riga può uscire dalla coda. In entrambi i casi si rilegge.
             load()
         }
     }
 
-    // Una lettura alla volta: una vecchia non sovrascrive quella dopo un'azione
+    /** Legge la coda dal server. Una lettura alla volta: una vecchia non deve sovrascrivere quella successiva a un'azione. */
     private fun load() {
         loadJob?.cancel()
         loadJob = viewModelScope.launch {
@@ -87,7 +96,7 @@ class HazardQueueViewModel(
             _state.update { state ->
                 result.fold(
                     onSuccess = { list -> state.copy(hazards = list, loading = false, loadError = null) },
-                    // con la lista già a schermo l'errore di una rilettura non la sostituisce
+                    // Se la lista è già a schermo, l'errore di una rilettura non la sostituisce.
                     onFailure = { failure ->
                         if (state.hazards.isEmpty()) state.copy(loading = false, loadError = failure.toUiMessage()) else state.copy(loading = false)
                     },

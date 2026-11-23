@@ -1,3 +1,6 @@
+// Foglio "Prenota" che si apre sopra la pagina del rifugio: calendario a due settimane con i posti liberi, numero
+// di persone, riepilogo e conferma animata. Contiene anche il "biglietto" del soggiorno e il blocco della data,
+// riusati in "Le mie prenotazioni", e alcune funzioni per scrivere le date in italiano.
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.compose.animation.AnimatedContent
@@ -133,16 +136,22 @@ import kotlin.time.Clock
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 import it.unical.geosentinel_mobile.core.ui.cardShadow
 
-// Da quanti posti in giù una notte è "agli ultimi posti" (numero in ambra e la parola "ultimi")
+/** Soglia dei posti liberi sotto la quale (compresa) una notte è "agli ultimi posti" e si evidenzia in ambra. */
 internal const val FEW_BEDS = 3
 
-// Oltre questa scala del testo le celle del calendario mostrano solo il giorno: i posti restano nella descrizione
+/**
+ * Scala del testo oltre la quale le celle del calendario mostrano solo il giorno, per non uscire dalla cella. I posti
+ * restano comunque nella descrizione letta dallo screen reader.
+ */
 private const val LargeTextScale = 1.3f
 
 /**
- * Foglio "Prenota" (redesign 11/2026, docs/UI_REDESIGN_PLAN.md §3.3): sopra la pagina del rifugio, un compito solo.
- * Calendario a due settimane con i posti di ogni notte, persone, riepilogo e "Conferma"; poi la conferma nello stesso
- * foglio. Si chiude trascinando in giù o con "Annulla", non durante l'invio.
+ * Foglio modale "Prenota", aperto sopra la pagina del rifugio per un solo compito. Mostra il form (calendario,
+ * persone, riepilogo, "Conferma") e, dopo l'invio, la conferma nello stesso foglio con una dissolvenza.
+ *
+ * Si chiude trascinandolo in giù o con "Annulla", ma non durante l'invio. Le tre funzioni di chiusura si chiamano
+ * dopo l'animazione che nasconde il foglio: [onDismiss] per l'annullamento, [onBooked] per "Fatto", [onOpenBookings]
+ * per andare a "Le mie prenotazioni".
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -156,7 +165,7 @@ internal fun BookingSheet(
     val state by viewModel.state.collectAsStateWithLifecycle()
     val sheetState = rememberModalBottomSheetState(
         skipPartiallyExpanded = true,
-        // durante l'invio non si chiude trascinando: l'utente deve vedere com'è andata
+        // Durante l'invio il foglio non si chiude trascinando: l'utente deve vedere com'è andata.
         confirmValueChange = { it != SheetValue.Hidden || !viewModel.state.value.submitting },
     )
     val scope = rememberCoroutineScope()
@@ -195,10 +204,11 @@ internal fun BookingSheet(
     }
 }
 
+/** Form della prenotazione: barra con "Annulla", calendario, persone, riepilogo, errore e pulsante di conferma. */
 @Composable
 private fun BookingForm(refugeName: String, state: BookRefugeUiState, viewModel: BookRefugeViewModel, onCancel: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    // barra del foglio: Annulla a sinistra, titolo al centro (come i fogli di iOS)
+    // Barra del foglio come nei fogli di iOS: "Annulla" a sinistra e titolo al centro.
     Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
         TextButton(onClick = onCancel, enabled = !state.submitting, modifier = Modifier.align(Alignment.CenterStart).heightIn(min = 48.dp)) {
             Text(stringResource(Res.string.auth_cancel), style = MaterialTheme.typography.bodyLarge)
@@ -247,7 +257,7 @@ private fun BookingForm(refugeName: String, state: BookRefugeUiState, viewModel:
             )
         }
     }
-    // perché il "+" si è fermato: la notte più piena del soggiorno o il limite per prenotazione
+    // Spiega perché il "+" non sale più: la notte più piena del soggiorno oppure il limite di persone per prenotazione.
     val tightest = state.tightestNight
     val limit = when {
         state.guests < state.guestsCap -> null
@@ -261,7 +271,7 @@ private fun BookingForm(refugeName: String, state: BookRefugeUiState, viewModel:
     }
 
     Spacer(Modifier.height(24.dp))
-    // riepilogo vivo: lo screen reader lo legge a ogni cambio
+    // Riepilogo del soggiorno come regione "live": lo screen reader lo rilegge a ogni cambio.
     Text(
         stayLabel(state.arrival, state.departure, state.nights, state.guests),
         style = MaterialTheme.typography.titleMedium,
@@ -280,11 +290,12 @@ private fun BookingForm(refugeName: String, state: BookRefugeUiState, viewModel:
     PrimaryPillButton(stringResource(Res.string.booking_confirm), onClick = viewModel::submit, loading = state.submitting)
 }
 
-// ---- Calendario ----
+// Calendario.
 
 /**
- * Due settimane da lunedì a domenica, con le frecce per spostarsi. Ogni giorno è un pulsante: il primo tocco sceglie
- * l'arrivo, il secondo (più avanti) la partenza. I giorni passati e le notti senza posti per tutti sono spenti.
+ * Calendario di due settimane, da lunedì a domenica, con le frecce per cambiare pagina. Ogni giorno è un pulsante:
+ * il primo tocco sceglie l'arrivo, il secondo (su un giorno successivo) la partenza. I giorni passati e le notti
+ * senza posti per tutte le persone sono disattivati. [onPage] riceve true per andare avanti.
  */
 @Composable
 private fun StayCalendar(state: BookRefugeUiState, onDay: (LocalDate) -> Unit, onPage: (Boolean) -> Unit) {
@@ -309,7 +320,7 @@ private fun StayCalendar(state: BookRefugeUiState, onDay: (LocalDate) -> Unit, o
             Icon(AppIcons.ChevronRight, contentDescription = stringResource(Res.string.booking_calendar_next))
         }
     }
-    // intestazione dei giorni: decorativa (ogni cella dice il suo giorno)
+    // Intestazione con i nomi dei giorni, nascosta allo screen reader perché ogni cella legge già il suo giorno.
     Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp).clearAndSetSemantics { }) {
         (0 until 7).forEach { offset ->
             Text(
@@ -341,6 +352,12 @@ private fun StayCalendar(state: BookRefugeUiState, onDay: (LocalDate) -> Unit, o
     }
 }
 
+/**
+ * Cella di un giorno del calendario: il numero, cerchiato se è arrivo o partenza, la fascia colorata del soggiorno e
+ * sotto i posti liberi (in ambra se sono pochi). Un giorno è attivo se non è passato e la notte ha posto, oppure se
+ * può fare da partenza. Per lo screen reader la cella è un pulsante con una descrizione completa: data, posti e ruolo
+ * nel soggiorno.
+ */
 @Composable
 private fun DayCell(date: LocalDate, state: BookRefugeUiState, today: LocalDate, compact: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
@@ -386,7 +403,8 @@ private fun DayCell(date: LocalDate, state: BookRefugeUiState, today: LocalDate,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(40.dp)
-                // la fascia del soggiorno: piena nei giorni in mezzo, mezza sull'arrivo (a destra) e sulla partenza (a sinistra)
+                // Fascia del soggiorno: piena nei giorni in mezzo, solo la metà destra sull'arrivo e solo la metà
+                // sinistra sulla partenza, così si unisce ai cerchi.
                 .drawBehind {
                     val half = size.width / 2
                     when {
@@ -428,7 +446,10 @@ private fun DayCell(date: LocalDate, state: BookRefugeUiState, today: LocalDate,
     }
 }
 
-// − valore +, con pulsanti da 48 dp (§2) e il valore annunciato quando cambia
+/**
+ * Contatore con i pulsanti meno e più da 48 dp (il bersaglio minimo) e il valore al centro, che lo screen reader
+ * annuncia quando cambia.
+ */
 @Composable
 private fun Stepper(value: Int, canDecrease: Boolean, canIncrease: Boolean, onChange: (Int) -> Unit) {
     val less = stringResource(Res.string.booking_less)
@@ -453,8 +474,12 @@ private fun Stepper(value: Int, canDecrease: Boolean, canIncrease: Boolean, onCh
     }
 }
 
-// ---- Conferma: il momento "di picco" del flusso ----
+// Conferma.
 
+/**
+ * Schermata di conferma nel foglio, con la spunta animata, una vibrazione di conferma e il biglietto del soggiorno.
+ * [booked] distingue la prenotazione creata da quella rimasta in coda, che ha un testo diverso.
+ */
 @Composable
 private fun BookingConfirmation(refugeName: String, state: BookRefugeUiState, booked: Boolean, onDone: () -> Unit, onOpenBookings: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -490,7 +515,10 @@ private fun BookingConfirmation(refugeName: String, state: BookRefugeUiState, bo
     }
 }
 
-// La spunta che si disegna in 400 ms dentro il tondo muschio; con "Riduci movimento" compare già intera
+/**
+ * Spunta che si disegna in 400 ms dentro un tondo colorato. Se l'utente ha attivato "Riduci movimento" compare già
+ * intera, senza animazione.
+ */
 @Composable
 private fun AnimatedCheck() {
     val colors = MaterialTheme.colorScheme
@@ -512,11 +540,12 @@ private fun AnimatedCheck() {
     }
 }
 
-// ---- Biglietto del soggiorno: conferma e "Prossimo soggiorno" nelle prenotazioni ----
+// Biglietto del soggiorno, usato nella conferma e in "Prossimo soggiorno" delle prenotazioni.
 
 /**
- * Il soggiorno come un biglietto: blocco della data d'arrivo, rifugio, date, notti e persone, su una card da 28 con le
- * curve di livello appena accennate. [note] (es. "Tra 3 giorni") in verde; [actions] sotto uno strappo tratteggiato.
+ * Il soggiorno disegnato come un biglietto: in una fascia colorata l'eventuale [note] in maiuscolo (per esempio
+ * "Tra 3 giorni"), il nome del rifugio e la riga con date, notti e persone. Se ci sono [actions], sotto compare una
+ * perforazione tratteggiata e poi la riga delle azioni; senza azioni il biglietto finisce con la fascia.
  */
 @Composable
 internal fun StayTicket(
@@ -528,8 +557,6 @@ internal fun StayTicket(
     note: String? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
-    // Il biglietto (Figma, "09 Rifugi · scuro"): in alto, su una fascia felce tenue, lo stato come occhiello, il rifugio
-    // in Archivo e le date; poi la perforazione (un tratteggio con due tacche ai lati) e sotto le azioni
     val colors = MaterialTheme.colorScheme
     val card = colors.surfaceContainerLowest
     val page = colors.background
@@ -557,8 +584,8 @@ internal fun StayTicket(
                 modifier = Modifier.padding(top = 6.dp),
             )
         }
-        // la perforazione (le due tacche nel colore della pagina e il tratteggio) e sotto le azioni; senza azioni il
-        // biglietto finisce con la fascia
+        // Perforazione: due mezzi cerchi nel colore della pagina sui bordi, che sembrano tacche, e un tratteggio in
+        // mezzo.
         if (actions != null) {
             val dash = colors.outlineVariant
             Canvas(Modifier.fillMaxWidth().height(16.dp)) {
@@ -583,7 +610,10 @@ internal fun StayTicket(
     }
 }
 
-/** Il giorno grande (Barlow 22) e il mese in tre lettere, su un riquadro muschio: si legge la data senza leggere. */
+/**
+ * Blocco della data: il giorno in grande e il mese in tre lettere su un riquadro colorato, per riconoscere la data a
+ * colpo d'occhio. Con [muted] usa colori spenti, per le prenotazioni passate o annullate.
+ */
 @Composable
 internal fun DateBlock(date: LocalDate, muted: Boolean = false) {
     val colors = MaterialTheme.colorScheme
@@ -601,12 +631,13 @@ internal fun DateBlock(date: LocalDate, muted: Boolean = false) {
     }
 }
 
-// ---- Date ----
+// Date in italiano.
 
-/** "sab 15 novembre" per gli screen reader: la cella mostra solo il numero. */
+/** Data estesa nella forma giorno della settimana, numero e mese, letta dallo screen reader al posto del solo numero. */
 @Composable
 internal fun LocalDate.longLabel(): String = "${stringResource(weekday())} $day ${stringResource(monthName())}"
 
+/** Nome del mese della data, dalle risorse di testo. */
 internal fun LocalDate.monthName(): StringResource = when (month.number) {
     1 -> Res.string.month_1
     2 -> Res.string.month_2

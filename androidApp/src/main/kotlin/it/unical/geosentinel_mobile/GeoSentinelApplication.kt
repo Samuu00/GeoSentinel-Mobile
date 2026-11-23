@@ -1,3 +1,5 @@
+// Classe Application dell'app Android: il primo codice che gira all'avvio del processo. Avvia Koin con la
+// configurazione presa da BuildConfig e prepara le notifiche push (canale delle notifiche e token di Firebase).
 package it.unical.geosentinel_mobile
 
 import android.app.Application
@@ -10,9 +12,12 @@ import it.unical.geosentinel_mobile.core.config.AppConfig
 import it.unical.geosentinel_mobile.core.di.initKoin
 import it.unical.geosentinel_mobile.core.di.pushManager
 
-// Koin parte qui e non in MainActivity: l'Activity si ricrea a ogni rotazione,
-// e un secondo startKoin lancerebbe KoinApplicationAlreadyStartedException.
+/**
+ * Punto d'ingresso del processo Android. Koin si avvia qui e non in MainActivity, perché l'Activity viene
+ * ricreata a ogni rotazione e un secondo avvio di Koin lancerebbe KoinApplicationAlreadyStartedException.
+ */
 class GeoSentinelApplication : Application() {
+    /** Avvia Koin con indirizzo dell'API, modalità debug e client ID di Google (null se non configurato), poi le push. */
     override fun onCreate() {
         super.onCreate()
         initKoin(
@@ -26,8 +31,11 @@ class GeoSentinelApplication : Application() {
         startPush()
     }
 
-    // Push (M7.1). onNewToken arriva solo quando FCM crea o rinnova il token: quello attuale si chiede a ogni avvio.
-    // Senza google-services.json Firebase non parte (FirebaseApp assente) e le push restano spente.
+    /**
+     * Crea il canale delle notifiche SOS (da Android 8) e collega Firebase a PushManager. onNewToken di Firebase
+     * arriva solo quando il token viene creato o rinnovato, quindi quello attuale si chiede a ogni avvio. Senza
+     * google-services.json Firebase non è inizializzato e le push restano spente.
+     */
     private fun startPush() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
@@ -40,8 +48,8 @@ class GeoSentinelApplication : Application() {
         if (FirebaseApp.getApps(this).isEmpty()) return
         val messaging = FirebaseMessaging.getInstance()
         messaging.token.addOnSuccessListener { token -> pushManager().onNewToken(token) }
-        // A fine sessione il token si invalida (le push dell'utente uscito non arrivano più qui) e se ne chiede uno
-        // nuovo, che App registra al prossimo login
+        // A fine sessione il token viene invalidato, così le push dell'utente uscito non arrivano più a questo telefono,
+        // e se ne chiede uno nuovo, che l'app registrerà al prossimo login.
         pushManager().tokenRevoker = {
             messaging.deleteToken().addOnCompleteListener {
                 messaging.token.addOnSuccessListener { token -> pushManager().onNewToken(token) }

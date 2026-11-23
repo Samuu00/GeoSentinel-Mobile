@@ -1,3 +1,7 @@
+// Entità Room della cache locale del catalogo (sentieri, dettagli dei sentieri, POI ed ETag). La UI legge sempre da
+// queste tabelle e la rete le aggiorna, così l'app mostra i dati anche senza connessione. In ogni entità updatedAt è
+// l'ultima volta che il server ha confermato la riga (con una risposta 200, o 304 per le rotte con ETag) ed è l'orario
+// mostrato come "aggiornato alle".
 package it.unical.geosentinel_mobile.trail.data.local
 
 import androidx.room.Entity
@@ -5,9 +9,13 @@ import androidx.room.Index
 import androidx.room.PrimaryKey
 import kotlin.time.Instant
 
-// Cache del catalogo (M3.3): la UI legge sempre da qui, la rete aggiorna. updatedAt = ultima volta che il server ha
-// confermato la riga (200, o 304 per le rotte con ETag): è la data di "aggiornato alle".
-
+/**
+ * Riassunto di un sentiero, usato per disegnarlo sulla mappa e nelle liste. Gli indici sul riquadro permettono di
+ * trovare i sentieri che attraversano la vista senza leggere il GeoJSON.
+ *
+ * @property simplifiedGeoJson la LineString semplificata in GeoJSON, così come arriva dal server.
+ * @property minLon riquadro del percorso (insieme a minLat, maxLon, maxLat), in gradi.
+ */
 @Entity(tableName = "trail_summary", indices = [Index("minLon", "maxLon"), Index("minLat", "maxLat")])
 data class TrailSummaryEntity(
     @PrimaryKey val id: String,
@@ -15,8 +23,7 @@ data class TrailSummaryEntity(
     val difficulty: String,
     val lengthMeters: Double,
     val status: String,
-    val simplifiedGeoJson: String, // GeoJsonLineString semplificato (ADR-0020), come arriva dal server
-    // riquadro del percorso: per trovare i sentieri che attraversano la vista senza leggere il GeoJSON
+    val simplifiedGeoJson: String,
     val minLon: Double,
     val minLat: Double,
     val maxLon: Double,
@@ -24,6 +31,7 @@ data class TrailSummaryEntity(
     val updatedAt: Instant
 )
 
+/** Dettaglio di un sentiero: il percorso completo in GeoJSON e la descrizione, mostrati nella pagina del sentiero. */
 @Entity(tableName = "trail_detail")
 data class TrailDetailEntity(
     @PrimaryKey val id: String,
@@ -36,6 +44,7 @@ data class TrailDetailEntity(
     val updatedAt: Instant
 )
 
+/** Punto di interesse; [trailId] è null per i POI non legati a un sentiero. */
 @Entity(tableName = "poi", indices = [Index("trailId"), Index("lat", "lon")])
 data class PoiEntity(
     @PrimaryKey val id: String,
@@ -48,9 +57,9 @@ data class PoiEntity(
 )
 
 /**
- * ETag dell'ultima risposta 200 di una rotta (es. "trail/<id>", "pois/<trailId>"). Il backend calcola l'ETag
- * sull'intero body (ShallowEtagHeaderFilter): vale per la risposta, non per la singola riga, quindi sta qui e non
- * nelle entità.
+ * ETag dell'ultima risposta 200 di una rotta, identificata da una chiave come "trail/<id>" o "pois/<trailId>". Il
+ * backend calcola l'ETag sull'intero body della risposta (ShallowEtagHeaderFilter di Spring): vale per la risposta e
+ * non per la singola riga, per questo è salvato in una tabella propria e non nelle entità.
  */
 @Entity(tableName = "catalog_etag")
 data class CatalogEtagEntity(

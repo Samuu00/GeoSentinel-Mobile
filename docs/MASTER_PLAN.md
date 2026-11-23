@@ -3,11 +3,11 @@
 > Claude fa da mentore, architetto e reviewer: **il codice lo scrivi tu.** Qui ci sono struttura, contratti (firme),
 > vincoli e checkpoint. Un task si chiude quando passano tutti i suoi checkpoint; poi chiedi la review (vedi §6).
 >
-> **Stato (12/10/2026):** M0–M9 fatte. M4–M7 revisionate il 09/10, M8 il 12/10 (nessun CRITICAL/HIGH).
-> M9 (12/10, scritta da Claude su richiesta) fatta per un progetto **che per ora resta in locale**: test di UI di
-> Compose con Robolectric, R8 sulla release provato con la build `staging`. Rimandato alla pubblicazione quello che
-> serve solo agli store (fine di M9.3). Poi, sempre il 12/10 ("Dopo M9", in fondo a §5): dati veri della Calabria al
-> posto di quelli di prova (OpenStreetMap, foto da Wikimedia Commons con i crediti, le stazioni del Soccorso Alpino),
+> **Stato (23/11/2026):** M0–M11 fatte. M4–M7 revisionate il 09/10, M8 il 12/10 (nessun CRITICAL/HIGH).
+> M9 (12/10, scritta da Claude su richiesta) fatta: test di UI di Compose con Robolectric, R8 sulla release provato
+> con la build `staging`. Il progetto è una tesi triennale e gira solo in locale: niente produzione né store.
+> Poi, sempre il 12/10 ("Dopo M9", in fondo a §5): dati veri della Calabria al posto di quelli
+> di prova (OpenStreetMap, foto da Wikimedia Commons con i crediti, le stazioni del Soccorso Alpino),
 > mappa più leggibile (linee in base allo zoom, icone senza sovrapposizioni, dissolvenze), avvio senza splash.
 > 325 test host. Build `4b92074` installata sull'iPhone. Repository dell'app pubblico dal 12/10: GitHub Actions senza
 > limite di minuti (prima la CI si era fermata per i crediti esauriti). CI verde su `4b92074`, **anche il job `ios`**
@@ -25,7 +25,11 @@
 > POI, rifugi e pericoli solo entro 50 km dall'utente, cache ripulita; percorso con GraphHopper nel backend (ADR-0028)
 > e tutte le "Indicazioni" dentro l'app. 379 test host, provato sull'emulatore.
 > Il 22/11, sempre: stile leggero della mappa (31 livelli, rilievo da zoom 11) e percorso **solo sui sentieri del
-> parco** (entro 1 km), provati sull'iPhone (build `ab7150e`). Prossima volta: togliere del tutto il rilievo (§9.1).
+> parco** (entro 1 km), provati sull'iPhone (build `ab7150e`).
+> **23/11:** rilievo ombreggiato tolto dalla mappa, Mailpit tolto dal backend, test di Room sul database vero,
+> "Apri il sentiero" tolto dalla card del POI (resta su quella del pericolo), commenti del codice riscritti in italiano
+> in forma esplicativa (intestazione di file, KDoc), nel backend `User.passwordHash` nullable come la migrazione;
+> tolti i riferimenti alla produzione e agli store. 389 test host.
 > **Cosa manca, in ordine: §9.**
 
 ---
@@ -202,7 +206,7 @@ verde, `islandShadow`). Nelle schede il contenuto scorre sotto l'isola (`LocalBo
 - in basso la barra "Vicino a te" su una riga, con dentro, a destra, "Segnala un pericolo" (tondo verde pieno,
   l'unica azione piena della mappa oltre all'SOS); accanto l'SOS;
 - un POI toccato apre una scheda di luogo nello stesso posto: bollino della categoria, nome, tipo, X grigia,
-  "Apri il sentiero" a capsula;
+  niente "Apri il sentiero" (tolto il 23/11; resta sulla card del pericolo);
 - stile stradale tipo Apple Maps (terra crema, boschi salvia, strade bianche, statali gialle; grafite di notte) con
   cime con nome e quota (rilievo ombreggiato tolto il 23/11, §9.1); POI come bollini colorati per categoria e rifugi come bollini verdi
   più grandi, con il nome sotto da vicino; pallino della posizione blu con anello bianco (dettagli in M3 e in
@@ -338,7 +342,7 @@ data class AppConfig(val apiBaseUrl: String, val isDebug: Boolean)
   `App(config)`; in M0.4 diventa un `single` di Koin. Cleartext Android nel source set `debug` (manifest +
   `res/xml/network_security_config.xml`), così la release non lo contiene. iOS: `API_BASE_URL[config=Debug|Release]`
   in `Config.xcconfig` (con `$()` perché `//` è un commento), `NSAllowsLocalNetworking` nell'unico `Info.plist`:
-  apre solo indirizzi locali, mai HTTP verso internet. URL di release segnaposto fino a M9.3.
+  apre solo indirizzi locali, mai HTTP verso internet. URL di release segnaposto: il progetto gira solo in locale.
 - Checkpoint:
   - [x] l'app debug sull'emulatore raggiunge `GET http://10.0.2.2:8080/actuator/health` (backend locale acceso):
     `200 {"status":"UP"}` dall'app su `Medium_Phone`, 02/10, con una chiamata di prova poi rimossa.
@@ -643,7 +647,7 @@ class SessionManager(store: SecureTokenStore, authApi: AuthApi, usersApi: UsersA
 - `getMyProfile`, `updateMyProfile` (nome visualizzato), `changeMyPassword` (salva i token nuovi che restituisce),
   `deleteMyAccount` con doppia conferma.
 - Per il personale `deleteMyAccount` risponde 409 `account-managed`: messaggio "contatta l'amministratore".
-- La cancellazione si fa tutta dall'app: è un requisito di App Store e Google Play.
+- La cancellazione si fa tutta dall'app, senza passare dall'amministratore (salvo il personale, vedi sopra).
 - Fatto il 03/10 (contratto cambiato):
   - **Niente `ProfileRepository`.** L'interfaccia scritta per M2.3 restituiva il DTO generato e non poteva toccare
     la sessione, ma tutte e tre le operazioni la cambiano: il cambio password ruota i token (vanno salvati e va
@@ -724,7 +728,7 @@ fun LocationProvider.positions(interval: Duration): Flow<GeoPoint>
   salvata in DataStore da `trail/data/MapSettings`). Stili in `composeResources/files/map`, generati da
   `tools/map-styles/build_map_styles.py`, tutti gratuiti e senza chiave:
   - **Stradale**: `liberty` di OpenFreeMap ricolorato con una palette tipo Google Maps, chiaro e scuro (dal 12/11
-    palette tipo Apple Maps con rilievo ombreggiato e cime: vedi "Dopo M11");
+    palette tipo Apple Maps con cime e quota, rilievo ombreggiato tolto il 23/11: vedi "Dopo M11");
   - **Satellite**: Sentinel-2 cloudless 2016 di EOX (CC BY 4.0, 10 m, nitido fino allo zoom 15) con strade,
     sentieri ed etichette sopra;
   - **Topografica tolta** (03/10): OpenTopoMap serve tile PNG, che il motore di maplibre-compose 0.19 su Android
@@ -1523,10 +1527,10 @@ backend): nessun CRITICAL/HIGH. Corretto da Claude su richiesta:
 - Da rivedere: in orizzontale i controlli della mappa scorrono, ma se ne vedono due; serve una disposizione apposta
   (es. in riga in alto) da decidere.
 
-### Milestone 9: qualità e rilascio
+### Milestone 9: qualità e build release
 
-Fatta il 12/10, scritta da Claude su richiesta ("fai tutto M9"). Il progetto per ora resta **in locale**: quello che
-serve solo per pubblicare sugli store è in fondo a M9.3, rimandato.
+Fatta il 12/10, scritta da Claude su richiesta ("fai tutto M9"). Il progetto è una tesi triennale e gira solo in
+locale: la build release serve a provare R8, non a pubblicare.
 
 **M9.1 Test**
 - `commonTest` copriva già client, errori, outbox, `SosController` (con `MockEngine` e tempo virtuale), coordinate e i
@@ -1557,11 +1561,11 @@ serve solo per pubblicare sugli store è in fondo a M9.3, rimandato.
   - [x] test di accessibilità dell'SOS (M9.1).
   - [ ] TalkBack e VoiceOver a mano su tutto il flusso (VoiceOver con il Mac o l'iPhone).
 
-**M9.3 Privacy e rilascio**
+**M9.3 Privacy e build release**
 - R8 sulla release (`isMinifyEnabled`, `isShrinkResources`): bastano le regole che arrivano con le librerie
   (kotlinx.serialization, Ktor, Room, Firebase), `proguard-rules.pro` resta vuoto.
 - Build `staging` in `androidApp`: la release con R8, firmata con la chiave di debug e con l'HTTP in chiaro di
-  `src/debug`, verso `10.0.2.2:8080`. Serve a provare R8 contro il backend locale finché non c'è un backend HTTPS.
+  `src/debug`, verso `10.0.2.2:8080`. Serve a provare R8 contro il backend locale, l'unico che c'è.
 - La prima build con R8 ha scoperto un bug di configurazione: `:apiClient:prepareAndroidMainArtProfile` leggeva la
   cartella generata senza dipendere da `openApiGenerate`; corretto in `apiClient/build.gradle.kts`. La CI ora fa anche
   `assembleRelease`.
@@ -1571,19 +1575,13 @@ serve solo per pubblicare sugli store è in fondo a M9.3, rimandato.
   - [x] `staging` sull'emulatore (12/10) contro il backend locale: sessione ripristinata, mappa con sentieri, pericoli
     e rifugi, dettaglio del rifugio con la disponibilità, prenotazione con il 409 spiegato, schermata SOS; nessun crash
     e nel logcat niente log di rete, token o posizione.
-  - [ ] la release vera su un telefono contro un backend HTTPS (`docker-compose.prod.yml`): quando il progetto esce
-    dal locale.
-- **Rimandati alla pubblicazione** (il progetto resta in locale):
-  - firma della release con un keystore vero (oggi `assembleRelease` dà un APK non firmato);
-  - informativa privacy raggiungibile dal Profilo, scheda "Data safety" su Play e "Privacy nutrition label" su App Store
-    (posizione, foto, email, nome, note mediche), con le tile da OpenFreeMap ed EOX che vedono IP e zona guardata;
+- **Limiti noti**, accettati per un progetto che gira solo in locale:
+  - le tile da OpenFreeMap ed EOX vedono IP e zona guardata;
   - un'alternativa a EOX (servizio gratuito senza garanzie): tile proprie o un altro fornitore;
   - `NSAllowsLocalNetworking` solo nella build Debug di iOS (oggi è anche in Release; senza il Mac non si può provare
     una modifica al progetto Xcode);
-  - payload dell'outbox in chiaro nel database (escluso dal backup, cancellato al logout): cifrarlo se lo store o la
-    valutazione d'impatto lo chiedono;
-  - logout senza rete che lascia valido il refresh token sul server (fino a 30 giorni): accodare la revoca se diventa
-    un requisito; `DELETE /users/me` con la risposta persa (account cancellato, errore mostrato);
+  - payload dell'outbox in chiaro nel database (escluso dal backup, cancellato al logout);
+  - logout senza rete che lascia valido il refresh token sul server (fino a 30 giorni); `DELETE /users/me` con la risposta persa (account cancellato, errore mostrato);
   - il filtro dei log sulle query con posizione è una lista di nomi (`lat`, `lon`, `bbox`, `radius`): rivederlo a ogni
     endpoint geografico nuovo.
 
@@ -1851,7 +1849,8 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
 - Stile (`tools/map-styles/build_map_styles.py`, JSON rigenerati):
   - palette tipo Apple Maps, chiara e scura;
   - rilievo ombreggiato dalle Mapzen Terrain Tiles su AWS Open Data, raster-dem terrarium gratuito e senza chiave,
-    citato nell'attribuzione. Su Android si disegna, a differenza delle mappe raster PNG come OpenTopoMap;
+    citato nell'attribuzione (tolto il 23/11 perché laggava su iPhone; le Terrain Tiles restano per il profilo
+    altimetrico e la quota dei rifugi);
   - cime (`mountain_peak`) con nome e quota in corsivo marrone, da zoom 10, anche sul satellite;
   - tolti i POI generici di OpenStreetMap e il rilievo di Natural Earth.
 - Segnaposti (`TrailMapLayers.kt`, `RefugeMapLayers.kt`):
@@ -1876,7 +1875,7 @@ Scritto da Claude su richiesta, sul contratto di M7.2.2 e M7.2.3 del backend (AD
   schermata SOS.
 - [ ] Testo al 200% e TalkBack su calendario e fogli.
 - [ ] Accesso, registrazione e reset, le schermate del gestore e dell'operatore dopo il redesign.
-- [ ] Job `ios` della CI e prova sull'iPhone: fogli, gesto indietro, safe area, rilievo e nomi sulla mappa (Metal).
+- [ ] Job `ios` della CI e prova sull'iPhone: fogli, gesto indietro, safe area e nomi sulla mappa (Metal).
 - [ ] Review del redesign (§6).
 
 ### Dopo il redesign (21–22/11): mappa entro 50 km e percorso A→B
@@ -1959,7 +1958,7 @@ perché scriverebbero il codice al posto tuo.
 | 6 | SOS | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita il 09/10: 4 HIGH corretti) |
 | 7 | Push e soccorso | `ecc:kotlin-reviewer,ecc:security-reviewer` (eseguita l'08–09/10) |
 | 8 | Personale | `ecc:kotlin-reviewer,ecc:code-reviewer` + `security-reviewer` (eseguita il 12/10: nessun CRITICAL/HIGH; correzioni in fondo a M8.3) |
-| 9 | Qualità e rilascio | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 9 | Qualità e build release | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 | 10 | Verifica in due passaggi | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 | 11 | Foto profilo | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 
@@ -1973,7 +1972,7 @@ perché scriverebbero il codice al posto tuo.
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-6] Review only: SosController state machine, 3 s long-press trigger, outbox retry across restarts with one Idempotency-Key, location fix timeout and fallback, foreground-only location updates, status polling, cancel, always-visible 112 dialer fallback, no medical notes or position in logs; Acceptance: offline SOS delivers exactly one alert when back online; logged-out user is offered 112; no PII logged"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-7] Review only: FCM integration (Android FirebaseMessagingService, iOS Firebase via SPM forwarding token to shared), device registration on start and onNewToken, notification permission flow, deep link by alertId tolerant of duplicates and unknown types, rescue operator list/map/detail, dispatch with alert-already-taken handling, resolve; Acceptance: push opens the right alert; concurrent dispatch shows the conflict message; Firebase config files not committed"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:code-reviewer" "[Plan: docs/MASTER_PLAN.md#step-8] Review only: park manager screens (hazard verification, trail status, POI creation), maintenance tickets with If-Match from ETag and concurrent-modification reload, assign-to-me, refuge capacity 409 handling, admin team creation; Acceptance: stale If-Match shows reload instead of overwriting; role-gated UI still handles 403"
-/ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-9] Review only: commonTest coverage of network, outbox and SOS logic, Compose UI tests, accessibility (TalkBack/VoiceOver, 200% font), R8 rules for serialization and Ktor, permission rationale strings, privacy disclosures; Acceptance: tests green on Android and iOS in CI; release build works against HTTPS backend; no debug logging in release"
+/ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-9] Review only: commonTest coverage of network, outbox and SOS logic, Compose UI tests, accessibility (TalkBack/VoiceOver, 200% font), R8 rules for serialization and Ktor, permission rationale strings, privacy disclosures; Acceptance: tests green on Android and iOS in CI; staging build (release with R8) works against the local backend; no debug logging in release"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-10] Review only: login second step on 401 mfa-required (slug added to ApiError.Unauthorized), password and Google ID token kept in the ViewModel outside UiState, recovery code path, no refresh triggered by auth 401s, MFA setup via otpauth URI and copyable key, recovery codes shown once with FLAG_SECURE and iOS background cover, sensitive clipboard, nothing persisted or logged; Acceptance: wrong password and missing code are distinguished; secrets never reach disk or logs"
 /ecc:orchestrate custom "ecc:kotlin-reviewer,ecc:security-reviewer" "[Plan: docs/MASTER_PLAN.md#step-11] Review only: profile photo picked with the system picker, square crop and 512 px JPEG re-encode without EXIF, upload through MediaUploader with USER target, profile reload after confirm and removal, Coil cache keyed by mediaId and cleared on logout; Acceptance: avatar updates without app restart; no GPS EXIF; no avatar left in cache after logout"
 ```
@@ -1996,25 +1995,27 @@ Scelte esplicite, non dimenticanze:
 3. Chiedimi "review <task>": leggo i file e ti segnalo i problemi con file e riga, senza riscrivere il codice.
 4. Spunta i checkpoint e, a fine milestone, lancia la catena di review di §6.
 
-## 9. Cosa manca (aggiornato al 22/11)
+## 9. Cosa manca (aggiornato al 23/11)
 
 In ordine di priorità. I dettagli stanno nei checkpoint dei singoli task; qui solo l'elenco, per non perdere niente.
+Il progetto è una tesi triennale e gira solo in locale: qui non c'è niente su produzione, store o rilascio.
 
-### 9.1 Prossimo lavoro: mappa senza rilievo, backend senza Mailpit
-1. **Rilievo ombreggiato tolto** (23/11): via `hillshade` e la sorgente `terrain` da `build_map_styles.py`, stili
+### 9.1 Fatto il 23/11
+1. **Rilievo ombreggiato tolto**: via `hillshade` e la sorgente `terrain` da `build_map_styles.py`, stili
    rigenerati (Stradale 31 → 30 livelli, il resto identico), `MapStylesTest` controlla che non torni. Le Terrain
-   Tiles restano per il profilo altimetrico e la quota dei rifugi (`ElevationRepository`). **Da fare:** prova
-   sull'iPhone. Se lagga ancora: profilare i livelli dell'app (sentieri, POI con le collisioni, dati rimandati a ogni
-   fermata) prima di togliere altro.
-2. **Mailpit tolto dal backend** (23/11): servizio via da `docker-compose.yml`, commenti e `CLAUDE.md` del backend
-   aggiornati, build e `docker compose config` verdi, container e immagine rimossi. Da sapere: le prove in locale di
-   reset e 2FA mandano email vere.
+   Tiles restano per il profilo altimetrico e la quota dei rifugi (`ElevationRepository`).
+2. **Mailpit tolto dal backend**: servizio via da `docker-compose.yml`, commenti e `CLAUDE.md` del backend
+   aggiornati. Da sapere: le prove in locale di reset e 2FA mandano email vere.
+3. **Test di Room sul database vero** (`CatalogDaoTest`, `OutboxDaoTest`, vedi 9.5).
+4. **"Apri il sentiero" tolto dalla card del POI** sulla mappa; resta sulla card del pericolo.
+5. **Commenti del codice** riscritti in italiano in forma esplicativa: intestazione di file, KDoc su classi e funzioni.
+6. Backend: `User.passwordHash` nullable, come la colonna nella migrazione (account Google senza password).
+7. Tolti dal codice e dalla documentazione i riferimenti alla produzione e agli store.
 
-### 9.2 Prima di un rilascio
-1. **GraphHopper nella produzione del backend** (`docker-compose.prod.yml`, piano del backend §7): senza, il percorso
-   risponde 503.
-2. **Release vera** su un telefono contro il backend HTTPS (M9.3).
-3. **Review non ancora lanciate** (§6): M9; redesign ("Dopo M11"); mappa entro 50 km e percorso ("Dopo il redesign").
+### 9.2 Prossimo lavoro
+1. **Mappa sull'iPhone senza rilievo**: verificare che non laggi più zoomando. Se lagga ancora: profilare i livelli
+   dell'app (sentieri, POI con le collisioni, dati rimandati a ogni fermata) prima di togliere altro.
+2. **Review non ancora lanciate** (§6): M9; redesign ("Dopo M11"); mappa entro 50 km e percorso ("Dopo il redesign").
 
 ### 9.3 Prove sull'emulatore (si fanno da qui)
 L'emulatore `Medium_Phone` dal 22/11 si chiude da solo (crash della grafica con `-gpu auto`; anche con

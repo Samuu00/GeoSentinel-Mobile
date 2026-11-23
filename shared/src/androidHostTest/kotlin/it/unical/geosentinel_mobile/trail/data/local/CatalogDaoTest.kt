@@ -1,3 +1,6 @@
+// Test di CatalogDao con le query SQL vere, sulla JVM: Room in memoria sopra l'SQLite fornito da Robolectric.
+// Il driver SQLite bundled usato dall'app non ha le librerie native per il PC, quindi qui non si imposta il driver;
+// le query sono comunque le stesse che girano sul telefono.
 package it.unical.geosentinel_mobile.trail.data.local
 
 import androidx.room.Room
@@ -13,38 +16,49 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.time.Instant
 
-// La SQL vera di CatalogDao sulla JVM (§9.5): Room in memoria sopra l'SQLite di Robolectric. Il driver bundled non ha
-// le librerie native per il PC, quindi qui niente setDriver: la SQL è la stessa che gira sul telefono.
+/** Verifica le query della cache del catalogo: ricerche per riquadro, sostituzioni e pulizia fuori dall'area. */
 @RunWith(RobolectricTestRunner::class)
 class CatalogDaoTest {
 
     private val db = Room.inMemoryDatabaseBuilder<AppDatabase>(ApplicationProvider.getApplicationContext()).build()
     private val dao = db.catalogDao()
+    /** Istante fisso usato come data di aggiornamento delle righe di prova. */
     private val at = Instant.fromEpochSeconds(1_790_000_000)
+    /** Riquadro dell'intero mondo (minLon, minLat, maxLon, maxLat), per leggere tutte le righe. */
     private val world = doubleArrayOf(-180.0, -90.0, 180.0, 90.0)
 
+    /** Chiude il database dopo ogni test. */
     @After
     fun close() = db.close()
 
+    /** Crea il riassunto di un sentiero con il riquadro e lo stato indicati. */
     private fun summary(id: String, minLon: Double, minLat: Double, maxLon: Double, maxLat: Double, status: String = "OPEN") =
         TrailSummaryEntity(id, id, "EASY", 1000.0, status, "{}", minLon, minLat, maxLon, maxLat, at)
 
+    /** Crea un POI in una posizione, collegato al sentiero [trailId] oppure a nessun sentiero se è null. */
     private fun poi(id: String, trailId: String?, lat: Double, lon: Double) = PoiEntity(id, trailId, id, "VIEWPOINT", lat, lon, at)
 
+    /** Restituisce, in ordine alfabetico, gli id dei sentieri che toccano il riquadro [box]. */
     private suspend fun summaryIds(box: DoubleArray = world) =
         dao.observeSummariesInBox(box[0], box[1], box[2], box[3]).first().map { it.id }.sorted()
 
+    /** Restituisce, in ordine alfabetico, gli id dei POI che cadono nel riquadro [box]. */
     private suspend fun poiIds(box: DoubleArray = world) =
         dao.observePoisInBox(box[0], box[1], box[2], box[3]).first().map { it.id }.sorted()
 
+    /**
+     * La pulizia fuori dall'area (longitudine da 16 a 17, latitudine da 39 a 40) tiene i sentieri che la toccano,
+     * anche solo su un angolo, e cancella gli altri; lo stesso vale per i POI. L'ETag dei POI di un sentiero che ha
+     * perso dei POI viene cancellato, gli altri ETag restano.
+     */
     @Test
     fun `deleteOutsideBox tiene quello che tocca l'area anche sul bordo e toglie il resto`() = runBlocking {
-        // area: lon 16..17, lat 39..40
         dao.upsertSummaries(
             listOf(
                 summary("dentro", 16.4, 39.4, 16.5, 39.5),
                 summary("a-cavallo", 16.9, 39.4, 17.5, 39.5),
-                summary("sul-bordo", 17.0, 40.0, 17.2, 40.2), // tocca l'angolo: resta
+                // Tocca l'area solo nell'angolo nord-est: deve restare.
+                summary("sul-bordo", 17.0, 40.0, 17.2, 40.2),
                 summary("appena-fuori", 17.0001, 39.4, 17.2, 39.5),
                 summary("lontano", 10.0, 46.0, 10.1, 46.1),
             ),
@@ -64,24 +78,29 @@ class CatalogDaoTest {
 
         assertEquals(listOf("a-cavallo", "dentro", "sul-bordo"), summaryIds())
         assertEquals(listOf("p-bordo", "p-dentro"), poiIds())
-        // l'ETag dei POI di t2 va via con i suoi POI (altrimenti un 304 lascerebbe il dettaglio senza POI), gli altri restano
+        // L'ETag dei POI di t2 va cancellato insieme ai suoi POI: altrimenti una risposta 304 lascerebbe il dettaglio del
+        // sentiero senza POI in cache.
         assertNull(dao.etagOf("pois/t2"))
         assertEquals("W/\"1\"", dao.etagOf("pois/t1"))
         assertEquals("W/\"3\"", dao.etagOf("trail/t2"))
     }
 
+    /**
+     * Le ricerche per riquadro includono il bordo: un sentiero tagliato a metà dalla vista o toccato solo sul bordo
+     * viene restituito, uno lontano no; un POI esattamente sul bordo è compreso, uno appena fuori no.
+     */
     @Test
     fun `le query per riquadro comprendono il bordo`() = runBlocking {
         dao.upsertSummaries(listOf(summary("sila", 16.48, 39.29, 16.52, 39.31), summary("alpi", 10.0, 46.0, 10.1, 46.1)))
         dao.upsertPois(listOf(poi("sul-bordo", null, 39.4, 16.6), poi("fuori", null, 39.41, 16.6)))
 
-        // la vista taglia il sentiero a metà o ne tocca solo il bordo: c'è; un'area lontana: niente
         assertEquals(listOf("sila"), summaryIds(doubleArrayOf(16.50, 39.30, 16.60, 39.40)))
         assertEquals(listOf("sila"), summaryIds(doubleArrayOf(16.52, 39.31, 16.60, 39.40)))
         assertEquals(emptyList(), summaryIds(doubleArrayOf(12.0, 41.0, 13.0, 42.0)))
         assertEquals(listOf("sul-bordo"), poiIds(doubleArrayOf(16.4, 39.2, 16.6, 39.4)))
     }
 
+    /** Inserire di nuovo un sentiero con lo stesso id sostituisce la riga, e lo stato si può cambiare con un update mirato. */
     @Test
     fun `upsert sostituisce la riga e lo stato cambia senza rileggere`() = runBlocking {
         dao.upsertSummaries(listOf(summary("t1", 16.0, 39.0, 16.1, 39.1)))
@@ -92,6 +111,10 @@ class CatalogDaoTest {
         assertEquals(listOf("OPEN"), dao.observeSummariesInBox(world[0], world[1], world[2], world[3]).first().map { it.status })
     }
 
+    /**
+     * Sostituire i sentieri di un'area cancella solo quelli interamente dentro l'area e assenti dalla nuova risposta;
+     * quelli fuori dall'area o che ne escono in parte restano. Anche una risposta vuota deve funzionare.
+     */
     @Test
     fun `replaceSummariesInBox toglie solo quelli tutti dentro che il server non ha piu`() = runBlocking {
         dao.upsertSummaries(
@@ -99,7 +122,8 @@ class CatalogDaoTest {
                 summary("resta", 16.48, 39.29, 16.52, 39.31),
                 summary("tolto", 16.55, 39.32, 16.56, 39.33),
                 summary("alpi", 10.0, 46.0, 10.1, 46.1),
-                // a L: il riquadro tocca l'area ma esce, il server può non restituirlo anche se esiste
+                // Sentiero a forma di L: il suo riquadro tocca l'area ma ne esce, quindi il server può non restituirlo anche se
+                // esiste ancora, e non va cancellato.
                 summary("elle", 16.0, 39.0, 16.9, 39.9),
             ),
         )
@@ -107,11 +131,15 @@ class CatalogDaoTest {
         dao.replaceSummariesInBox(16.30, 39.10, 16.80, 39.50, listOf(summary("resta", 16.48, 39.29, 16.52, 39.31)))
         assertEquals(listOf("alpi", "elle", "resta"), summaryIds())
 
-        // risposta vuota: "NOT IN" con la lista vuota non deve rompere la query
+        // Risposta vuota: la condizione NOT IN con una lista vuota non deve rompere la query.
         dao.replaceSummariesInBox(16.30, 39.10, 16.80, 39.50, emptyList())
         assertEquals(listOf("alpi", "elle"), summaryIds())
     }
 
+    /**
+     * La sostituzione dei POI di un'area tocca solo i POI dell'area, e quella dei POI di un sentiero tocca solo i POI
+     * di quel sentiero, lasciando stare quelli non collegati a nessun sentiero.
+     */
     @Test
     fun `replacePoisInBox e replacePoisOfTrail toccano solo il loro insieme`() = runBlocking {
         dao.upsertPois(

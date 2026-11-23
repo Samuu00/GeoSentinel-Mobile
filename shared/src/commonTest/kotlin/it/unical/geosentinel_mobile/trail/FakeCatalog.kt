@@ -1,3 +1,5 @@
+// Rotte del catalogo (sentieri, POI, pericoli, media e percorso A-B) simulate sul backend finto dei test comuni,
+// con i dati JSON di esempio. Le usano i test del repository dei sentieri e dei ViewModel della mappa.
 package it.unical.geosentinel_mobile.trail
 
 import io.ktor.client.engine.mock.MockRequestHandleScope
@@ -12,53 +14,82 @@ import it.unical.geosentinel_mobile.core.session.FakeBackend
 import kotlinx.coroutines.delay
 import kotlinx.io.IOException
 
-// Il primo sentiero del seed del backend (R__local_seed.sql), con le coordinate vere della Sila in [lon, lat]
+/** Id del primo sentiero dei dati di prova del backend. */
 const val SEED_TRAIL_ID = "10000000-0000-0000-0000-000000000001"
+/** Percorso del sentiero di prova in GeoJSON, con coordinate reali della Sila nell'ordine [lon, lat]. */
 const val SEED_TRAIL_PATH = """{"type":"LineString","coordinates":[[16.4852,39.2934],[16.4910,39.2980],[16.5020,39.3050],[16.5150,39.3100]]}"""
 
+/** JSON del riassunto di un sentiero come lo restituisce l'API, con i campi principali personalizzabili. */
 fun trailJson(id: String = SEED_TRAIL_ID, status: String = "OPEN", difficulty: String = "MODERATE", name: String = "Sentiero delle Vette Silane") =
     """{"id":"$id","name":"$name","difficulty":"$difficulty","status":"$status","lengthM":2830.4,"path":$SEED_TRAIL_PATH}"""
 
+/** JSON del dettaglio di un sentiero, con descrizione e stato personalizzabile. */
 fun trailDetailJson(id: String = SEED_TRAIL_ID, status: String = "CLOSED") =
     """{"id":"$id","name":"Sentiero delle Vette Silane","description":"Traversata panoramica.","difficulty":"MODERATE","status":"$status","lengthM":2830.4,"path":$SEED_TRAIL_PATH}"""
 
+/** JSON di un media (foto) allegato al sentiero di prova, con lo stato indicato (per esempio READY o QUARANTINED). */
 fun mediaJson(id: String, status: String) =
     """{"id":"$id","contentType":"image/jpeg","createdAt":"2026-10-01T10:00:00Z","originalFilename":"$id.jpg","sizeBytes":1000,"status":"$status","entityType":"TRAIL","entityId":"$SEED_TRAIL_ID"}"""
 
 /**
- * Le rotte del catalogo sul backend finto di SessionTestSupport (stesso client, con Auth e AuthScope): sentieri e
- * POI pubblici, pericoli e media solo con un bearer valido, come sul server.
+ * Aggiunge al backend finto di SessionTestSupport le rotte del catalogo, usando lo stesso client con autenticazione.
+ * Come sul server vero, sentieri e POI sono pubblici, mentre pericoli e media richiedono un bearer valido. Le
+ * proprietà pubbliche permettono ai test di cambiare le risposte e di contare le richieste ricevute.
  */
 class FakeCatalog(private val backend: FakeBackend) {
+    /** Sentieri restituiti dalle ricerche per area e vicine, come stringhe JSON. */
     var trails: List<String> = listOf(trailJson())
+    /** Stato HTTP della risposta al dettaglio di un sentiero; se diverso da 200 si risponde con un errore. */
     var detailStatus = HttpStatusCode.OK
+    /** POI restituiti, come stringhe JSON. */
     var pois = listOf("""{"id":"p1","trailId":"$SEED_TRAIL_ID","name":"Fonte del Faggio","type":"WATER_SOURCE","location":{"lat":39.298,"lon":16.491}}""")
+    /** Pericoli restituiti per un sentiero, come stringhe JSON. */
     var hazards = listOf("""{"id":"h1","trailId":"$SEED_TRAIL_ID","type":"FALLEN_TREE","severity":"HIGH","status":"VERIFIED","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-04T09:00:00Z"}""")
+    /** Media allegati al sentiero; uno è in quarantena e non deve essere mostrato. */
     var media = listOf(mediaJson("m1", "READY"), mediaJson("m2", "QUARANTINED"), mediaJson("m3", "READY"))
+    /** Se vero, ogni richiesta fallisce con un errore di rete. */
     var offline = false
-    // GET /trails/route: false = 422 no-route
+    /** Se falso, la richiesta del percorso A-B risponde 422 con lo slug "no-route". */
     var routeFound = true
-    // una richiesta della bbox ancora in volo (per i test di annullamento)
+    /** Ritardo della risposta alla ricerca per area, per avere una richiesta ancora in corso nei test di annullamento. */
     var bboxDelayMillis = 0L
+    /** Se vero, la richiesta dell'URL di download di una foto fallisce con 503. */
     var downloadUrlFails = false
-    // L'ETag cambia quando cambia il body, come con ShallowEtagHeaderFilter: si simula con un numero di versione
+    /**
+     * Versione del dettaglio, usata per calcolare l'ETag. Sul server l'ETag cambia quando cambia il body della risposta;
+     * qui lo si simula cambiando il numero di versione.
+     */
     var detailVersion = 1
+    /** Versione della lista dei POI, usata per calcolare l'ETag come per il dettaglio. */
     var poisVersion = 1
+    /** Stato del sentiero scritto nel JSON del dettaglio. */
     var detailStatusValue = "CLOSED"
-    // tipo e query string di ogni richiesta ("bbox", "nearby", "pois-nearby", "pois", "detail", "hazards", "media", "download-url")
+    /**
+     * Registro delle richieste: per ognuna il tipo ("bbox", "nearby", "pois-nearby", "pois", "detail", "hazards",
+     * "media", "download-url", "route" o "304") e la query string o il percorso.
+     */
     val calls = mutableListOf<Pair<String, String>>()
+    /** Contatore usato per generare URL di download sempre diversi, come le firme temporanee dello storage. */
     private var urlCounter = 0
 
+    /** Numero di richieste ricevute del tipo indicato. */
     fun count(kind: String) = calls.count { it.first == kind }
+    /** Query string delle richieste ricevute del tipo indicato. */
     fun queries(kind: String) = calls.filter { it.first == kind }.map { it.second }
 
+    /** Registra le rotte del catalogo nel backend finto. */
     fun install() {
         backend.extraRoutes = { request, owner -> handle(request, owner) }
     }
 
+    /**
+     * Risponde alle richieste GET del catalogo in base al percorso; restituisce null per le rotte che non gestisce,
+     * così il backend finto passa alle sue. [owner] è l'utente del bearer, null se la richiesta è anonima.
+     */
     private suspend fun MockRequestHandleScope.handle(request: HttpRequestData, owner: String?): HttpResponseData? {
         if (request.method != HttpMethod.Get) return null
         val path = request.url.encodedPath
+        // Registra la richiesta, oppure simula l'assenza di rete se offline è attivo.
         fun record(kind: String) {
             if (offline) throw IOException("rete assente")
             calls += kind to request.url.encodedQuery
@@ -100,9 +131,13 @@ class FakeCatalog(private val backend: FakeBackend) {
         }
     }
 
+    /** Unisce una lista di oggetti JSON in un array JSON. */
     private fun list(items: List<String>) = "[${items.joinToString(",")}]"
 
-    // If-None-Match uguale all'ETag attuale: 304 senza body; altrimenti 200 con l'ETag
+    /**
+     * Simula una GET condizionale: se If-None-Match coincide con l'ETag attuale risponde 304 senza body, altrimenti
+     * 200 con il body e l'ETag.
+     */
     private fun MockRequestHandleScope.conditional(request: HttpRequestData, etag: String, body: () -> String): HttpResponseData {
         if (request.headers[HttpHeaders.IfNoneMatch] == etag) {
             calls += "304" to request.url.encodedPath
@@ -111,5 +146,6 @@ class FakeCatalog(private val backend: FakeBackend) {
         return respond(body(), HttpStatusCode.OK, headersOf(HttpHeaders.ContentType to listOf("application/json"), HttpHeaders.ETag to listOf(etag)))
     }
 
+    /** Risposta 200 con il JSON indicato. */
     private fun MockRequestHandleScope.ok(json: String) = respond(json, HttpStatusCode.OK, headersOf(HttpHeaders.ContentType, "application/json"))
 }

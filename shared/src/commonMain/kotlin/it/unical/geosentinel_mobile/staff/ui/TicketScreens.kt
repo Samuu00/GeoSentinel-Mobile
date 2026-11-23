@@ -1,3 +1,5 @@
+// Schermate dei ticket di manutenzione e della scheda Gestione: lista con filtri, dettaglio con le azioni e la
+// modifica, form del nuovo ticket, più le etichette di stato e priorità.
 package it.unical.geosentinel_mobile.staff.ui
 
 import geosentinel_mobile.shared.generated.resources.ticket_unknown_note
@@ -135,8 +137,9 @@ import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
 import androidx.compose.foundation.lazy.rememberLazyListState
 
 /**
- * Scheda Gestione: le segnalazioni da verificare (M8.1) e i ticket di manutenzione (M8.2), scelti con due voci sotto
- * la testata. La voce scelta resta anche tornando da un dettaglio.
+ * Scheda Gestione: le segnalazioni da verificare e i ticket di manutenzione, scelti con un selettore a due voci sotto
+ * la testata. La voce scelta resta anche tornando da un dettaglio. [onResetMfa] non è null solo per gli
+ * amministratori e mostra il link per azzerare la verifica in due passaggi di un utente.
  */
 @Composable
 fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Unit, onResetMfa: (() -> Unit)? = null) {
@@ -144,7 +147,7 @@ fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Un
     val tabs = @Composable {
         Column {
             ManagementTabs(tickets) { tickets = it }
-            // solo ADMIN (M10.3): chi ha perso telefono e codici di recupero
+            // Solo per gli amministratori: aiuto a chi ha perso telefono e codici di recupero.
             onResetMfa?.let { ManageLink(stringResource(Res.string.staff_mfa_reset_title), onClick = it) }
         }
     }
@@ -155,6 +158,7 @@ fun ManagementScreen(onOpenTrail: (String) -> Unit, onOpenTicket: (String) -> Un
     }
 }
 
+/** Selettore tra segnalazioni e ticket; [tickets] vero indica la seconda voce. */
 @Composable
 private fun ManagementTabs(tickets: Boolean, onSelect: (Boolean) -> Unit) {
     SegmentedControl(
@@ -164,17 +168,16 @@ private fun ManagementTabs(tickets: Boolean, onSelect: (Boolean) -> Unit) {
     )
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Lista
-// ---------------------------------------------------------------------------------------------------------------------
+// Lista dei ticket.
 
+/** Lista dei ticket con i filtri; [tabs] disegna il selettore della scheda Gestione sotto il titolo. */
 @Composable
 private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable () -> Unit) {
     val viewModel = koinViewModel<TicketListViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     val error = state.error
 
-    // tornando dal dettaglio la lista si rilegge: il ticket può essere cambiato
+    // Tornando dal dettaglio la lista si rilegge, perché il ticket può essere cambiato.
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose { }
@@ -196,8 +199,8 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
             )
         }
         item(key = "filters") { Filters(state, viewModel) }
-        // con la lista già a schermo: rilettura (filtro cambiato, ritorno dal dettaglio) e il suo esito sopra la lista,
-        // che resta; la schermata d'errore solo se non c'è niente da mostrare
+        // Con la lista già a schermo, una rilettura (filtro cambiato, ritorno dal dettaglio) mostra il suo esito sopra
+        // la lista, che resta visibile; la schermata d'errore compare solo se non c'è niente da mostrare.
         if (state.tickets.isNotEmpty() && state.loading) {
             item(key = "reloading") {
                 LinearProgressIndicator(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp))
@@ -227,7 +230,7 @@ private fun TicketListScreen(onOpenTicket: (String) -> Unit, tabs: @Composable (
     }
 }
 
-// Due righe di filtri che scorrono in orizzontale: stato (con "Solo i miei") e priorità
+/** Due righe di filtri che scorrono in orizzontale: stato (con "Solo i miei") e priorità. */
 @Composable
 private fun Filters(state: TicketListUiState, viewModel: TicketListViewModel) {
     Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(top = 4.dp, bottom = 12.dp)) {
@@ -261,17 +264,17 @@ private fun Filters(state: TicketListUiState, viewModel: TicketListViewModel) {
     }
 }
 
-// Un ticket: titolo e stato, poi priorità, luogo e data
+/** Riga di un ticket dentro il gruppo della lista; [first] e [last] servono per gli angoli arrotondati del gruppo. */
 @Composable
 private fun TicketRow(ticket: TicketResponse, first: Boolean, last: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    // una riga del gruppo dei ticket (prima una card per ticket)
     Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
         if (!first) GroupDivider()
         TicketRowContent(ticket, onClick)
     }
 }
 
+/** Contenuto della riga: titolo e stato, poi priorità, luogo e data. */
 @Composable
 private fun TicketRowContent(ticket: TicketResponse, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -300,13 +303,12 @@ private fun TicketRowContent(ticket: TicketResponse, onClick: () -> Unit) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Dettaglio
-// ---------------------------------------------------------------------------------------------------------------------
+// Dettaglio del ticket.
 
 /**
- * Dettaglio di un ticket (M8.2): dati, azioni secondo lo stato e "Modifica". Le transizioni le decide il server; qui si
- * mostrano solo quelle che ha senso proporre. Un 409 `concurrent-modification` mostra il messaggio e la versione nuova.
+ * Dettaglio del ticket [ticketId]: dati, azioni secondo lo stato e "Modifica". Le transizioni ammesse le decide il
+ * server; qui si propongono solo quelle che hanno senso. Un 409 `concurrent-modification` mostra il messaggio e la
+ * versione aggiornata del ticket.
  */
 @Composable
 fun TicketDetailScreen(ticketId: String, onBack: () -> Unit, onOpenTrail: (String) -> Unit) {
@@ -321,7 +323,7 @@ fun TicketDetailScreen(ticketId: String, onBack: () -> Unit, onOpenTrail: (Strin
             Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // posto per il tondo Indietro sotto la barra di stato (niente più paesaggio in testata, redesign 11/2026)
+            // Spazio per il pulsante tondo Indietro sotto la barra di stato: questa pagina non ha la testata col paesaggio.
             Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
             Spacer(Modifier.height(56.dp))
             when {
@@ -366,6 +368,7 @@ fun TicketDetailScreen(ticketId: String, onBack: () -> Unit, onOpenTrail: (Strin
     }
 }
 
+/** Dati del ticket: priorità, luogo (con il link al sentiero), assegnatario e date di apertura e risoluzione. */
 @Composable
 private fun TicketInfo(ticket: TicketResponse, me: String?, onOpenTrail: (String) -> Unit) {
     Column {
@@ -398,11 +401,15 @@ private fun TicketInfo(ticket: TicketResponse, me: String?, onOpenTrail: (String
     }
 }
 
-// Il passo successivo è la capsula piena; le altre azioni sono contornate. Un ticket chiuso non ha azioni.
+/**
+ * Azioni sul ticket secondo il suo stato: il passo successivo è la capsula piena, le altre sono contornate. Un ticket
+ * chiuso non ha azioni e mostra solo una nota. [onCancel] chiede conferma prima di annullare.
+ */
 @Composable
 private fun Actions(ticket: TicketResponse, state: TicketDetailUiState, viewModel: TicketDetailViewModel, onCancel: () -> Unit) {
     val status = ticket.status
-    // uno stato nuovo del server: non si sa quali passaggi permetta, quindi nessuna azione (si aggiorna l'app)
+    // Uno stato che l'app non conosce: non si sa quali passaggi permetta, quindi nessuna azione e una nota che
+    // invita ad aggiornare l'app.
     val note = when (status) {
         TicketResponse.Status.RESOLVED, TicketResponse.Status.CANCELLED -> Res.string.ticket_closed_note
         TicketResponse.Status.unknown_default_open_api -> Res.string.ticket_unknown_note
@@ -437,6 +444,7 @@ private fun Actions(ticket: TicketResponse, state: TicketDetailUiState, viewMode
     }
 }
 
+/** Form "Modifica" del ticket: titolo, descrizione e priorità, con salva e annulla. */
 @Composable
 private fun EditForm(draft: TicketDraft, busy: Boolean, viewModel: TicketDetailViewModel) {
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -456,11 +464,9 @@ private fun EditForm(draft: TicketDraft, busy: Boolean, viewModel: TicketDetailV
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Nuovo ticket
-// ---------------------------------------------------------------------------------------------------------------------
+// Nuovo ticket.
 
-// Nuovo ticket dal dettaglio di un sentiero (M8.2). Quando il server lo salva si torna indietro con [onCreated].
+/** Form del nuovo ticket, aperto dal dettaglio del sentiero [trailId]. Quando il server lo salva si chiama [onCreated]. */
 @Composable
 fun TicketCreateScreen(trailId: String, onBack: () -> Unit, onCreated: () -> Unit) {
     val viewModel = koinViewModel<TicketCreateViewModel>(key = "ticket-create-$trailId") { parametersOf(trailId) }
@@ -491,10 +497,9 @@ fun TicketCreateScreen(trailId: String, onBack: () -> Unit, onCreated: () -> Uni
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// In comune
-// ---------------------------------------------------------------------------------------------------------------------
+// Componenti e etichette in comune.
 
+/** Campi titolo (con il contatore dei caratteri) e descrizione, usati sia dalla creazione sia dalla modifica. */
 @Composable
 private fun TicketFields(title: String, onTitleChange: (String) -> Unit, description: String, onDescriptionChange: (String) -> Unit) {
     FormTextField(
@@ -514,7 +519,7 @@ private fun TicketFields(title: String, onTitleChange: (String) -> Unit, descrip
     )
 }
 
-// Stato e priorità in una capsula neutra: il rosso non si usa per i ticket (nemmeno CRITICAL, che non è un'emergenza)
+/** Capsula neutra per stato e priorità: i ticket non usano il rosso, nemmeno con priorità critica, perché non sono emergenze. */
 @Composable
 private fun Chip(text: String) {
     Text(
@@ -525,13 +530,15 @@ private fun Chip(text: String) {
     )
 }
 
-// Il sentiero o il rifugio del ticket; quelli aperti da una segnalazione non hanno un nome
+/** Nome del sentiero o del rifugio del ticket; un ticket aperto da una segnalazione non ha un nome e usa un testo generico. */
 @Composable
 private fun TicketResponse.place(): String = trailName ?: refugeName ?: stringResource(Res.string.ticket_target_hazard)
 
-// Per valore: i tre enum generati (risposta, ricerca, richieste) hanno gli stessi valori
-// Per nome: gli stessi valori arrivano da enum diversi (filtri, risposta, form). Un valore futuro del server non si
-// spaccia per uno noto: "sconosciuto"
+/**
+ * Etichetta di uno stato del ticket, cercata per valore testuale: gli stessi valori arrivano da enum generati diversi
+ * (risposta, filtri di ricerca, richieste). Un valore che l'app non conosce diventa "sconosciuto" invece di essere
+ * confuso con uno noto.
+ */
 private fun statusLabel(value: String): StringResource = when (value) {
     "OPEN" -> Res.string.ticket_status_open
     "ASSIGNED" -> Res.string.ticket_status_assigned
@@ -541,6 +548,7 @@ private fun statusLabel(value: String): StringResource = when (value) {
     else -> Res.string.ticket_status_unknown
 }
 
+/** Etichetta di una priorità, cercata per valore testuale come per [statusLabel]. */
 private fun priorityLabel(value: String): StringResource = when (value) {
     "LOW" -> Res.string.ticket_priority_low
     "MEDIUM" -> Res.string.ticket_priority_medium
@@ -549,7 +557,8 @@ private fun priorityLabel(value: String): StringResource = when (value) {
     else -> Res.string.ticket_priority_unknown
 }
 
-// Quelle del contratto, senza il caso dei valori futuri (che l'app non manda)
+// Valori proposti nei filtri e nei form: quelli del contratto, tranne il caso dei valori sconosciuti, che l'app non
+// invia mai.
 private val SearchStatuses = MaintenanceApi.StatusSearchTickets.entries.filter { it.name != "unknown_default_open_api" }
 private val SearchPriorities = MaintenanceApi.PrioritySearchTickets.entries.filter { it.name != "unknown_default_open_api" }
 private val CreatePriorities = CreateTicketRequest.Priority.entries - CreateTicketRequest.Priority.unknown_default_open_api

@@ -1,3 +1,5 @@
+// Test delle funzioni di posizione in core/location: conversione tra GeoPoint e Position di MapLibre, lettura della
+// posizione corrente con timeout e permessi, flusso delle posizioni e spostamento del centro della mappa trascinata.
 package it.unical.geosentinel_mobile.core.location
 
 import kotlinx.coroutines.awaitCancellation
@@ -23,29 +25,38 @@ import kotlin.time.Duration.Companion.seconds
 import kotlin.time.Instant
 import kotlin.time.TimeSource
 
+/** Verifica le funzioni di posizione usando un LocationProvider finto al posto del GPS. */
 class LocationTest {
 
-    // Un punto della Sila (seed del backend): in Calabria, non nel Golfo di Aden
+    /** Un punto della Sila: serve anche a riconoscere un'inversione di latitudine e longitudine. */
     private val sila = GeoPoint(lat = 39.33, lon = 16.55)
 
+    /** Crea un evento di posizione disponibile alle coordinate indicate. */
     private fun update(lat: Double, lon: Double) = LocationEvent.Update(
         LocationMeasurement(position = Position(longitude = lon, latitude = lat), measuredAt = Instant.fromEpochSeconds(0)),
         TimeSource.Monotonic.markNow(),
     )
 
+    /**
+     * Provider di posizione finto. [granted] dice se il permesso è concesso; [events] produce il flusso di eventi che
+     * il provider emette. Registra in [collected] se qualcuno ha chiesto gli aggiornamenti.
+     */
     private class FakeProvider(granted: Boolean = true, private val events: () -> Flow<LocationEvent>) : LocationProvider {
+        /** Vero se gli aggiornamenti di posizione sono stati richiesti almeno una volta. */
         var collected = false
+        /** Stato del permesso di posizione, concesso con precisione alta oppure non concesso ma richiedibile. */
         override val permission = MutableStateFlow(
             if (granted) LocationPermission.Granted(LocationAccuracyAuthorization.Precise) else LocationPermission.NotGranted(canRequest = true),
         )
+        /** Segna che gli aggiornamenti sono stati richiesti e restituisce il flusso di eventi del test. */
         override fun updates(request: LocationRequest): Flow<LocationEvent> {
             collected = true
             return events()
         }
     }
 
-    // ---- lon/lat ----------------------------------------------------------------------------------------------
 
+    /** La conversione mette la longitudine per prima, come vuole GeoJSON, e la conversione inversa restituisce lo stesso punto. */
     @Test
     fun `GeoPoint diventa una Position con la longitudine per prima`() {
         val position = sila.toPosition()
@@ -56,8 +67,8 @@ class LocationTest {
         assertEquals(sila, position.toGeoPoint())
     }
 
-    // ---- current ----------------------------------------------------------------------------------------------
 
+    /** current ignora gli eventi di posizione non disponibile e restituisce la prima posizione valida ricevuta. */
     @Test
     fun `current restituisce il primo fix e salta gli eventi non disponibili`() = runTest {
         val provider = FakeProvider {
@@ -67,6 +78,7 @@ class LocationTest {
         assertEquals(sila, provider.current())
     }
 
+    /** Senza permesso current restituisce null e non avvia nemmeno la richiesta di posizione. */
     @Test
     fun `current senza permesso restituisce null senza avviare la posizione`() = runTest {
         val provider = FakeProvider(granted = false) { flowOf(update(39.33, 16.55)) }
@@ -75,13 +87,18 @@ class LocationTest {
         assertFalse(provider.collected)
     }
 
+    /**
+     * Se non arriva nessuna posizione entro il timeout, current restituisce null. Il test usa il tempo virtuale di
+     * runTest, quindi non aspetta davvero 10 secondi.
+     */
     @Test
     fun `current senza fix entro il timeout restituisce null`() = runTest {
         val provider = FakeProvider { flow { awaitCancellation() } }
 
-        assertNull(provider.current(timeout = 10.seconds)) // tempo virtuale: il test non aspetta davvero
+        assertNull(provider.current(timeout = 10.seconds))
     }
 
+    /** Se il flusso di eventi finisce senza una posizione valida, current restituisce null. */
     @Test
     fun `current con aggiornamenti finiti senza un fix restituisce null`() = runTest {
         val provider = FakeProvider { flowOf(LocationEvent.Unavailable(LocationUnavailableReason.ServicesDisabled)) }
@@ -89,6 +106,7 @@ class LocationTest {
         assertNull(provider.current())
     }
 
+    /** Se il provider lancia un'eccezione (piattaforma senza servizio di posizione), current restituisce null invece di propagarla. */
     @Test
     fun `current su una piattaforma senza provider restituisce null`() = runTest {
         val provider = FakeProvider { throw IllegalStateException("nessun backend") }
@@ -96,8 +114,8 @@ class LocationTest {
         assertNull(provider.current())
     }
 
-    // ---- positions --------------------------------------------------------------------------------------------
 
+    /** Il flusso positions converte ogni posizione valida in GeoPoint e salta gli eventi di posizione non disponibile. */
     @Test
     fun `positions converte ogni fix e salta gli eventi non disponibili`() = runTest {
         val provider = FakeProvider {
@@ -107,16 +125,20 @@ class LocationTest {
         assertEquals(listOf(sila, GeoPoint(39.4, 16.6)), provider.positions(60.seconds).toList())
     }
 
+    /**
+     * Trascinare la mappa con il dito sposta il centro nella direzione opposta: a destra il centro va a ovest, in basso
+     * va a nord. Oltre l'antimeridiano la longitudine viene riportata nell'intervallo da -180 a 180.
+     */
     @Test
     fun `trascinare la mappa sposta il centro dalla parte opposta al dito`() {
         val center = sila.toPosition()
-        // dito verso destra di 100 dp a 10 m/dp: il centro va 1 km a ovest
+        // Dito verso destra di 100 dp con 10 metri per dp: il centro si sposta di 1 km verso ovest.
         val west = center.dragged(dxDp = 100.0, dyDp = 0.0, metersPerDp = 10.0)
         assertEquals(39.33, west.latitude, 1e-9)
         assertEquals(16.55 - 1000 / (111_320.0 * kotlin.math.cos(39.33 * kotlin.math.PI / 180)), west.longitude, 1e-9)
-        // dito verso il basso: il centro va a nord
+        // Dito verso il basso: il centro si sposta verso nord.
         assertEquals(39.33 + 1000 / 111_320.0, center.dragged(0.0, 100.0, 10.0).latitude, 1e-9)
-        // oltre l'antimeridiano la longitudine resta tra -180 e 180
+        // Vicino all'antimeridiano lo spostamento verso est riporta la longitudine nel lato negativo.
         val east = org.maplibre.spatialk.geojson.Position(longitude = 179.99, latitude = 0.0).dragged(-1000.0, 0.0, 10.0)
         assertEquals(-179.92, east.longitude, 0.01)
     }

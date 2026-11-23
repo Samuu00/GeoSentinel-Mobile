@@ -1,3 +1,5 @@
+// Test dei ViewModel del profilo: modifica del nome visualizzato, cambio password (anche con la verifica in due
+// passaggi attiva), cancellazione dell'account e foto profilo.
 package it.unical.geosentinel_mobile.profile.ui
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -35,14 +37,20 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Verifica EditNameViewModel, ChangePasswordViewModel e ProfileViewModel contro il backend finto e lo storage finto. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ProfileViewModelsTest {
 
     private val backend = FakeBackend()
+    /** API dei media e storage finti, usati per la foto profilo. */
     private val media = FakeMedia(backend)
+    /** Client HTTP della sessione corrente, condiviso dai repository creati nei test. */
     private lateinit var client: HttpClient
 
-    // viewModelScope usa Dispatchers.Main: lo si sostituisce con quello del test (tempo virtuale)
+    /**
+     * Fa l'accesso con le credenziali indicate e restituisce la sessione. viewModelScope usa Dispatchers.Main, che qui
+     * viene sostituito con il dispatcher del test, così tutto gira nel tempo virtuale.
+     */
     private suspend fun TestScope.loggedIn(
         email: String = "hiker@test.dev",
         password: String = "password-giusta-1",
@@ -56,16 +64,19 @@ class ProfileViewModelsTest {
         return session
     }
 
+    /** Crea il ViewModel del profilo con un uploader e un repository dei media collegati ai finti. */
     private fun TestScope.profileViewModel(session: SessionManager) =
         ProfileViewModel(session, with(media) { uploader(client) }, MediaRepository({ client }, TEST_BASE_URL))
 
+    /** Conta le richieste con il metodo indicato verso le rotte /users/me. */
     private fun requests(method: String) = backend.requests.count { it.startsWith("$method /api/v1/users/me") }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    // ---- nome -----------------------------------------------------------------------------------------------
 
+    /** Il campo parte dal nome attuale e il salvataggio resta disabilitato finché il nome, senza spazi ai lati, non cambia. */
     @Test
     fun `il nome parte da quello attuale e se non cambia non si salva`() = runTest {
         val viewModel = EditNameViewModel(loggedIn())
@@ -76,6 +87,7 @@ class ProfileViewModelsTest {
         assertFalse(viewModel.state.value.canSubmit, "solo spazi in più non è un nome nuovo")
     }
 
+    /** Un nome troppo corto mostra l'errore sul campo e non produce nessuna richiesta al server. */
     @Test
     fun `nome troppo corto - errore sul campo e nessuna richiesta`() = runTest {
         val viewModel = EditNameViewModel(loggedIn())
@@ -88,6 +100,7 @@ class ProfileViewModelsTest {
         assertEquals(0, requests("PATCH"))
     }
 
+    /** Dopo il salvataggio lo stato è "salvato" e il profilo della sessione riporta il nuovo nome. */
     @Test
     fun `nome salvato - stato saved e profilo della sessione aggiornato`() = runTest {
         val session = loggedIn()
@@ -101,8 +114,8 @@ class ProfileViewModelsTest {
         assertEquals("Anna", assertIs<SessionState.LoggedIn>(session.state.value).profile?.displayName)
     }
 
-    // ---- password -------------------------------------------------------------------------------------------
 
+    /** Password attuale vuota e nuova password troppo corta producono errori sui rispettivi campi senza chiamare il server. */
     @Test
     fun `controlli locali - password attuale vuota e nuova corta senza richiesta`() = runTest {
         val viewModel = ChangePasswordViewModel(loggedIn())
@@ -116,6 +129,7 @@ class ProfileViewModelsTest {
         assertEquals(0, backend.requests.count { it.startsWith("POST /api/v1/users/me/password") })
     }
 
+    /** Se il server rifiuta la password attuale l'errore compare sul campo della password attuale e l'invio termina. */
     @Test
     fun `password attuale sbagliata - errore sul campo della password attuale`() = runTest {
         val viewModel = ChangePasswordViewModel(loggedIn())
@@ -130,6 +144,7 @@ class ProfileViewModelsTest {
         assertFalse(viewModel.state.value.submitting)
     }
 
+    /** Dopo un cambio riuscito le password vengono tolte dallo stato e il server ha la nuova password. */
     @Test
     fun `password cambiata - stato changed e password tolte dallo stato`() = runTest {
         val viewModel = ChangePasswordViewModel(loggedIn())
@@ -146,12 +161,17 @@ class ProfileViewModelsTest {
         assertEquals("nuova-password-123", backend.users["hiker@test.dev"])
     }
 
-    // ADR-0026 del backend: con la verifica in due passaggi attiva il cambio password chiede anche il codice
+    /**
+     * Con la verifica in due passaggi attiva il cambio password richiede anche il codice: se manca l'errore è sul campo
+     * e non parte nessuna richiesta; con un codice sbagliato il server rifiuta; con quello giusto la password cambia e
+     * il codice viene tolto dallo stato.
+     */
     @Test
     fun `con la 2FA attiva serve il codice - assente sul campo poi sbagliato poi giusto`() = runTest {
         backend.mfaTotp["hiker@test.dev"] = "777888"
         val session = loggedIn(mfaCode = "777888")
-        backend.mfaTotp["hiker@test.dev"] = "111222" // il codice del login è consumato: ne vale uno nuovo
+        // Il codice usato per il login è consumato: per il cambio password ne vale uno nuovo.
+        backend.mfaTotp["hiker@test.dev"] = "111222"
         val viewModel = ChangePasswordViewModel(session)
         assertTrue(viewModel.state.value.mfaRequired)
 
@@ -176,8 +196,8 @@ class ProfileViewModelsTest {
         assertEquals("nuova-password-123", backend.users["hiker@test.dev"])
     }
 
-    // ---- cancellazione --------------------------------------------------------------------------------------
 
+    /** Dopo la cancellazione dell'account la sessione torna da ospite e non resta nessun errore. */
     @Test
     fun `cancellazione riuscita - si torna ospiti`() = runTest {
         val session = loggedIn()
@@ -191,6 +211,7 @@ class ProfileViewModelsTest {
         assertNull(viewModel.state.value.error)
     }
 
+    /** Il personale non può cancellare il proprio account: compare il messaggio "account-managed" e la sessione resta attiva. */
     @Test
     fun `cancellazione del personale - messaggio account-managed e sessione intatta`() = runTest {
         val session = loggedIn("rescuer@test.dev", "password-giusta-2")
@@ -203,8 +224,11 @@ class ProfileViewModelsTest {
         assertIs<SessionState.LoggedIn>(session.state.value)
     }
 
-    // ---- foto profilo (M11) ---------------------------------------------------------------------------------
 
+    /**
+     * La foto profilo viene caricata allegandola all'utente (target USER con l'id dell'utente); dopo la conferma il
+     * profilo viene riletto dal server e mostra il nuovo avatar.
+     */
     @Test
     fun `foto profilo - upload con target USER e l'id dell'utente poi profilo riletto`() = runTest {
         val session = loggedIn()
@@ -213,7 +237,8 @@ class ProfileViewModelsTest {
 
         viewModel.uploadAvatar { byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte()) }
         assertTrue(viewModel.state.value.avatarBusy)
-        backend.avatars["hiker@test.dev"] = "m1" // il server la collega al confirm
+        // Il server collega la foto al profilo al momento della conferma.
+        backend.avatars["hiker@test.dev"] = "m1"
         advanceUntilIdle()
 
         assertTrue(media.uploadRequests.single().contains("\"entityType\":\"USER\""))
@@ -225,6 +250,7 @@ class ProfileViewModelsTest {
         assertNull(viewModel.state.value.error)
     }
 
+    /** La rimozione cancella il media dell'avatar corrente e rilegge il profilo, che non ha più l'avatar. */
     @Test
     fun `foto profilo - rimozione con DELETE del media corrente e profilo riletto`() = runTest {
         backend.avatars["hiker@test.dev"] = "m7"
@@ -240,6 +266,7 @@ class ProfileViewModelsTest {
         assertNull(viewModel.state.value.error)
     }
 
+    /** Se l'immagine scelta non si può leggere compare un messaggio e non parte nessun caricamento. */
     @Test
     fun `foto profilo illeggibile - messaggio e nessun upload`() = runTest {
         val viewModel = profileViewModel(loggedIn())

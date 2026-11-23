@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solo debug: il manifest merger lo unisce a main, la release non lo vede -->
+<!-- Manifest usato solo dalle build di debug e staging: il manifest merger lo unisce a quello principale, mentre
+     la release non lo vede. Attiva la configurazione di rete che permette l'HTTP in chiaro verso il backend locale. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application android:networkSecurityConfig="@xml/network_security_config"/>

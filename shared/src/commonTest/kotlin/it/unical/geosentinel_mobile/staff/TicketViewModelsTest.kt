@@ -1,3 +1,6 @@
+// Test dei ViewModel dei ticket di manutenzione (lista, dettaglio, creazione). Le modifiche ai ticket usano il
+// controllo di concorrenza ottimistico: il client invia in If-Match l'ETag letto, e il server rifiuta con 409 se nel
+// frattempo qualcun altro ha cambiato il ticket.
 package it.unical.geosentinel_mobile.staff
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -40,41 +43,58 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** M8.2: ticket con If-Match contro un backend finto che tiene la versione come il server vero. */
+/**
+ * Verifica i ViewModel dei ticket contro un backend finto che tiene un solo ticket con un numero di versione, come
+ * il server vero.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TicketViewModelsTest {
 
     private val backend = FakeBackend()
 
-    // ---- stato del server finto: un ticket ----
+    /** Versione corrente del ticket sul server finto, restituita come ETag. */
     private var version = 0L
+    /** Stato corrente del ticket sul server finto. */
     private var status = "OPEN"
+    /** Titolo corrente del ticket sul server finto. */
     private var title = "Staccionata rotta"
+    /** Priorità corrente del ticket sul server finto. */
     private var priority = "MEDIUM"
+    /** Id dell'operatore a cui è assegnato il ticket, null se non è assegnato. */
     private var assignedTo: String? = null
+    /** Valori di If-Match ricevuti dalle richieste di modifica, nell'ordine. */
     private val ifMatches = mutableListOf<String?>()
+    /** Query string delle ricerche dei ticket ricevute. */
     private val searchQueries = mutableListOf<String>()
+    /** Corpi delle richieste di creazione ricevute. */
     private val createBodies = mutableListOf<String>()
-    // un proxy che toglie l'ETag dalle risposte
+    /** Se falso, le risposte arrivano senza ETag, come se un proxy lo togliesse. */
     private var sendEtag = true
+    /** Se vero, la ricerca dei ticket fallisce con un errore di rete. */
     private var searchOffline = false
 
+    /** JSON del ticket con lo stato corrente del server finto. */
     private fun ticketJson() =
         """{"id":"t1","title":"$title","priority":"$priority","status":"$status","trailId":"$SEED_TRAIL_ID","trailName":"Sentiero",""" +
             (assignedTo?.let { "\"assignedTo\":\"$it\"," } ?: "") + """"createdAt":"2026-10-05T10:00:00Z"}"""
 
-    // un collega modifica il ticket: la versione sale
+    /** Simula un collega che modifica il ticket: cambia il titolo e la versione aumenta. */
     private fun colleagueEdits() {
         title = "Staccionata rotta (aggiornato)"
         version++
     }
 
+    /** Header delle risposte con il ticket: tipo JSON e, se sendEtag è vero, l'ETag con la versione corrente. */
     private fun versioned() = if (sendEtag) {
         headersOf(HttpHeaders.ContentType to listOf("application/json"), HttpHeaders.ETag to listOf("\"$version\""))
     } else {
         headersOf(HttpHeaders.ContentType, "application/json")
     }
 
+    /**
+     * Installa le rotte finte dei ticket, fa l'accesso e restituisce il repository dei ticket e la sessione. Le rotte
+     * di modifica richiedono If-Match uguale alla versione corrente: senza rispondono 428, con una versione vecchia 409.
+     */
     private suspend fun TestScope.setUp(): Pair<TicketRepository, SessionManager> {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         backend.extraRoutes = { request, _ ->
@@ -99,7 +119,7 @@ class TicketViewModelsTest {
                     }
                     request.method == HttpMethod.Get && path == "/t1" -> respond(ticketJson(), HttpStatusCode.OK, versioned())
                     else -> {
-                        // le modifiche: If-Match obbligatorio e uguale alla versione attuale
+                        // Modifiche: If-Match è obbligatorio e deve coincidere con la versione attuale.
                         val ifMatch = request.headers[HttpHeaders.IfMatch]
                         ifMatches += ifMatch
                         val body = body()
@@ -120,7 +140,7 @@ class TicketViewModelsTest {
                             }
                             path == "/t1/status" -> {
                                 val target = field(body, "status")!!
-                                // come il dominio: si risolve solo da ASSIGNED o IN_PROGRESS
+                                // Come nel dominio del backend: un ticket si risolve solo se è ASSIGNED o IN_PROGRESS.
                                 if (target == "RESOLVED" && status !in setOf("ASSIGNED", "IN_PROGRESS")) {
                                     problem(HttpStatusCode.UnprocessableEntity, "business-rule")
                                 } else {
@@ -141,9 +161,11 @@ class TicketViewModelsTest {
         return TicketRepository({ client }, TEST_BASE_URL) to session
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
+    /** "Assegna a me" invia in If-Match l'ETag letto, assegna il ticket all'utente e salva il nuovo ETag restituito. */
     @Test
     fun `assegna a me manda l'ETag letto e salva quello nuovo`() = runTest {
         val (tickets, session) = setUp()
@@ -162,6 +184,11 @@ class TicketViewModelsTest {
         assertNull(state.actionError)
     }
 
+    /**
+     * Se un collega ha modificato il ticket, il salvataggio su una versione vecchia riceve 409: compare il messaggio,
+     * si rilegge la versione del collega, la modifica in corso si chiude senza sovrascrivere quella del collega e
+     * un'azione successiva, sulla versione nuova, riesce.
+     */
     @Test
     fun `con una versione vecchia il 409 mostra il messaggio e la versione nuova`() = runTest {
         val (tickets, session) = setUp()
@@ -181,13 +208,14 @@ class TicketViewModelsTest {
         assertNull(state.draft, "la modifica fatta su dati vecchi si chiude")
         assertEquals("MEDIUM", priority, "la modifica non ha sovrascritto quella del collega")
 
-        // il secondo tentativo, sulla versione nuova, passa
+        // Il secondo tentativo parte dalla versione appena riletta e passa.
         viewModel.changeStatus(UpdateTicketStatusRequest.Status.IN_PROGRESS)
         advanceUntilIdle()
         assertEquals(TicketResponse.Status.IN_PROGRESS, viewModel.state.value.ticket?.status)
         assertNull(viewModel.state.value.actionError)
     }
 
+    /** Un cambio di stato vietato dalle regole (risolvere un ticket aperto) diventa un messaggio specifico del ticket. */
     @Test
     fun `una transizione non permessa diventa un messaggio del ticket`() = runTest {
         val (tickets, session) = setUp()
@@ -202,6 +230,10 @@ class TicketViewModelsTest {
         assertFalse(viewModel.state.value.busy)
     }
 
+    /**
+     * Un titolo con meno di 3 caratteri (il minimo del server) disabilita il salvataggio e non parte nessuna richiesta;
+     * un titolo valido crea il ticket sul sentiero, senza spazi ai lati e senza inviare una descrizione vuota.
+     */
     @Test
     fun `il titolo troppo corto non parte e quello valido apre il ticket sul sentiero`() = runTest {
         val (tickets, _) = setUp()
@@ -226,6 +258,7 @@ class TicketViewModelsTest {
         assertFalse("description" in sent, "una descrizione vuota non si manda: $sent")
     }
 
+    /** I filtri di stato e priorità finiscono nella ricerca, e "solo i miei" filtra con l'id dell'utente. */
     @Test
     fun `i filtri finiscono nella ricerca e solo i miei usa l'id dell'utente`() = runTest {
         val (tickets, session) = setUp()
@@ -245,6 +278,7 @@ class TicketViewModelsTest {
         assertFalse(viewModel.state.value.loading)
     }
 
+    /** Se la rilettura della lista fallisce i ticket già letti restano visibili con l'errore sopra. */
     @Test
     fun `se la rilettura fallisce la lista resta con l'errore sopra`() = runTest {
         val (tickets, session) = setUp()
@@ -260,6 +294,10 @@ class TicketViewModelsTest {
         assertFalse(viewModel.state.value.loading)
     }
 
+    /**
+     * Se il ticket è arrivato senza ETag il client non può indicare la versione: l'azione non invia nessuna richiesta
+     * e mostra un messaggio che spiega il problema.
+     */
     @Test
     fun `senza ETag il tocco non manda nulla ma lo dice e rilegge`() = runTest {
         sendEtag = false

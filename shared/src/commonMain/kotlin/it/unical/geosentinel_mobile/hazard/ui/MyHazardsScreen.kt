@@ -1,3 +1,5 @@
+// Schermata "Le mie segnalazioni", aperta dal Profilo: elenco paginato delle segnalazioni fatte dall'utente con il loro
+// stato di verifica.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
@@ -83,12 +85,14 @@ import kotlin.time.Instant
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
 
-// Quante righe prima del fondo si chiede la pagina dopo: arriva prima che l'utente se ne accorga
+/** Quante righe prima della fine si chiede la pagina successiva, così arriva prima che l'utente raggiunga il fondo. */
 private const val PrefetchDistance = 3
 
 /**
- * "Le mie segnalazioni" (M4.3), spinta dal Profilo: tipo, gravità, data e stato in parole di ogni segnalazione, dalla
- * più recente. Il tocco su una segnalazione con un sentiero apre il sentiero. Trascinando in basso si ricarica.
+ * Schermata "Le mie segnalazioni", aperta dal Profilo. Per ogni segnalazione, dalla più recente, mostra tipo, gravità,
+ * data, stato scritto a parole, inizio della descrizione e foto. Il tocco su una segnalazione legata a un sentiero apre
+ * il sentiero con [onOpenTrail]; trascinando in basso si ricarica la lista. Nello stato vuoto un pulsante porta alla
+ * mappa con [onGoToMap].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -97,7 +101,8 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
     val state by viewModel.state.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
 
-    // La pagina dopo quando le ultime righe entrano sullo schermo (il ViewModel ignora le chiamate di troppo)
+    // Chiede la pagina successiva quando le ultime righe entrano nello schermo. distinctUntilChanged evita chiamate
+    // ripetute a ogni scroll; quelle in più vengono comunque ignorate dal ViewModel.
     LaunchedEffect(listState) {
         snapshotFlow {
             val info = listState.layoutInfo
@@ -139,7 +144,8 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
                         }
                         when {
                             state.loadingMore -> item(key = "more") { CenteredProgress(small = true) }
-                            // errore sulla pagina dopo: le righe già caricate restano, sotto il motivo e "Riprova"
+                            // Errore su una pagina successiva: le righe già caricate restano e sotto compaiono il
+                            // motivo e "Riprova".
                             state.error != null -> item(key = "more-error") { InlineError(state.error!!.resolve(), onRetry = viewModel::retry) }
                         }
                     }
@@ -151,17 +157,23 @@ fun MyHazardsScreen(onBack: () -> Unit, onOpenTrail: (String) -> Unit, onGoToMap
     }
 }
 
-// Una segnalazione: icona nel colore della gravità (il rosso solo per CRITICAL), tipo e stato in alto, gravità e data
-// sotto, l'inizio della descrizione. Con un sentiero tutta la card lo apre (freccia a destra).
+/**
+ * Una segnalazione come riga di un gruppo di card: [first] e [last] indicano se è la prima o l'ultima del gruppo, per
+ * arrotondare gli angoli giusti e non disegnare il divisore sopra la prima.
+ */
 @Composable
 private fun HazardCard(hazard: HazardResponse, onOpenTrail: (String) -> Unit, first: Boolean, last: Boolean) {
-    // una riga del gruppo delle segnalazioni (prima una card per segnalazione)
     Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).groupedItem(first, last)) {
         if (!first) GroupDivider(54.dp)
         HazardRowContent(hazard, onOpenTrail)
     }
 }
 
+/**
+ * Contenuto della riga: icona nel colore della gravità (rosso solo per CRITICAL), tipo e stato in alto, gravità e data
+ * sotto, poi l'inizio della descrizione e le foto. Se la segnalazione ha un sentiero, tutta la riga lo apre e a destra
+ * compare una freccia. Gli elementi sono uniti in un solo nodo di accessibilità.
+ */
 @Composable
 private fun HazardRowContent(hazard: HazardResponse, onOpenTrail: (String) -> Unit) {
     val trailId = hazard.trailId
@@ -175,7 +187,7 @@ private fun HazardRowContent(hazard: HazardResponse, onOpenTrail: (String) -> Un
             .padding(16.dp)
             .semantics(mergeDescendants = true) { },
     ) {
-        // decorativo: tipo e gravità sono scritti accanto
+        // Icona decorativa: tipo e gravità sono scritti accanto.
         Icon(AppIcons.Alert, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -216,7 +228,10 @@ private fun HazardRowContent(hazard: HazardResponse, onOpenTrail: (String) -> Un
     }
 }
 
-// Lo stato è sempre scritto; il colore lo accompagna e basta. Prugna (non rosso) per "Non confermata"
+/**
+ * Etichetta dello stato della segnalazione. Lo stato è sempre scritto e il colore lo accompagna soltanto. Per una
+ * segnalazione non confermata si usa il ruolo `error` del tema (prugna) e non il rosso, riservato alle emergenze.
+ */
 @Composable
 private fun StatusChip(status: HazardResponse.Status) {
     val colors = MaterialTheme.colorScheme
@@ -234,6 +249,7 @@ private fun StatusChip(status: HazardResponse.Status) {
     )
 }
 
+/** Indicatore di caricamento centrato: grande per la prima pagina, piccolo ([small]) in fondo alla lista. */
 @Composable
 private fun CenteredProgress(small: Boolean = false) {
     Box(Modifier.fillMaxWidth().padding(vertical = if (small) 12.dp else 48.dp), contentAlignment = Alignment.Center) {
@@ -244,7 +260,7 @@ private fun CenteredProgress(small: Boolean = false) {
     }
 }
 
-// Stato vuoto o d'errore: testo centrato e una sola azione
+/** Messaggio a tutta pagina per lo stato vuoto o d'errore: titolo facoltativo, testo centrato e una sola azione. */
 @Composable
 private fun Message(text: String, title: String? = null, isError: Boolean = false, action: @Composable () -> Unit) {
     Column(
@@ -267,6 +283,7 @@ private fun Message(text: String, title: String? = null, isError: Boolean = fals
     }
 }
 
+/** Errore su una pagina successiva, mostrato in fondo alla lista con il pulsante "Riprova". */
 @Composable
 private fun InlineError(message: String, onRetry: () -> Unit) {
     Row(
@@ -285,9 +302,10 @@ private fun InlineError(message: String, onRetry: () -> Unit) {
     }
 }
 
-// "05/10/2026, 13:36" nell'ora del telefono
+/** Formatta l'istante come "gg/mm/aaaa, hh:mm" nel fuso orario del telefono. */
 private fun formatDate(instant: Instant): String {
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    // Formatta un numero su due cifre, con lo zero davanti.
     fun Int.two() = toString().padStart(2, '0')
     return "${local.day.two()}/${local.month.number.two()}/${local.year}, ${local.hour.two()}:${local.minute.two()}"
 }

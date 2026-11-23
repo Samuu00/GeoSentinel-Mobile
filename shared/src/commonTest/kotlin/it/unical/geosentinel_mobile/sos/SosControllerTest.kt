@@ -1,3 +1,7 @@
+// Test di SosController, il componente unico per tutta l'app che invia l'SOS e ne segue lo stato. L'SOS passa per
+// l'outbox con una chiave di idempotenza, così un invio interrotto (rete assente, app chiusa) riparte con la stessa
+// chiave e il server crea una sola allerta. I test coprono invio, riavvio, annullamento con verifica sul server,
+// invio periodico della posizione e lettura dello stato.
 package it.unical.geosentinel_mobile.sos
 
 import io.ktor.client.HttpClient
@@ -38,40 +42,58 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
+/** Verifica il ciclo di vita di un SOS contro un backend finto che simula le allerte e l'idempotenza del server. */
 class SosControllerTest {
 
     private val backend = FakeBackend()
+    /** Outbox in memoria in cui il controller salva l'SOS prima di inviarlo. */
     private val outbox = FakeOutboxDao()
-    private val owner = "id-hiker@test.dev" // l'id del profilo nel backend finto
+    /** Id del profilo dell'utente di prova nel backend finto. */
+    private val owner = "id-hiker@test.dev"
+    /** Posizione da cui parte l'SOS nei test. */
     private val here = GeoPoint(lat = 39.278, lon = 16.452)
+    /** Contatore usato per generare chiavi di idempotenza prevedibili. */
     private var keys = 0
 
-    // il server: rete assente per POST /sos, un errore forzato, le allerte create (una per chiave, come l'idempotenza vera)
+    /** Se vero, POST /sos fallisce con un errore di rete. */
     private var sosOffline = false
+    /** Se impostato, POST /sos risponde con questo stato e questo slug. */
     private var raiseProblem: Pair<HttpStatusCode, String>? = null
+    /** Id dell'allerta attiva sul server, null se non ce n'è. */
     private var activeOnServer: String? = null
-    // per ogni POST /sos: chiave, body e se la chiave era già nell'outbox quando è arrivata la richiesta
+    /** Per ogni POST /sos: chiave, corpo e se la chiave era già nell'outbox quando la richiesta è arrivata. */
     private val posts = mutableListOf<Triple<String?, String, Boolean>>()
-    private val created = mutableMapOf<String, String>() // chiave -> id dell'allerta
+    /** Allerte create dal server: chiave di idempotenza -> id dell'allerta. Una sola allerta per chiave, come sul server. */
+    private val created = mutableMapOf<String, String>()
+    /** Id delle allerte annullate con DELETE. */
     private val cancelled = mutableListOf<String>()
+    /** Se vero, l'annullamento fallisce con un errore di rete. */
     private var cancelOffline = false
-    // M6.2: stato dell'allerta sul server, PUT della posizione ricevuti (id, body), rete assente per PUT e GET active
+    /** Stato dell'allerta restituito dal server (per esempio DISPATCHED quando parte la squadra). */
     private var serverStatus = "ACTIVE"
+    /** Aggiornamenti di posizione ricevuti: id dell'allerta e corpo della richiesta. */
     private val locationPuts = mutableListOf<Pair<String, String>>()
+    /** Se vero, l'invio della posizione fallisce con un errore di rete. */
     private var locationOffline = false
+    /** Se vero, la lettura dell'allerta attiva fallisce con un errore di rete. */
     private var activeOffline = false
-    // il server crea l'allerta ma la risposta si perde per strada
+    /** Se vero, il server crea l'allerta ma la risposta si perde per strada. */
     private var loseRaiseResponse = false
-    // 2xx con un corpo fuori contratto (un bug): non deve far crashare l'app
+    /** Se vero, il server risponde 201 con un corpo fuori contratto, come farebbe per un bug: l'app non deve crashare. */
     private var raiseMalformed = false
-    // GET /sos/active lento (rete scarsa in montagna), in ms di tempo virtuale
+    /** Ritardo della lettura dell'allerta attiva in millisecondi di tempo virtuale, come con una rete scarsa in montagna. */
     private var activeDelayMs = 0L
-    // il client dell'ultimo controller: un controller nuovo sulla stessa outbox simula un riavvio dell'app
+    /** Client dell'ultimo controller creato: un controller nuovo sulla stessa outbox simula un riavvio dell'app. */
     private var httpClient: HttpClient? = null
 
+    /** JSON di un'allerta dell'utente di prova con l'id e lo stato indicati. */
     private fun alertJson(id: String, status: String = "ACTIVE") =
         """{"id":"$id","hikerId":"$owner","location":{"lat":39.278,"lon":16.452},"status":"$status","createdAt":"2026-10-06T10:00:00Z","locationUpdatedAt":"2026-10-06T10:00:00Z"}"""
 
+    /**
+     * Installa le rotte finte dell'SOS, crea la sessione (autenticata se [login]) e restituisce un SosController
+     * collegato all'outbox in memoria insieme alla sessione.
+     */
     private suspend fun TestScope.controller(login: Boolean = true): Pair<SosController, SessionManager> {
         val json = headersOf(HttpHeaders.ContentType, "application/json")
         backend.extraRoutes = { request, _ ->
@@ -87,7 +109,7 @@ class SosControllerTest {
                     } else if (raiseMalformed) {
                         respond("""{"id":42}""", HttpStatusCode.Created, json)
                     } else {
-                        // stessa chiave o allerta già attiva: 200 con quella; altrimenti 201 con una nuova
+                        // Stessa chiave o allerta già attiva: 200 con quella allerta; altrimenti 201 con un'allerta nuova.
                         val existing = created[key] ?: activeOnServer
                         val id = existing ?: "s${created.size + 1}"
                         created[key ?: id] = id
@@ -106,7 +128,7 @@ class SosControllerTest {
                     val id = path.removePrefix("/api/v1/sos/").removeSuffix("/location")
                     locationPuts += id to (request.body as OutgoingContent.ByteArrayContent).bytes().decodeToString()
                     if (locationOffline) throw IOException("rete assente")
-                    // chiusa dal soccorso: il dominio la rifiuta con 422
+                    // Un'allerta chiusa dal soccorso non accetta più posizioni: il dominio risponde 422.
                     if (activeOnServer != id) with(backend) { problem(HttpStatusCode.UnprocessableEntity, "business-rule") }
                     else respond(alertJson(id, serverStatus), HttpStatusCode.OK, json)
                 }
@@ -127,17 +149,21 @@ class SosControllerTest {
             SosRepository({ client }, TEST_BASE_URL),
             outbox,
             ownerId = { session.currentUserId() },
-            // backgroundScope: i retry senza fine si fermano con il test; il tempo è virtuale
+            // backgroundScope ferma con il test i tentativi senza fine; il tempo è virtuale.
             scope = backgroundScope,
             newKey = { "k${++keys}" },
         )
         return controller to session
     }
 
+    /** Aspetta il primo stato del controller che soddisfa [predicate] e lo restituisce. */
     private suspend fun SosController.awaitState(predicate: (SosState) -> Boolean): SosState = state.first(predicate)
 
-    // ---- Invio ----
 
+    /**
+     * La chiave di idempotenza viene salvata nell'outbox prima della richiesta; la richiesta contiene posizione e
+     * note mediche senza spazi ai lati, e con il 201 l'allerta è attiva e l'outbox è vuota.
+     */
     @Test
     fun `la chiave si salva prima della richiesta e con il 201 il soccorso ha l'allerta`() = runTest {
         val (sos) = controller()
@@ -154,6 +180,7 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /** Note mediche fatte di soli spazi non vengono inviate. */
     @Test
     fun `note mediche vuote non si mandano`() = runTest {
         val (sos) = controller()
@@ -164,6 +191,10 @@ class SosControllerTest {
         assertFalse("medicalNotes\":\"" in posts.single().second)
     }
 
+    /**
+     * Senza rete l'SOS resta in invio e in coda, con il numero di tentativi salvato; quando la rete torna arriva al
+     * server una sola allerta, sempre con la stessa chiave.
+     */
     @Test
     fun `senza rete resta in invio e quando torna arriva una sola allerta`() = runTest {
         val (sos) = controller()
@@ -182,10 +213,14 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /**
+     * Dieci tocchi veloci, mentre la prima richiesta è ancora senza risposta, producono un solo SOS con una sola
+     * chiave di idempotenza.
+     */
     @Test
     fun `dieci tocchi veloci fanno un solo SOS`() = runTest {
         val (sos) = controller()
-        sosOffline = true // la prima richiesta resta senza risposta mentre arrivano gli altri tocchi
+        sosOffline = true
 
         (1..10).map { async { sos.raise(here, null) } }.awaitAll()
         sosOffline = false
@@ -195,10 +230,11 @@ class SosControllerTest {
         assertEquals(1, created.size)
     }
 
+    /** Se esiste già un'allerta attiva (lanciata da un altro dispositivo) il server risponde 200 con quella, ed è un successo. */
     @Test
     fun `un 200 con un'allerta già attiva è un successo`() = runTest {
         val (sos) = controller()
-        activeOnServer = "s9" // lanciata da un altro dispositivo
+        activeOnServer = "s9"
 
         sos.raise(here, null)
         val raised = assertIs<SosState.Raised>(sos.awaitState { it is SosState.Raised })
@@ -206,6 +242,7 @@ class SosControllerTest {
         assertEquals("s9", raised.alert.id)
     }
 
+    /** Un 4xx definitivo (qui 403) toglie l'SOS dalla coda, non viene ripetuto e lo stato mostra l'errore. */
     @Test
     fun `un 4xx definitivo toglie l'SOS dalla coda e lo dice`() = runTest {
         val (sos) = controller()
@@ -219,6 +256,7 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /** Da ospite l'SOS non parte e non viene messo in coda: il server richiede un utente autenticato. */
     @Test
     fun `da ospite non parte nulla`() = runTest {
         val (sos) = controller(login = false)
@@ -230,8 +268,8 @@ class SosControllerTest {
         assertIs<SosState.Idle>(sos.state.value)
     }
 
-    // ---- Riavvio e sessione ----
 
+    /** Dopo un riavvio dell'app l'SOS rimasto in coda riparte con la sua chiave originale. */
     @Test
     fun `dopo un riavvio l'SOS in coda riparte con la sua chiave`() = runTest {
         val (sos) = controller()
@@ -244,6 +282,7 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /** Un SOS in coda che appartiene a un altro utente non parte e resta nell'outbox. */
     @Test
     fun `un SOS in coda di un altro utente non parte`() = runTest {
         val (sos) = controller()
@@ -256,6 +295,7 @@ class SosControllerTest {
         assertEquals(1, outbox.rows.value.size)
     }
 
+    /** All'avvio si rilegge dal server l'allerta attiva, così la schermata mostra l'SOS in corso. */
     @Test
     fun `all'avvio si rilegge l'allerta attiva`() = runTest {
         val (sos) = controller()
@@ -266,6 +306,7 @@ class SosControllerTest {
         assertEquals("s7", assertIs<SosState.Raised>(sos.state.value).alert.id)
     }
 
+    /** Al logout il controller smette di inviare e torna inattivo, ma l'SOS resta nell'outbox. */
     @Test
     fun `al logout si smette di inviare ma l'SOS resta in coda`() = runTest {
         val (sos) = controller()
@@ -279,8 +320,8 @@ class SosControllerTest {
         assertEquals(1, outbox.rows.value.size)
     }
 
-    // ---- Annullamento ----
 
+    /** Annullare un'allerta attiva la chiude sul server e riporta il controller allo stato inattivo. */
     @Test
     fun `annullare un'allerta la chiude sul server`() = runTest {
         val (sos) = controller()
@@ -293,6 +334,7 @@ class SosControllerTest {
         assertIs<SosState.Idle>(sos.state.value)
     }
 
+    /** Se l'annullamento fallisce per la rete l'allerta resta attiva e viene restituito l'errore. */
     @Test
     fun `annullare senza rete lascia l'allerta e restituisce l'errore`() = runTest {
         val (sos) = controller()
@@ -305,6 +347,11 @@ class SosControllerTest {
         assertIs<SosState.Raised>(sos.state.value)
     }
 
+    /**
+     * Annullare un SOS ancora in coda lo toglie e non lo invia più. Resta una verifica sul server, perché la
+     * richiesta potrebbe essere arrivata: quando la verifica conferma che non c'è nessuna allerta, anche la sua riga
+     * sparisce dall'outbox.
+     */
     @Test
     fun `annullare un SOS ancora in coda lo toglie e non lo manda più`() = runTest {
         val (sos) = controller()
@@ -320,11 +367,15 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.values.none { it.kind == ActionKind.SOS })
         assertEquals(before, posts.size)
         assertTrue(created.isEmpty())
-        // la verifica sul server (nessuna allerta) finisce e toglie anche la sua riga
+        // La verifica sul server (che non trova allerte) termina e toglie la sua riga.
         testScheduler.advanceTimeBy(30_000)
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /**
+     * La verifica di un annullamento è salvata nell'outbox: dopo un riavvio riparte, trova l'allerta creata dalla
+     * richiesta la cui risposta si era persa e la chiude, senza mai mostrarla all'utente che aveva annullato.
+     */
     @Test
     fun `la verifica di un annullamento riparte dopo un riavvio e chiude l'allerta senza mostrarla`() = runTest {
         val (sos, session) = controller()
@@ -335,8 +386,8 @@ class SosControllerTest {
         assertTrue(sos.cancel().isSuccess)
         assertEquals(listOf(ActionKind.SOS_CANCEL), outbox.rows.value.values.map { it.kind })
 
-        // app chiusa prima che la rete torni: un controller nuovo sulla stessa outbox
         activeOffline = false
+        // L'app viene chiusa prima che la rete torni: un controller nuovo sulla stessa outbox simula il riavvio.
         val client = httpClient!!
         val restarted = SosController(
             SosRepository({ client }, TEST_BASE_URL),
@@ -352,6 +403,7 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /** Un nuovo SOS toglie la verifica di un annullamento precedente, così l'allerta nuova non viene chiusa per errore. */
     @Test
     fun `un SOS nuovo toglie la verifica di un annullamento precedente`() = runTest {
         val (sos) = controller()
@@ -372,6 +424,10 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /**
+     * Se l'SOS è arrivato al server ma la risposta si è persa, annullarlo chiude anche l'allerta: la verifica in
+     * background la trova e la chiude, così il soccorso non cerca una persona che ha annullato.
+     */
     @Test
     fun `annullare un SOS arrivato al server con la risposta persa chiude anche l'allerta`() = runTest {
         val (sos) = controller()
@@ -383,13 +439,13 @@ class SosControllerTest {
         assertTrue(sos.cancel().isSuccess)
         assertIs<SosState.Idle>(sos.state.value)
 
-        // la verifica in background trova l'allerta e la chiude: il soccorso non cerca chi ha annullato
         testScheduler.advanceTimeBy(30_000)
         assertEquals(listOf(alertId), cancelled)
         assertNull(activeOnServer)
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /** Senza rete la verifica dell'annullamento continua a riprovare e chiude l'allerta quando la rete torna. */
     @Test
     fun `annullare in coda senza rete continua a verificare e chiude quando la rete torna`() = runTest {
         val (sos) = controller()
@@ -409,6 +465,10 @@ class SosControllerTest {
         assertEquals(1, cancelled.size)
     }
 
+    /**
+     * Un SOS non aspetta la lettura lenta dell'allerta attiva fatta all'avvio: passa subito in invio. La risposta di
+     * quella lettura, arrivata dopo, non riporta indietro lo stato.
+     */
     @Test
     fun `un SOS non aspetta il restore lento all'avvio`() = runTest {
         val (sos) = controller()
@@ -422,21 +482,26 @@ class SosControllerTest {
         assertEquals(1, posts.size)
 
         restoring.await()
-        // la risposta del restore (nessuna allerta prima dell'SOS, o quella nuova) non riporta indietro lo stato
+        // La risposta del restore (nessuna allerta prima dell'SOS, oppure quella nuova) non deve far tornare lo stato inattivo.
         assertTrue(sos.state.value is SosState.Raised || sos.state.value is SosState.Sending)
     }
 
+    /**
+     * L'SOS parte anche se la coroutine che l'ha lanciato viene annullata subito dopo il tocco (per esempio perché la
+     * schermata si chiude): l'invio vive nello scope del controller.
+     */
     @Test
     fun `l'SOS parte anche se chi lo lancia viene annullato subito`() = runTest {
         val (sos) = controller()
         val screen = backgroundScope.async { sos.raise(here, null) }
         testScheduler.runCurrent()
-        screen.cancel() // la schermata si chiude subito dopo il tocco
+        screen.cancel()
 
         sos.awaitState { it is SosState.Raised }
         assertEquals(1, created.size)
     }
 
+    /** Una risposta fuori contratto non fa crashare l'app: l'SOS resta in coda e si ritenta finché non arriva una risposta valida. */
     @Test
     fun `una risposta fuori contratto non fa crashare e si ritenta`() = runTest {
         val (sos) = controller()
@@ -450,6 +515,7 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /** Una riga illeggibile nell'outbox non fa crashare il ripristino: viene tolta e lo stato mostra l'errore. */
     @Test
     fun `una riga illeggibile nell'outbox non fa crashare il restore e lo dice`() = runTest {
         val (sos) = controller()
@@ -461,19 +527,26 @@ class SosControllerTest {
         assertTrue(outbox.rows.value.isEmpty())
     }
 
+    /**
+     * Se l'allerta era stata creata ma la risposta e la riga dell'outbox sono andate perse, una push (per esempio
+     * SOS_DISPATCHED) che fa rileggere lo stato porta l'allerta a schermo anche partendo dallo stato inattivo.
+     */
     @Test
     fun `una push dopo una risposta persa e un riavvio porta l'allerta anche da Idle`() = runTest {
         val (sos) = controller()
-        activeOnServer = "s9" // creata prima del riavvio, risposta mai arrivata, riga persa
+        activeOnServer = "s9"
         assertIs<SosState.Idle>(sos.state.value)
 
-        sos.refresh() // push SOS_DISPATCHED
+        sos.refresh()
 
         assertEquals("s9", assertIs<SosState.Raised>(sos.state.value).alert.id)
     }
 
-    // ---- Id dell'utente dal token ----
 
+    /**
+     * Il campo "sub" del payload JWT è l'id dell'utente, usato come proprietario dell'SOS quando il profilo non è
+     * ancora disponibile; un token non leggibile dà null.
+     */
     @OptIn(ExperimentalEncodingApi::class)
     @Test
     fun `il sub del JWT è l'id dell'utente e un token illeggibile dà null`() {
@@ -484,8 +557,8 @@ class SosControllerTest {
         assertNull(jwtSubject("x.%%%.y"))
     }
 
-    // ---- Posizione e stato (M6.2) ----
 
+    /** Restituisce un controller con un SOS già inviato e attivo sul server. */
     private suspend fun TestScope.raised(): SosController {
         val (sos) = controller()
         sos.raise(here, null)
@@ -493,6 +566,7 @@ class SosControllerTest {
         return sos
     }
 
+    /** Una posizione nuova viene inviata all'allerta attiva, e la risposta del server aggiorna lo stato mostrato. */
     @Test
     fun `la posizione nuova va all'allerta attiva e la risposta aggiorna lo stato`() = runTest {
         val sos = raised()
@@ -506,6 +580,7 @@ class SosControllerTest {
         assertEquals(SosAlertResponse.Status.DISPATCHED, assertIs<SosState.Raised>(sos.state.value).alert.status)
     }
 
+    /** Finché l'SOS è in coda non c'è ancora un id di allerta, quindi la posizione non viene inviata. */
     @Test
     fun `senza allerta attiva la posizione non parte`() = runTest {
         val (sos) = controller()
@@ -518,6 +593,7 @@ class SosControllerTest {
         assertTrue(locationPuts.isEmpty(), "in coda non c'è ancora un id")
     }
 
+    /** Se l'invio della posizione fallisce per la rete l'allerta resta com'è. */
     @Test
     fun `posizione senza rete lascia l'allerta com'è`() = runTest {
         val sos = raised()
@@ -528,16 +604,18 @@ class SosControllerTest {
         assertEquals("s1", assertIs<SosState.Raised>(sos.state.value).alert.id)
     }
 
+    /** Se l'operatore ha chiuso l'allerta, il server rifiuta la posizione con 422 e il controller torna inattivo. */
     @Test
     fun `allerta chiusa dal soccorso con il 422 sulla posizione si torna a Idle`() = runTest {
         val sos = raised()
-        activeOnServer = null // risolta dall'operatore
+        activeOnServer = null
 
         sos.updateLocation(here)
 
         assertIs<SosState.Idle>(sos.state.value)
     }
 
+    /** La rilettura periodica dello stato mostra la squadra in arrivo anche senza ricevere una push. */
     @Test
     fun `il refresh porta la squadra in arrivo senza push`() = runTest {
         val sos = raised()
@@ -548,6 +626,10 @@ class SosControllerTest {
         assertEquals(SosAlertResponse.Status.DISPATCHED, assertIs<SosState.Raised>(sos.state.value).alert.status)
     }
 
+    /**
+     * Una rilettura fallita per la rete non cambia nulla, sia con un'allerta attiva sia dallo stato inattivo (in cui
+     * il controller chiede comunque al server se esiste un'allerta).
+     */
     @Test
     fun `refresh senza rete non cambia nulla`() = runTest {
         val sos = raised()
@@ -558,7 +640,7 @@ class SosControllerTest {
 
         activeOffline = false
         assertTrue(sos.cancel().isSuccess)
-        activeOffline = true // da Idle il refresh chiede al server: senza rete lo stato resta com'è
+        activeOffline = true
         sos.refresh()
         assertIs<SosState.Idle>(sos.state.value)
     }

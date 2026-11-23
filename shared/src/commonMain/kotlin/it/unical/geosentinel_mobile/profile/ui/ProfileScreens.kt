@@ -1,3 +1,6 @@
+// Scheda Profilo e schermate collegate. Da loggati mostra la card dell'utente (foto, nome, email, ruolo), le
+// attività, l'account, il tema e i crediti, con uscita e cancellazione in fondo; da ospiti mostra il blocco per
+// accedere o registrarsi. Contiene anche le schermate per cambiare nome e password e il selettore del tema.
 package it.unical.geosentinel_mobile.profile.ui
 
 import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
@@ -177,11 +180,17 @@ import kotlin.math.sin
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 
-// Passi della cancellazione: prima cosa succede, poi la conferma definitiva (doppia conferma, §M2.3)
+// Passi della cancellazione dell'account, che chiede due conferme: nessun dialogo, il dialogo che spiega cosa
+// succede, la conferma definitiva. Sono interi perché si salvano con rememberSaveable.
 private const val DeleteNone = 0
 private const val DeleteExplain = 1
 private const val DeleteConfirm = 2
 
+/**
+ * Scheda Profilo. Lo stato della sessione arriva da fuori ([session]); le azioni sull'account passano da
+ * [ProfileViewModel]. Le funzioni `on...` aprono le altre schermate; [onMyBookings] è null per i ruoli che non vedono
+ * i rifugi, e allora la riga non si mostra.
+ */
 @Composable
 fun ProfileScreen(
     session: SessionState,
@@ -193,7 +202,6 @@ fun ProfileScreen(
     onMfa: () -> Unit,
     onMyHazards: () -> Unit,
     onCredits: () -> Unit,
-    // null per chi non vede i rifugi
     onMyBookings: (() -> Unit)?,
     themeMode: ThemeMode,
     onThemeModeSelected: (ThemeMode) -> Unit,
@@ -202,8 +210,9 @@ fun ProfileScreen(
     val ui by viewModel.state.collectAsStateWithLifecycle()
     var deleteStep by rememberSaveable { mutableIntStateOf(DeleteNone) }
     val profile = (session as? SessionState.LoggedIn)?.profile
-    // Con un SOS in corso uscire ha conseguenze: si chiede prima (in invio: la richiesta smette di partire e si toglie
-    // dal telefono; attivo: l'allerta resta ma la posizione non si aggiorna più)
+    // Con un SOS in corso il logout ha conseguenze, quindi si chiede conferma. Se l'SOS è ancora in invio, la
+    // richiesta in coda viene cancellata dal telefono e non partirà più; se è già attivo, l'allerta resta aperta
+    // sul server ma la posizione smette di aggiornarsi.
     val sosState by koinInject<SosController>().state.collectAsStateWithLifecycle()
     var confirmLogout by rememberSaveable { mutableStateOf(false) }
     val onLogout = {
@@ -219,14 +228,15 @@ fun ProfileScreen(
             .verticalScroll(scroll),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // Redesign "Luce di quota": il cielo dell'ora con il titolo, poi sul foglio la card di chi sei (foto, nome, ruolo,
-        // email) che si appoggia sulle creste. Da ospite al suo posto il blocco per entrare.
+        // In alto la testata con il cielo dell'ora e il titolo; sotto, sul foglio, la card dell'utente (foto, nome,
+        // email, ruolo). Da ospite al suo posto c'è il blocco per accedere.
         PageHeader(title = stringResource(Res.string.nav_profile))
-        // la prima card si appoggia sulle creste (Figma): tutto il contenuto sale di 36 dp sul foglio
+        // Tutto il contenuto sale di 36 dp, così la prima card si appoggia sulle creste della testata.
         Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp).offset(y = (-36).dp)) {
             if (session is SessionState.LoggedIn) {
                 val encoder = koinInject<ImageEncoder>()
-                // quadrata da 512 px: il cerchio la mostra a 80 dp, anche sugli schermi più densi
+                // La foto scelta si ritaglia quadrata e si riduce a 512 px di lato: basta per il cerchio da 80 dp
+                // anche sugli schermi più densi.
                 val pickPhoto = rememberPhotoPicker { picked ->
                     viewModel.uploadAvatar { encoder.toJpeg(picked, maxSidePx = AvatarSidePx, squareCrop = true) }
                 }
@@ -240,7 +250,7 @@ fun ProfileScreen(
                                 style = MaterialTheme.typography.titleLarge,
                                 modifier = Modifier.semantics { heading() },
                             )
-                            // senza profilo (avvio offline) niente ruolo né email
+                            // Senza profilo (app avviata offline) non si conoscono ruolo ed email: si mostrano solo se c'è.
                             if (profile != null) {
                                 Text(
                                     profile.email,
@@ -255,7 +265,8 @@ fun ProfileScreen(
                         }
                     }
                 }
-                // Gruppi nell'ordine d'uso: quello che hai fatto, chi sei, come appare l'app; uscire e cancellarsi in fondo
+                // Gruppi nell'ordine d'uso: le proprie attività, l'account, l'aspetto dell'app; uscita e cancellazione
+                // stanno in fondo.
                 GroupHeader(stringResource(Res.string.profile_activity_section))
                 GroupCard {
                     GroupRow(stringResource(Res.string.my_hazards_title), onClick = onMyHazards, icon = AppIcons.Alert)
@@ -266,7 +277,7 @@ fun ProfileScreen(
                 }
                 GroupHeader(stringResource(Res.string.profile_account_section))
                 GroupCard {
-                    // Senza profilo (avvio offline) il nome non si può modificare: non sappiamo quale sia
+                    // Senza profilo (app avviata offline) il nome non è noto, quindi non si può modificare.
                     GroupRow(
                         title = stringResource(Res.string.profile_name),
                         value = profile?.displayName,
@@ -275,14 +286,15 @@ fun ProfileScreen(
                         icon = AppIcons.User,
                     )
                     GroupDivider(GroupIconIndent)
-                    // Account aperto con Google: non c'è una password da cambiare (il server darebbe 422), si imposta via email
+                    // Un account creato con Google non ha una password da cambiare (il server risponderebbe 422): la
+                    // riga diventa "Imposta una password" e usa il flusso con il codice via email.
                     if (profile?.hasPassword == false) {
                         GroupRow(stringResource(Res.string.profile_set_password), onClick = { onSetPassword(profile.email) }, icon = AppIcons.Lock)
                     } else {
                         GroupRow(stringResource(Res.string.profile_change_password), onClick = onChangePassword, icon = AppIcons.Lock)
                     }
                     GroupDivider(GroupIconIndent)
-                    // senza profilo non si sa se è attiva: la riga aspetta
+                    // Senza profilo non si sa se la verifica è attiva: la riga resta disabilitata.
                     GroupRow(
                         title = stringResource(Res.string.profile_mfa),
                         value = profile?.let { stringResource(if (it.mfaEnabled) Res.string.profile_mfa_on else Res.string.profile_mfa_off) },
@@ -292,8 +304,8 @@ fun ProfileScreen(
                     )
                 }
             } else {
-                // Ospite (o sessione scaduta): un solo blocco con le due strade per entrare, una sopra l'altra, e la
-                // registrazione come alternativa sotto. Come l'accesso all'account nelle Impostazioni di iOS.
+                // Ospite o sessione scaduta: un solo blocco con i due modi per accedere, uno sopra l'altro, e la
+                // registrazione come alternativa sotto, come l'accesso all'account nelle Impostazioni di iOS.
                 SignInCard(expired = session is SessionState.Expired, onLogin = onLogin, onRegister = onRegister)
             }
 
@@ -314,8 +326,9 @@ fun ProfileScreen(
             }
 
             if (session is SessionState.LoggedIn) {
-                // Uscire e cancellarsi: in fondo, insieme, come nelle impostazioni di sistema. "Esci" è un'uscita, non un
-                // errore (verde); "Elimina account" nel colore degli errori (mai il rosso dell'SOS) e con due conferme
+                // Uscita e cancellazione stanno insieme in fondo, come nelle impostazioni di sistema. "Esci" usa il colore
+                // primario perché non è un errore; "Elimina account" usa il colore degli errori (mai il rosso, riservato
+                // all'SOS) e chiede due conferme.
                 Spacer(Modifier.size(24.dp))
                 GroupCard {
                     GroupRow(stringResource(Res.string.profile_logout), onClick = onLogout, color = MaterialTheme.colorScheme.primary, chevron = false)
@@ -328,18 +341,19 @@ fun ProfileScreen(
                         chevron = false,
                     )
                 }
-                // es. personale: "si cancellano tramite l'amministratore"
+                // Errore delle azioni sull'account, per esempio il rifiuto della cancellazione per un account del
+                // personale, che si cancella solo tramite l'amministratore.
                 ui.error?.let {
                     Spacer(Modifier.size(12.dp))
                     FormErrorBanner(it.resolve())
                 }
             }
 
-            // il contenuto scorre sotto la barra a isola
+            // Spazio in fondo perché l'ultimo contenuto non resti nascosto sotto la barra di navigazione a isola.
             Spacer(Modifier.size(32.dp + pageBottomInset()))
         }
     }
-    // scorrendo, la barra di stato prende il colore del cielo: il contenuto non le passa sotto
+    // Quando la pagina scorre, la barra di stato si copre con il colore del cielo, così il testo non le passa sotto.
     SkyStatusBarScrim(show = scroll.value > 120)
     }
 
@@ -386,8 +400,11 @@ fun ProfileScreen(
     }
 }
 
-// Accesso dal Profilo: sagoma, titolo, cosa si guadagna, poi "Accedi con email" e "Continua con Google" (quest'ultimo
-// solo se configurato) della stessa larghezza e altezza, e "Registrati" come link sotto
+/**
+ * Blocco di accesso del Profilo da ospite: sagoma, titolo, cosa si ottiene accedendo, poi "Accedi con email" e
+ * "Continua con Google" (solo se configurato) della stessa misura, e "Registrati" come link sotto. Con [expired] il
+ * testo spiega che la sessione è scaduta.
+ */
 @Composable
 private fun SignInCard(expired: Boolean, onLogin: () -> Unit, onRegister: () -> Unit) {
     GroupCard(Modifier.padding(top = 8.dp)) {
@@ -419,8 +436,9 @@ private fun SignInCard(expired: Boolean, onLogin: () -> Unit, onRegister: () -> 
     }
 }
 
-// ---- Nome visualizzato ---------------------------------------------------------------------------------------
+// Nome visualizzato.
 
+/** Form per cambiare il nome visualizzato; [onSaved] viene chiamata dopo il salvataggio. */
 @Composable
 fun EditNameScreen(onBack: () -> Unit, onSaved: () -> Unit) {
     val viewModel = koinViewModel<EditNameViewModel>()
@@ -453,8 +471,12 @@ fun EditNameScreen(onBack: () -> Unit, onSaved: () -> Unit) {
     }
 }
 
-// ---- Cambio password -----------------------------------------------------------------------------------------
+// Cambio password.
 
+/**
+ * Form per cambiare la password: password attuale e nuova, più il codice della verifica in due passaggi se l'account
+ * l'ha attiva. [onChanged] viene chiamata a cambio riuscito.
+ */
 @Composable
 fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
     val viewModel = koinViewModel<ChangePasswordViewModel>()
@@ -507,16 +529,19 @@ fun ChangePasswordScreen(onBack: () -> Unit, onChanged: () -> Unit) {
     }
 }
 
-// ---- Mattoncini ----
+// Componenti della pagina.
 
+/** Lato in pixel della foto profilo caricata sul server, dopo il ritaglio quadrato. */
 private const val AvatarSidePx = 512
-// La foto in testata al Profilo, grande come quella dell'ID Apple
+/** Diametro della foto profilo in testata, simile a quello dell'account nelle Impostazioni di iOS. */
 private val AvatarSize = 80.dp
 
 /**
- * La foto profilo (M11), o l'iniziale se non c'è. Un tocco apre il menu: scegli una foto, e rimuovila se c'è. Durante
- * il caricamento un anello attorno. L'URL firmato vale 5 minuti; la foto resta solo nella cache in memoria (chiave =
- * id, che cambia a ogni foto nuova): su disco no, è un dato personale che al logout resterebbe lì.
+ * Foto profilo dell'utente, oppure l'iniziale del nome se non c'è. Un tocco apre un menu con "Scegli una foto" e,
+ * se una foto c'è, "Rimuovi". Durante il caricamento compare un anello di avanzamento attorno.
+ *
+ * La foto la scarica [AvatarPhoto] e resta solo nella cache in memoria, mai su disco: è un dato personale che
+ * altrimenti resterebbe sul telefono anche dopo il logout.
  */
 @Composable
 private fun ProfileAvatar(profile: UserProfile?, busy: Boolean, onPick: () -> Unit, onRemove: () -> Unit) {
@@ -551,7 +576,10 @@ private fun ProfileAvatar(profile: UserProfile?, busy: Boolean, onPick: () -> Un
 }
 
 
-// Iniziale del nome su un tondo color pino; per l'ospite una sagoma. Decorativo: il nome è scritto accanto.
+/**
+ * Tondo con l'iniziale del nome nel colore terziario del tema; senza nome (ospite) mostra una sagoma. È decorativo
+ * e non ha semantica per l'accessibilità, perché il nome è già scritto accanto.
+ */
 @Composable
 private fun Monogram(name: String?, modifier: Modifier = Modifier, size: Dp = AvatarSize) {
     val initial = name?.trim()?.firstOrNull()?.uppercaseChar()
@@ -567,11 +595,15 @@ private fun Monogram(name: String?, modifier: Modifier = Modifier, size: Dp = Av
     }
 }
 
-// ---- Selettore del tema: capsula con tre simboli e un cursore che scorre ----
+// Selettore del tema.
 
-// 48 dp per segmento: è il bersaglio minimo; il cursore visibile è un cerchio da 40 al centro
+/** Lato di ogni segmento del selettore: 48 dp, il bersaglio minimo al tocco. Il cursore visibile è un cerchio da 40 dp al centro. */
 private val SegmentSize = 48.dp
 
+/**
+ * Selettore del tema a capsula con tre simboli (automatico, chiaro, scuro) e un cursore che scorre con una molla
+ * verso l'opzione scelta. Per l'accessibilità è un gruppo di pulsanti radio, ognuno con la sua etichetta.
+ */
 @Composable
 private fun ThemeSwitch(current: ThemeMode, onSelected: (ThemeMode) -> Unit) {
     val options = ThemeMode.entries
@@ -616,7 +648,11 @@ private fun ThemeSwitch(current: ThemeMode, onSelected: (ThemeMode) -> Unit) {
     }
 }
 
-// Simboli disegnati a mano: auto (cerchio mezzo pieno), sole, luna. Le icone di base non li hanno.
+/**
+ * Disegna il simbolo di un tema: un cerchio mezzo pieno per l'automatico, un sole per il chiaro, una luna per lo
+ * scuro. Sono disegnati su Canvas perché il set di icone usato non li contiene. La luna è un cerchio da cui si
+ * sottrae un secondo cerchio spostato.
+ */
 @Composable
 private fun ThemeGlyph(mode: ThemeMode, tint: Color, modifier: Modifier) {
     Canvas(modifier.clearAndSetSemantics { }) {
@@ -652,6 +688,7 @@ private fun ThemeGlyph(mode: ThemeMode, tint: Color, modifier: Modifier) {
     }
 }
 
+/** Nome del ruolo da mostrare all'utente. */
 private fun UserRole.label(): StringResource = when (this) {
     UserRole.GUEST -> Res.string.role_guest
     UserRole.HIKER -> Res.string.role_hiker
@@ -660,6 +697,7 @@ private fun UserRole.label(): StringResource = when (this) {
     UserRole.ADMIN -> Res.string.role_admin
 }
 
+/** Etichetta del tema, letta anche dal lettore di schermo. */
 private fun ThemeMode.label(): StringResource = when (this) {
     ThemeMode.SYSTEM -> Res.string.theme_system
     ThemeMode.LIGHT -> Res.string.theme_light

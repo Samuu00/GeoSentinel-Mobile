@@ -1,3 +1,6 @@
+// AppDelegate dell'app iOS: avvia il codice Kotlin condiviso, configura Firebase Cloud Messaging sopra APNs per le
+// notifiche push e prepara il login con Google. GoogleService-Info.plist non è nel repository: senza, l'app parte
+// lo stesso e le push restano spente, come su Android senza google-services.json.
 import UIKit
 import UserNotifications
 import FirebaseCore
@@ -5,22 +8,25 @@ import FirebaseMessaging
 import GoogleSignIn
 import Shared
 
-// Push (M7.1): Firebase Cloud Messaging sopra APNs. GoogleService-Info.plist non è nel repo: senza, l'app parte lo stesso
-// e le push restano spente (come su Android senza google-services.json).
+/// Riceve gli eventi di sistema di UIKit (avvio, token APNs, notifiche) e li inoltra ai bridge Kotlin
+/// PushBridge e GoogleSignInBridge.
 class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDelegate, MessagingDelegate {
 
+    /// Avvio dell'app: inizializza il codice condiviso, imposta il delegate delle notifiche, prepara il login con
+    /// Google e, se c'è la configurazione di Firebase, avvia FCM e la registrazione ad APNs.
     func application(
         _ application: UIApplication,
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
-        // Koin prima di tutto: il tocco su una notifica ad app chiusa arriva prima che la UI sia pronta
+        // Koin si avvia prima di tutto: il tocco su una notifica ad app chiusa arriva prima che l'interfaccia sia pronta.
         MainViewControllerKt.startShared()
         UNUserNotificationCenter.current().delegate = self
         startGoogleSignIn()
         guard Bundle.main.url(forResource: "GoogleService-Info", withExtension: "plist") != nil else { return true }
         FirebaseApp.configure()
         Messaging.messaging().delegate = self
-        // A fine sessione il token si invalida (le push dell'utente uscito non arrivano più qui) e se ne chiede uno nuovo
+        // A fine sessione il token viene invalidato, così le push dell'utente uscito non arrivano più a questo telefono,
+        // e se ne chiede uno nuovo.
         PushBridge.shared.setTokenRevoker {
             Messaging.messaging().deleteToken { _ in
                 Messaging.messaging().token { token, _ in
@@ -28,13 +34,13 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
                 }
             }
         }
-        // Il permesso lo chiede l'app quando serve (RequestNotificationPermission): registrarsi ad APNs non lo richiede
+        // Il permesso delle notifiche lo chiede l'app quando serve: registrarsi ad APNs non lo richiede.
         application.registerForRemoteNotifications()
         return true
     }
 
-    // Login con Google (ADR-0024 del backend): l'SDK legge GIDClientID dall'Info.plist e restituisce l'ID token, che
-    // Kotlin manda a POST /auth/google. Senza client ID il launcher non c'è e il pulsante non compare.
+    /// Prepara il login con Google. L'SDK legge GIDClientID dall'Info.plist e restituisce l'ID token, che il codice
+    /// Kotlin invia a POST /auth/google. Senza client ID il launcher non viene registrato e il pulsante non compare.
     private func startGoogleSignIn() {
         guard let clientId = Bundle.main.object(forInfoDictionaryKey: "GIDClientID") as? String, !clientId.isEmpty else { return }
         GoogleSignInBridge.shared.setLauncher { callback in
@@ -56,7 +62,8 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         }
     }
 
-    // Il foglio di Google si presenta sopra quello che è già aperto (es. un dialogo)
+    /// Restituisce il view controller in cima alla finestra principale, così il foglio di Google si presenta sopra
+    /// quello che è già aperto (per esempio un dialogo).
     private static func topViewController() -> UIViewController? {
         let window = UIApplication.shared.connectedScenes
             .compactMap { ($0 as? UIWindowScene)?.keyWindow }
@@ -66,19 +73,20 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         return top
     }
 
+    /// Passa a Firebase il token APNs del dispositivo, necessario per ricevere le push FCM.
     func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         Messaging.messaging().apnsToken = deviceToken
     }
 
-    // Token FCM, a ogni avvio e quando cambia: lo registra App da loggati
+    /// Riceve il token FCM a ogni avvio e quando cambia; l'app lo registra sul backend quando l'utente è autenticato.
     func messaging(_ messaging: Messaging, didReceiveRegistrationToken fcmToken: String?) {
         guard let token = fcmToken else { return }
         PushBridge.shared.onNewToken(token: token)
     }
 
-    // Push con l'app in primo piano: lo stato dell'SOS si rilegge subito e la notifica si mostra lo stesso
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
+        /// Push ricevuta con l'app in primo piano: lo stato dell'SOS si rilegge subito e la notifica viene mostrata comunque.
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
@@ -86,9 +94,9 @@ class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCenterDele
         completionHandler([.banner, .list, .sound])
     }
 
-    // Tocco sulla notifica, anche ad app chiusa: App apre l'allerta
     func userNotificationCenter(
         _ center: UNUserNotificationCenter,
+        /// Tocco sulla notifica, anche ad app chiusa: l'app apre l'allerta indicata.
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {

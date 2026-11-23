@@ -1,3 +1,5 @@
+// Coda delle segnalazioni di pericolo per il gestore del parco, sia di un singolo sentiero sia di tutto il parco.
+// Contiene anche piccoli componenti riusati dalle altre schermate del personale (messaggi, avvisi, date).
 package it.unical.geosentinel_mobile.staff.ui
 
 import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
@@ -84,13 +86,15 @@ import it.unical.geosentinel_mobile.core.ui.AppIcons
 import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
 import androidx.compose.foundation.lazy.rememberLazyListState
 
+/** Forma delle card delle schermate del personale. */
 internal val CardShape = RoundedCornerShape(20.dp)
 
 /**
- * Coda delle segnalazioni per il gestore. Con [trailId] quelle di un sentiero ("spinta", con [onBack]): le segnalazioni in
- * verifica si verificano o si respingono, quelle confermate si risolvono. Con [trailId] null è la scheda Gestione: le
- * segnalazioni da verificare di tutto il parco, ognuna con il suo sentiero ([onOpenTrail]) o le coordinate. Le
- * transizioni non valide le decide il server: un 409 o 422 si mostra e la lista si rilegge.
+ * Coda delle segnalazioni per il gestore. Con [trailId] mostra quelle di un sentiero, come schermata aperta sopra le
+ * altre e con [onBack]: le segnalazioni in attesa si verificano o si respingono, quelle verificate si risolvono. Con
+ * [trailId] null è il contenuto della scheda Gestione: le segnalazioni da verificare di tutto il parco, ognuna con il
+ * suo sentiero ([onOpenTrail]) o le coordinate. Le transizioni non valide le decide il server: un 409 o un 422 si
+ * mostra e la lista si rilegge.
  */
 @Composable
 fun HazardQueueScreen(
@@ -122,7 +126,7 @@ fun HazardQueueScreen(
                 PageHeader(
                     title = stringResource(if (pending) Res.string.staff_pending_title else Res.string.staff_queue_title),
                     intro = stringResource(if (pending) Res.string.staff_pending_intro else Res.string.staff_queue_intro),
-                    // nella scheda Gestione: Segnalazioni | Ticket sotto il titolo
+                    // Nella scheda Gestione, sotto il titolo, il selettore tra segnalazioni e ticket.
                     below = tabs,
                     hasBack = onBack != null,
                 )
@@ -147,10 +151,10 @@ fun HazardQueueScreen(
                     QueueRow(
                         hazard = hazard,
                         busy = state.busyHazardId == hazard.id,
-                        // una sola azione alla volta: con una in corso le altre righe si disattivano
+                        // Una sola azione alla volta: mentre una è in corso le altre righe si disattivano.
                         enabled = state.busyHazardId == null,
                         onChange = { status -> viewModel.change(hazard, status) },
-                        // nella coda del parco: dove si trova (nella coda di un sentiero lo si sa già)
+                        // Nella coda del parco si indica dove si trova la segnalazione; in quella di un sentiero è già noto.
                         onOpenTrail = if (trailId == null) onOpenTrail else null,
                         showPlace = trailId == null,
                     )
@@ -162,8 +166,10 @@ fun HazardQueueScreen(
     }
 }
 
-// Una segnalazione: tipo e stato, gravità e data, la descrizione. Le azioni dipendono dallo stato; il rosso non compare
-// mai qui (solo per CRITICAL nell'icona, come nelle altre liste)
+/**
+ * Riga di una segnalazione: tipo e stato, gravità e data, descrizione, foto e posizione. Le azioni dipendono dallo
+ * stato. Il rosso compare solo nell'icona dei pericoli di gravità `CRITICAL`, come nelle altre liste.
+ */
 @Composable
 private fun QueueRow(
     hazard: HazardResponse,
@@ -185,7 +191,7 @@ private fun QueueRow(
             .padding(16.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            // decorativa: tipo e gravità sono scritti accanto
+            // Icona decorativa: tipo e gravità sono scritti accanto.
             Icon(AppIcons.Alert, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
             Spacer(Modifier.width(10.dp))
             Text(
@@ -205,7 +211,7 @@ private fun QueueRow(
         hazard.description?.takeIf { it.isNotBlank() }?.let {
             Text(it, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 6.dp))
         }
-        // le foto sono la prova per verificare senza andare sul posto
+        // Le foto sono la prova che permette di verificare la segnalazione senza andare sul posto.
         HazardPhotoStrip(hazard.id, Modifier.padding(top = 10.dp))
         if (showPlace) {
             val trailId = hazard.trailId
@@ -218,7 +224,8 @@ private fun QueueRow(
                     Text(stringResource(Res.string.poi_open_trail), fontWeight = FontWeight.SemiBold)
                 }
             } else {
-                // una segnalazione dalla mappa: le coordinate (5 decimali, circa un metro) per ritrovarla
+                // Segnalazione fatta dalla mappa, senza sentiero: si mostrano le coordinate con 5 decimali (circa un
+                // metro di precisione) per ritrovarla.
                 Text(
                     stringResource(Res.string.staff_queue_off_trail, hazard.location.lat.decimals5(), hazard.location.lon.decimals5()),
                     style = MaterialTheme.typography.bodyMedium,
@@ -227,7 +234,7 @@ private fun QueueRow(
                 )
             }
         }
-        // Solo SUBMITTED (verifica o respingi) e VERIFIED (risolvi). Le altre non hanno azioni.
+        // Solo SUBMITTED (verifica o respingi) e VERIFIED (risolvi) hanno azioni; gli altri stati no.
         if (hazard.status == HazardResponse.Status.SUBMITTED) {
             Row(Modifier.fillMaxWidth().padding(top = 12.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 PrimaryPillButton(
@@ -240,7 +247,7 @@ private fun QueueRow(
                 OutlinedButton(
                     onClick = { onChange(UpdateHazardStatusRequest.Status.REJECTED) },
                     enabled = enabled,
-                    // alta come la capsula accanto (56 dp), così le due azioni si leggono come una coppia
+                    // Alta come la capsula accanto (56 dp), così le due azioni si leggono come una coppia.
                     modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                 ) {
                     Text(stringResource(Res.string.staff_queue_reject))
@@ -260,7 +267,7 @@ private fun QueueRow(
     }
 }
 
-// Lo stato è sempre scritto; il colore resta neutro (il rosso è riservato alle emergenze)
+/** Capsula con lo stato della segnalazione, sempre scritto a parole e in colore neutro: il rosso è riservato alle emergenze. */
 @Composable
 private fun StatusChip(status: HazardResponse.Status) {
     Text(
@@ -271,6 +278,7 @@ private fun StatusChip(status: HazardResponse.Status) {
     )
 }
 
+/** Indicatore di caricamento centrato. */
 @Composable
 internal fun CenteredProgress() {
     Box(Modifier.fillMaxWidth().padding(vertical = 48.dp), contentAlignment = Alignment.Center) {
@@ -278,7 +286,10 @@ internal fun CenteredProgress() {
     }
 }
 
-// Errore dell'azione (409 di un collega, 422 di una transizione non permessa): sopra la lista, letto dagli screen reader
+/**
+ * Errore di un'azione, per esempio un 409 perché un collega è arrivato prima o un 422 per una transizione non
+ * permessa. Sta sopra la lista ed è una regione "live", letta dagli screen reader.
+ */
 @Composable
 internal fun Notice(message: String) {
     Text(
@@ -293,7 +304,7 @@ internal fun Notice(message: String) {
     )
 }
 
-// Stato vuoto o d'errore: testo centrato e una sola azione
+/** Messaggio per lo stato vuoto o d'errore: testo centrato, titolo facoltativo e una sola azione. */
 @Composable
 internal fun Message(text: String, title: String? = null, isError: Boolean = false, action: @Composable () -> Unit = {}) {
     Column(
@@ -316,9 +327,10 @@ internal fun Message(text: String, title: String? = null, isError: Boolean = fal
     }
 }
 
-// "05/10/2026, 13:36" nell'ora del telefono (come in MyHazardsScreen)
+/** Data e ora nel formato gg/mm/aaaa, hh:mm, nel fuso orario del telefono (come in "Le mie segnalazioni"). */
 internal fun formatDate(instant: Instant): String {
     val local = instant.toLocalDateTime(TimeZone.currentSystemDefault())
+    // Scrive il numero su due cifre, con lo zero davanti se serve.
     fun Int.two() = toString().padStart(2, '0')
     return "${local.day.two()}/${local.month.number.two()}/${local.year}, ${local.hour.two()}:${local.minute.two()}"
 }

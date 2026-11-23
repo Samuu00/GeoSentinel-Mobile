@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Colori usati dall'app Android prima che parta Compose. -->
 <resources>
-    <!-- Lo sfondo dell'app (StoneLight / NightForestDark in core/ui/theme/Color.kt): se cambia lì, va cambiato qui.
-         Segue il tema del sistema: la scelta Chiaro/Scuro del Profilo si conosce solo dopo l'avvio -->
+    <!-- Sfondo della finestra all'avvio, uguale allo sfondo dell'app definito in core/ui/theme/Color.kt (tema
+         chiaro): se cambia lì, va cambiato anche qui. Segue il tema del sistema, perché la scelta Chiaro/Scuro fatta
+         nel Profilo si conosce solo dopo l'avvio. -->
     <color name="start_background">#EDF0E9</color>
 </resources>

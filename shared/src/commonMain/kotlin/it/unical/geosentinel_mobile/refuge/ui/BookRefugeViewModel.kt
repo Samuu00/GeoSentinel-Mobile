@@ -1,3 +1,5 @@
+// ViewModel del foglio "Prenota" di un rifugio: calendario con i posti liberi per notte, scelta di arrivo,
+// partenza e numero di persone, invio della prenotazione tramite l'outbox.
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.lifecycle.ViewModel
@@ -26,59 +28,75 @@ import kotlinx.datetime.plus
 import kotlinx.datetime.todayIn
 import kotlin.time.Clock
 
-// Le notti di una prenotazione: il server ne accetta al massimo 14 (come il calendario del dettaglio)
+/** Numero massimo di notti di una prenotazione: il server ne accetta al massimo 14, come il calendario del dettaglio. */
 const val MAX_BOOKING_NIGHTS = AVAILABILITY_NIGHTS
 
-// Le persone di una prenotazione: il contratto (CreateBookingRequest.guests) ne accetta al massimo 20
+/** Numero massimo di persone in una prenotazione, secondo il contratto della richiesta di prenotazione. */
 const val MAX_BOOKING_GUESTS = 20
 
-// Una pagina del calendario del foglio "Prenota": due settimane, da lunedì a domenica
+/** Giorni di una pagina del calendario del foglio "Prenota": due settimane, da lunedì a domenica. */
 const val CALENDAR_PAGE_DAYS = 14
 
-/** Com'è finito l'invio: il foglio passa alla conferma. */
+/**
+ * Esito dell'invio che fa passare il foglio alla conferma: BOOKED se la prenotazione è stata creata, QUEUED se è
+ * rimasta in coda e partirà da sola più tardi.
+ */
 enum class BookingDone { BOOKED, QUEUED }
 
+/** Stato del foglio "Prenota": soggiorno scelto, calendario caricato ed esito dell'invio. */
 data class BookRefugeUiState(
     val arrival: LocalDate,
     val nights: Int = 1,
     val guests: Int = 1,
-    // i posti del rifugio, al massimo MAX_BOOKING_GUESTS
+    /** Posti del rifugio, limitati a [MAX_BOOKING_GUESTS]. */
     val maxGuests: Int = 1,
-    // calendario: il lunedì della pagina mostrata e i posti liberi delle notti già lette (tutte le pagine viste)
+    /** Lunedì della pagina del calendario mostrata. */
     val pageStart: LocalDate = arrival,
+    /** Posti liberi delle notti già lette dal server, accumulati su tutte le pagine viste. */
     val freeBeds: Map<LocalDate, Int> = emptyMap(),
     val loadingPage: Boolean = false,
     val pageError: UiMessage? = null,
-    // dopo l'arrivo il tocco successivo su un giorno più avanti sceglie la partenza
+    /** Vero dopo aver scelto l'arrivo: il prossimo tocco su un giorno successivo sceglie la partenza. */
     val pickingDeparture: Boolean = false,
     val submitting: Boolean = false,
     val done: BookingDone? = null,
     val error: UiMessage? = null,
 ) {
+    /** Giorno di partenza, ricavato da arrivo e numero di notti. */
     val departure: LocalDate get() = arrival.plus(DatePeriod(days = nights))
 
-    /** Si può dormire qui la notte di [date] con [guests] persone? Una notte non ancora letta si lascia scegliere (decide il server). */
+    /**
+     * Vero se nella notte di [date] ci sono posti per [guests] persone. Una notte non ancora letta dal server si
+     * lascia scegliere: in quel caso decide il server all'invio.
+     */
     fun nightFits(date: LocalDate, guests: Int = this.guests): Boolean = freeBeds[date]?.let { it >= guests } ?: true
 
-    /** La notte del soggiorno con meno posti, se si conosce. */
+    /** Notte del soggiorno con meno posti liberi, tra quelle di cui si conosce la disponibilità. */
     val tightestNight: NightAvailability?
         get() = (0 until nights).map { arrival.plus(DatePeriod(days = it)) }
             .mapNotNull { date -> freeBeds[date]?.let { NightAvailability(date, it) } }
             .minByOrNull { it.freeBeds }
 
-    /** Quante persone al massimo per le notti scelte: i posti del rifugio o, se meno, quelli della notte più piena. */
+    /** Persone al massimo per le notti scelte: i posti del rifugio o, se sono meno, quelli della notte più piena. */
     val guestsCap: Int get() = minOf(maxGuests, tightestNight?.freeBeds ?: maxGuests).coerceAtLeast(1)
 
-    // niente date nei log
+    // toString scritto a mano: le date del soggiorno non devono finire nei log.
     override fun toString() = "BookRefugeUiState(nights=$nights, guests=$guests, submitting=$submitting, done=$done, error=${error != null})"
 }
 
 /**
- * Foglio "Prenota" (M5.2, rifatto con il redesign 11/2026): calendario a due settimane con i posti liberi di ogni notte,
- * arrivo e partenza con due tocchi, persone (1–posti, al massimo 20), poi la conferma nello stesso foglio. L'invio passa
- * dall'outbox ([BookingRepository.book]): senza risposta la prenotazione resta "in invio" e parte da sola più tardi.
- * [ownerId]: l'id dell'utente loggato (dal profilo o, senza rete, dal token; null da ospite).
- * [loadNights]: i posti liberi di `nights` notti da `from` (di solito `RefugeRepository.availability`).
+ * ViewModel del foglio "Prenota". Il calendario mostra due settimane con i posti liberi di ogni notte; arrivo e
+ * partenza si scelgono con due tocchi, poi il numero di persone (da 1 ai posti disponibili, al massimo 20) e infine
+ * la conferma nello stesso foglio.
+ *
+ * L'invio passa dall'outbox ([BookingRepository.book]): se non arriva una risposta la prenotazione resta "in invio"
+ * e parte da sola più tardi.
+ *
+ * @param capacity posti del rifugio.
+ * @param ownerId restituisce l'id dell'utente loggato, preso dal profilo o, senza rete, dal token; null da ospite.
+ * @param today giorno corrente del telefono, sostituibile nei test.
+ * @param loadNights restituisce i posti liberi di `nights` notti a partire da `from` (di solito
+ * `RefugeRepository.availability`).
  */
 class BookRefugeViewModel(
     private val refugeId: String,
@@ -89,18 +107,21 @@ class BookRefugeViewModel(
     private val loadNights: suspend (from: LocalDate, nights: Int) -> Result<List<NightAvailability>> = { _, _ -> Result.success(emptyList()) },
 ) : ViewModel() {
 
+    /** Posti del rifugio limitati a [MAX_BOOKING_GUESTS]. */
     val maxGuests: Int = capacity.coerceIn(1, MAX_BOOKING_GUESTS)
 
     private val _state = MutableStateFlow(BookRefugeUiState(arrival = today(), maxGuests = maxGuests, pageStart = mondayOf(today())))
     val state: StateFlow<BookRefugeUiState> = _state.asStateFlow()
 
     private var pageJob: Job? = null
-    // aperto da "Prenota" senza un giorno: l'arrivo diventa la prima notte libera appena si leggono i posti
+    // Vero se il foglio è stato aperto da "Prenota" senza un giorno: appena si leggono i posti, l'arrivo diventa
+    // la prima notte libera.
     private var pickFirstFree = false
 
     /**
-     * Apre il foglio: con [arrival] (un giorno toccato nella pagina del rifugio) l'arrivo è quello e il tocco dopo sceglie
-     * la partenza; senza, la prima notte libera. Toglie la conferma di una prenotazione precedente.
+     * Prepara il foglio all'apertura. Con [arrival] (un giorno toccato nella pagina del rifugio) l'arrivo è quel giorno
+     * e il tocco successivo sceglie la partenza; senza, l'arrivo diventa la prima notte libera. Toglie l'eventuale
+     * conferma di una prenotazione precedente.
      */
     fun open(arrival: LocalDate?) {
         if (_state.value.submitting) return
@@ -112,7 +133,11 @@ class BookRefugeViewModel(
         loadPage(mondayOf(start))
     }
 
-    /** Un giorno del calendario: arrivo, poi partenza; un giorno prima dell'arrivo (o un terzo tocco) ricomincia. */
+    /**
+     * Gestisce il tocco su un giorno del calendario: il primo tocco sceglie l'arrivo, il secondo la partenza. Un
+     * giorno prima dell'arrivo, o un terzo tocco, ricomincia dall'arrivo. La partenza si accetta solo se il soggiorno
+     * non supera [MAX_BOOKING_NIGHTS] e tutte le notti hanno posto; i giorni passati si ignorano.
+     */
     fun onDayTapped(date: LocalDate) {
         if (date < today()) return
         val current = _state.value
@@ -129,7 +154,7 @@ class BookRefugeViewModel(
         if (current.nightFits(date)) edit { copy(arrival = date, nights = 1, pickingDeparture = true) }
     }
 
-    /** Due settimane avanti o indietro (mai interamente nel passato). */
+    /** Sposta il calendario di due settimane avanti o indietro, senza mai mostrare una pagina tutta nel passato. */
     fun onPage(forward: Boolean) {
         val current = _state.value
         val first = mondayOf(today())
@@ -139,17 +164,23 @@ class BookRefugeViewModel(
         loadPage(next)
     }
 
+    /** Riprova a caricare la pagina mostrata dopo un errore. */
     fun retryPage() = loadPage(_state.value.pageStart)
 
+    /** Imposta il giorno di arrivo. */
     fun onArrivalChange(date: LocalDate) = edit { copy(arrival = date) }
 
+    /** Imposta il numero di notti, tra 1 e [MAX_BOOKING_NIGHTS]. */
     fun onNightsChange(value: Int) = edit { copy(nights = value.coerceIn(1, MAX_BOOKING_NIGHTS)) }
 
+    /** Imposta il numero di persone, tra 1 e il massimo consentito per le notti scelte. */
     fun onGuestsChange(value: Int) = edit { copy(guests = value.coerceIn(1, guestsCap)) }
 
+    /** Invia la prenotazione tramite l'outbox e porta il foglio alla conferma, o mostra l'errore. */
     fun submit() {
         val current = _state.value
-        // doppio tocco: una sola prenotazione (la seconda chiave creerebbe una seconda prenotazione)
+        // Protezione dal doppio tocco: ogni invio genera una chiave nuova, quindi un secondo invio creerebbe una
+        // seconda prenotazione.
         if (current.submitting || current.done != null) return
         if (current.arrival < today()) {
             _state.update { it.copy(error = UiMessage(Res.string.booking_arrival_past)) }
@@ -167,14 +198,18 @@ class BookRefugeViewModel(
                 when (outcome) {
                     is BookingOutcome.Booked -> state.copy(submitting = false, done = BookingDone.BOOKED)
                     BookingOutcome.Queued -> state.copy(submitting = false, done = BookingDone.QUEUED)
-                    // capacity-exceeded, date non valide...: le scelte restano, si cambia e si riprova
+                    // Rifiuto (per esempio posti esauriti o date non valide): le scelte restano, così l'utente le può
+                    // cambiare e riprovare.
                     is BookingOutcome.Rejected -> state.copy(submitting = false, error = outcome.cause.toUiMessage())
                 }
             }
         }
     }
 
-    // Le notti della pagina che parte da [start]: solo da oggi in poi (il server rifiuta il passato) e solo se mancano
+    /**
+     * Carica i posti liberi della pagina che parte da [start]. Chiede solo le notti da oggi in poi, perché il server
+     * rifiuta date passate, e non fa la richiesta se le notti sono già tutte note.
+     */
     private fun loadPage(start: LocalDate) {
         val from = maxOf(start, today())
         val count = (start.toEpochDays() + CALENDAR_PAGE_DAYS - from.toEpochDays()).toInt()
@@ -197,6 +232,7 @@ class BookRefugeViewModel(
         }
     }
 
+    /** Se il foglio era aperto senza un giorno, sposta l'arrivo sulla prima notte libera tra quelle note. */
     private fun choosePickedFirstFree() {
         if (!pickFirstFree) return
         pickFirstFree = false
@@ -207,11 +243,12 @@ class BookRefugeViewModel(
         }
     }
 
+    /** Applica [change] allo stato, a meno che ci sia un invio in corso o la conferma sia già mostrata. */
     private fun edit(change: BookRefugeUiState.() -> BookRefugeUiState) {
         if (_state.value.submitting || _state.value.done != null) return
         _state.update { it.change().copy(error = null) }
     }
 }
 
-/** Il lunedì della settimana di [date]: le pagine del calendario partono da lì. */
+/** Lunedì della settimana di [date], da cui partono le pagine del calendario. */
 internal fun mondayOf(date: LocalDate): LocalDate = date.minus(DatePeriod(days = date.dayOfWeek.isoDayNumber - 1))

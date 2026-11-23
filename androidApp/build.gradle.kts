@@ -1,3 +1,5 @@
+// Script di build dell'app Android: il modulo che produce l'APK. Contiene solo il punto d'ingresso Android
+// (Application, Activity, servizio delle push); tutta la logica e l'interfaccia arrivano dal modulo shared.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import java.util.Properties
 
@@ -6,10 +8,12 @@ plugins {
     alias(libs.plugins.composeCompiler)
 }
 
-// Push (M7.1): google-services.json non è nel repo (si scarica dalla console Firebase). Senza, l'app si compila lo
-// stesso (CI, chi non ha il progetto Firebase) e le push restano spente.
+// Le push usano Firebase, configurato da google-services.json. Il file non è nel repository (si scarica dalla
+// console di Firebase): se manca, l'app si compila comunque (in CI o per chi non ha il progetto Firebase) e le
+// push restano disattivate.
 if (file("google-services.json").exists()) apply(plugin = libs.plugins.googleServices.get().pluginId)
 
+// Il bytecode Kotlin è compatibile con Java 11, come le opzioni Java più sotto.
 kotlin {
     compilerOptions {
         jvmTarget = JvmTarget.JVM_11
@@ -36,14 +40,16 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
-        // Login con Google: client ID "Web" della Google Cloud Console (è l'audience dell'ID token, il backend lo
-        // accetta in GOOGLE_CLIENT_IDS). Non è un segreto, ma è del progetto Google di chi sviluppa: sta in
-        // local.properties (google.webClientId=...). Vuoto: il pulsante "Continua con Google" non compare.
+        // Login con Google: serve il client ID di tipo "Web" della Google Cloud Console, che è l'audience dell'ID token
+        // e che il backend accetta nella sua configurazione. Non è un segreto, ma appartiene al progetto Google di chi
+        // sviluppa, quindi si legge da local.properties (google.webClientId=...). Se è vuoto, il pulsante "Continua con
+        // Google" non compare.
         val localProperties = Properties().apply {
             rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
         }
         buildConfigField("String", "GOOGLE_WEB_CLIENT_ID", "\"${localProperties.getProperty("google.webClientId", "")}\"")
     }
+    // Esclude dall'APK file di licenza duplicati presenti in più librerie, che altrimenti farebbero fallire il packaging.
     packaging {
         resources {
             excludes += "/META-INF/{AL2.0,LGPL2.1}"
@@ -51,13 +57,15 @@ android {
     }
     buildTypes {
         debug {
-            // 10.0.2.2 è il PC visto dall'emulatore
+            // Nell'emulatore Android l'indirizzo 10.0.2.2 corrisponde al PC su cui gira il backend locale.
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
         }
         release {
-            // segnaposto finché non c'è il dominio di produzione (M9.3)
+            // Indirizzo segnaposto: il progetto gira solo con il backend locale, quindi la release non lo usa mai.
+            // R8 si prova con la build staging qui sotto.
             buildConfigField("String", "API_BASE_URL", "\"https://api.geosentinel.dev\"")
-            // R8 (M9.3): le regole di kotlinx.serialization, Ktor, Room e Firebase arrivano con le librerie
+            // R8 riduce e offusca il codice; le regole per kotlinx.serialization, Ktor, Room e Firebase sono incluse nelle
+            // librerie stesse.
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -65,25 +73,27 @@ android {
                 "proguard-rules.pro"
             )
         }
-        // La release con R8 da provare sull'emulatore contro il backend locale (M9.3): come la release, ma firmata con
-        // la chiave di debug e con l'HTTP in chiaro della build di debug (manifest e risorse di src/debug).
-        // ponytail: finché il progetto resta in locale; con un backend HTTPS vero si prova direttamente la release
+        // Build "staging": la release con R8 da provare sull'emulatore contro il backend locale. È uguale alla release,
+        // ma firmata con la chiave di debug e con l'HTTP in chiaro della build di debug (manifest e risorse di src/debug).
         create("staging") {
             initWith(getByName("release"))
             buildConfigField("String", "API_BASE_URL", "\"http://10.0.2.2:8080\"")
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+    // La build staging riusa manifest e risorse di debug, che permettono l'HTTP in chiaro verso il backend locale.
     sourceSets {
         getByName("staging") {
             manifest.srcFile("src/debug/AndroidManifest.xml")
             res.srcDir("src/debug/res")
         }
     }
+    // Sorgenti e bytecode Java compatibili con Java 11.
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
+    // Compose per l'interfaccia e BuildConfig per i valori di configurazione (indirizzo dell'API, client ID di Google).
     buildFeatures {
         compose = true
         buildConfig = true

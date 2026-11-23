@@ -1,3 +1,6 @@
+// Implementazione Android dell'allineamento tra tema dell'app e barre di sistema.
+// Imposta il colore delle icone di stato e di navigazione e comunica al sistema la scelta del tema,
+// così anche la schermata di avvio usa i colori giusti.
 package it.unical.geosentinel_mobile.core.ui.theme
 
 import android.app.Activity
@@ -10,14 +13,20 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
+/**
+ * Rende chiare le icone di sistema sul tema scuro e scure sul tema chiaro, e su Android 12 e successivi
+ * salva la scelta del tema presso il sistema con `setApplicationNightMode`. Nell'anteprima dell'editor non fa nulla.
+ */
 @Composable
 actual fun SystemBarsAppearance(mode: ThemeMode, darkTheme: Boolean) {
     val view = LocalView.current
     if (view.isInEditMode) return
-    // al cambio di tema (setApplicationNightMode, qui sotto) il sistema rimette le icone di default: leggere la
-    // configurazione fa ricomporre e riapplicare la scelta anche quando [darkTheme] non è cambiato
+    // Quando cambia il tema con setApplicationNightMode (più sotto) il sistema ripristina le icone predefinite.
+    // Leggere la configurazione fa ricomporre questo composable e riapplicare la scelta anche quando
+    // darkTheme non è cambiato.
     val uiMode = LocalConfiguration.current.uiMode
     SideEffect {
+        // Lettura senza effetto: serve solo a rendere esplicita la dipendenza da uiMode.
         uiMode.hashCode()
         val window = (view.context as? Activity)?.window ?: return@SideEffect
         WindowCompat.getInsetsController(window, view).apply {
@@ -25,8 +34,9 @@ actual fun SystemBarsAppearance(mode: ThemeMode, darkTheme: Boolean) {
             isAppearanceLightNavigationBars = !darkTheme
         }
     }
-    // Android 12+: il sistema ricorda la scelta del Profilo, così all'avvio successivo lo sfondo prima di Compose
-    // (values-night) è già quello giusto, senza un lampo chiaro prima dell'app scura o il contrario
+    // Da Android 12 il sistema ricorda la scelta fatta nel Profilo: all'avvio successivo lo sfondo mostrato
+    // prima di Compose (le risorse values-night) è già quello giusto, senza un lampo chiaro prima dell'app
+    // scura o viceversa.
     LaunchedEffect(mode) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return@LaunchedEffect
         val night = when (mode) {

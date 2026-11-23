@@ -1,3 +1,7 @@
+// Il cielo disegnato nelle testate delle pagine, elemento caratteristico dell'interfaccia.
+// Le testate mostrano il cielo dell'ora reale (giorno, luce dorata, notte) sopra un profilo di creste montuose e
+// dicono quanta luce resta prima del tramonto, un'informazione di sicurezza per chi è in montagna. Il contenuto
+// della pagina sale sopra le creste come un foglio. Tutto è disegnato in codice con i Path di Compose, senza immagini.
 package it.unical.geosentinel_mobile.core.ui
 
 import androidx.compose.animation.core.Animatable
@@ -70,12 +74,18 @@ import kotlin.math.sin
 import kotlin.time.Clock
 import kotlin.time.Instant
 
-// Il cielo vivo (redesign "Luce di quota", l'elemento firma dell'app): le testate delle pagine mostrano il cielo
-// dell'ora vera sopra le creste della Calabria (giorno, luce dorata, notte) e dicono quanta luce resta, che in montagna
-// è un'informazione di sicurezza. Il contenuto sale sopra le creste come un foglio. Il cielo è decorativo: il testo
-// sopra ha sempre il suo colore verificato ([SkyPalette.content], almeno 5:1 sulla fascia del testo).
-
-/** Colori di un cielo. [top]/[upper] fanno la fascia del testo, [horizon] il bagliore dietro le creste. */
+/**
+ * I colori di un cielo. Il cielo è decorativo, ma il testo sopra deve restare leggibile: per ogni fase [content] è
+ * scelto con un contrasto di almeno 5:1 sulla fascia del testo.
+ *
+ * @property top colore in cima al cielo; insieme a [upper] forma la fascia su cui sta il testo.
+ * @property horizon il bagliore all'orizzonte, dietro le creste.
+ * @property farRidge creste lontane.
+ * @property nearRidge creste vicine.
+ * @property forest la fila di abeti in primo piano.
+ * @property chip fondo velato del chip della luce.
+ * @property stars vero se vanno disegnate le stelle.
+ */
 @Immutable
 internal class SkyPalette(
     val top: Color,
@@ -84,27 +94,29 @@ internal class SkyPalette(
     val farRidge: Color,
     val nearRidge: Color,
     val forest: Color,
-    // testo e icone sopra il cielo
+    // Colore di testo e icone sopra il cielo.
     val content: Color,
     val chip: Color,
-    // le icone della barra di stato vanno chiare
+    // Vero se il cielo è scuro e le icone della barra di stato vanno quindi chiare.
     val dark: Boolean,
     val stars: Boolean = false,
 )
 
+/** Restituisce i colori del cielo per la fase indicata. */
 internal fun skyPalette(phase: SkyPhase): SkyPalette = when (phase) {
-    // inchiostro sul celeste: 9:1 in cima, 10:1 sulla fascia del testo
+    // Testo scuro sul celeste: contrasto 9:1 in cima e 10:1 sulla fascia del testo.
     SkyPhase.DAY -> SkyPalette(
         top = Color(0xFF8EBFE3), upper = Color(0xFFA9D0EA), horizon = Color(0xFFDCEBF2),
         farRidge = Color(0xFFA9C0C8), nearRidge = Color(0xFF7E9AA0), forest = Color(0xFF1F4436),
         content = Color(0xFF0E1B16), chip = Color.White.copy(alpha = 0.6f), dark = false,
     )
-    // bianco sul blu della sera: 7,3:1 in cima, 5,2:1 in fondo alla fascia del testo
+    // Testo bianco sul blu della sera: 7,3:1 in cima e 5,2:1 in fondo alla fascia del testo.
     SkyPhase.GOLDEN -> SkyPalette(
         top = Color(0xFF3E4F88), upper = Color(0xFF5E6AA0), horizon = Color(0xFFF0BE96),
         farRidge = Color(0xFF9C8DB0), nearRidge = Color(0xFF6A6888), forest = Color(0xFF22352F),
         content = Color.White, chip = Color.White.copy(alpha = 0.18f), dark = true,
     )
+    // Notte: testo bianco su blu molto scuro, con le stelle.
     SkyPhase.NIGHT -> SkyPalette(
         top = Color(0xFF071120), upper = Color(0xFF13293F), horizon = Color(0xFF1C3549),
         farRidge = Color(0xFF1C3145), nearRidge = Color(0xFF13232F), forest = Color(0xFF0A1511),
@@ -113,19 +125,27 @@ internal fun skyPalette(phase: SkyPhase): SkyPalette = when (phase) {
 }
 
 /**
- * La luce di adesso nel parco (il centro dell'area di default: niente permesso di posizione per un cielo).
- * ponytail: calcolata quando la pagina entra in composizione, non a ogni minuto; una pagina lasciata aperta per ore
- * mostra la luce di quando è stata aperta. Se serve, un ticker a minuto qui.
+ * La luce attuale nel parco, calcolata nel centro dell'area predefinita: per disegnare un cielo non vale la pena
+ * chiedere il permesso di posizione.
+ *
+ * Limite noto: il valore si calcola quando la pagina entra nella composizione e non si aggiorna ogni minuto, quindi
+ * una pagina lasciata aperta per ore mostra la luce del momento in cui è stata aperta. Se servisse, qui andrebbe un
+ * aggiornamento periodico.
  */
 @Composable
 internal fun rememberDaylight(): Daylight = remember { daylightAt(Clock.System.now(), DefaultArea.lat, DefaultArea.lon) }
 
+/** L'ora locale del dispositivo nel formato "17:02" (ore senza zero iniziale, minuti a due cifre). */
 private fun Instant.clock(): String {
     val time = toLocalDateTime(TimeZone.currentSystemDefault())
     return "${time.hour}:${time.minute.toString().padStart(2, '0')}"
 }
 
-/** "Tramonto 17:02 · 2 h 11 min di luce" di giorno, "Alba alle 6:58" dopo il tramonto. null se il sole non tramonta. */
+/**
+ * Il testo del chip della luce: di giorno l'ora del tramonto e la luce che resta (per esempio
+ * "Tramonto 17:02 · 2 h 11 min di luce"), dopo il tramonto l'ora dell'alba ("Alba alle 6:58").
+ * Restituisce null se non ci sono alba o tramonto da mostrare.
+ */
 @Composable
 internal fun daylightLabel(daylight: Daylight): String? {
     val remaining = daylight.remaining
@@ -146,7 +166,7 @@ internal fun daylightLabel(daylight: Daylight): String? {
     }
 }
 
-/** "Tramonto 17:02" di giorno, "Alba 6:58" di notte: la versione corta per i chip sopra la mappa. */
+/** Versione corta del testo per i chip sopra la mappa: "Tramonto 17:02" di giorno, "Alba 6:58" di notte; null se non c'è. */
 @Composable
 internal fun daylightShortLabel(daylight: Daylight): String? {
     val sunset = daylight.sunset
@@ -158,7 +178,10 @@ internal fun daylightShortLabel(daylight: Daylight): String? {
     }
 }
 
-/** Il chip della luce: capsula velata sopra il cielo, icona del tramonto (o della luna) e il testo. */
+/**
+ * Il chip della luce: una capsula velata sopra il cielo con l'icona del tramonto (o della luna, dopo il tramonto)
+ * e il testo di [daylightLabel]. Se non c'è testo il chip non viene mostrato.
+ */
 @Composable
 internal fun DaylightChip(daylight: Daylight, palette: SkyPalette, modifier: Modifier = Modifier) {
     val label = daylightLabel(daylight) ?: return
@@ -174,16 +197,22 @@ internal fun DaylightChip(daylight: Daylight, palette: SkyPalette, modifier: Mod
     }
 }
 
-// Quanto il foglio del contenuto copre il fondo del cielo, con i suoi angoli tondi
+// Di quanto il foglio del contenuto, con i suoi angoli arrotondati, copre il fondo del cielo.
 internal val SheetOverlap = 28.dp
 
-// Fascia delle creste in fondo al cielo
+// Altezza della fascia delle creste in fondo al cielo.
 internal val RidgeBand = 132.dp
 
 /**
- * Il cielo con le creste, disegnato dietro a un elemento alto quanto la testata. [parallax]: di quanti px la testata
- * è salita scorrendo (le creste scendono più piano, gli strati lontani più lenti). [rise]: 0..1, le creste che salgono
- * all'ingresso. [sheet]: il colore del foglio che copre il fondo con gli angoli tondi (null = niente foglio).
+ * Disegna il cielo con le creste dietro l'elemento (in genere alto quanto la testata).
+ *
+ * I tracciati si calcolano una volta per dimensione (`drawWithCache`); a ogni frame si applicano solo gli
+ * spostamenti, letti da funzioni per non provocare una nuova composizione.
+ *
+ * @param parallax di quanti pixel la testata è salita scorrendo: le creste scendono più lentamente del contenuto,
+ *   e gli strati più lontani ancora più piano, per dare profondità.
+ * @param rise valore da 0 a 1 per l'animazione d'ingresso, in cui le creste salgono dal basso (1 = ancora abbassate).
+ * @param sheet il colore del foglio che copre il fondo con gli angoli arrotondati; null se non c'è il foglio.
  */
 internal fun Modifier.skyBackdrop(
     palette: SkyPalette,
@@ -224,9 +253,15 @@ internal fun Modifier.skyBackdrop(
 }
 
 /**
- * Testata delle pagine (redesign "Luce di quota"): il cielo dell'ora, il chip della luce, il titolo grande in Archivo
- * e, sotto le creste, l'inizio del foglio su cui sta il contenuto. [below] (segmenti, link) sta già sul foglio.
- * [topBar]: spazio in alto per la barra con Indietro e le azioni (che disegna chi la usa).
+ * La testata delle pagine principali: il cielo dell'ora, il chip della luce, il titolo grande in Archivo e, sotto
+ * le creste, l'inizio del foglio su cui sta il contenuto. All'ingresso le creste salgono con un'animazione a molla
+ * (assente con "Riduci movimento"); scorrendo, gli strati si muovono con un effetto di parallasse.
+ *
+ * @param intro una riga facoltativa sotto il titolo.
+ * @param trailing un elemento facoltativo a destra del titolo.
+ * @param below contenuto (segmenti, link) che sta già sul foglio, sotto le creste.
+ * @param topBar se vero lascia spazio in alto per la barra con Indietro e le azioni, che disegna chi usa la testata.
+ * @param daylight la luce da rappresentare; di solito quella attuale.
  */
 @Composable
 internal fun SkyHeader(
@@ -257,7 +292,7 @@ internal fun SkyHeader(
                 }
                 .skyBackdrop(
                     palette,
-                    // quanto è salita la testata da dove è comparsa
+                    // Quanto è salita la testata rispetto alla posizione in cui è comparsa.
                     parallax = { if (placedTop.isNaN()) 0f else firstTop - placedTop },
                     rise = { rise.value },
                     sheet = sheet,
@@ -300,7 +335,7 @@ internal fun SkyHeader(
                     }
                 }
             }
-            // la fascia delle creste, che finisce sotto il foglio
+            // Spazio per la fascia delle creste, che termina sotto il foglio.
             Spacer(Modifier.height(RidgeBand))
         }
         if (below != null) {
@@ -312,8 +347,9 @@ internal fun SkyHeader(
 }
 
 /**
- * Striscia sotto la barra di stato, nel colore della cima del cielo: compare ([show]) quando la testata è scorsa via,
- * così il contenuto non passa sotto l'ora e le icone, che restano quelle del cielo.
+ * Striscia alta quanto la barra di stato, nel colore della cima del cielo. Compare in dissolvenza quando [show] è
+ * vero, cioè quando la testata è scorsa via: così il contenuto non passa sotto l'ora e le icone di sistema, il cui
+ * colore resta quello scelto per il cielo.
  */
 @Composable
 internal fun SkyStatusBarScrim(show: Boolean, modifier: Modifier = Modifier) {
@@ -328,13 +364,20 @@ internal fun SkyStatusBarScrim(show: Boolean, modifier: Modifier = Modifier) {
     )
 }
 
-/** Un cielo pieno senza testo (foto mancanti, sfondi di marca): solo cielo e creste dell'ora. */
+/**
+ * Solo il cielo e le creste dell'ora, senza testo: si usa al posto delle foto mancanti e come illustrazione.
+ * [phase] permette di scegliere una fase diversa da quella attuale; [sheet] come in [skyBackdrop].
+ */
 @Composable
 internal fun SkyPicture(modifier: Modifier = Modifier, phase: SkyPhase = rememberDaylight().phase, sheet: Color? = null) {
     Box(modifier.skyBackdrop(skyPalette(phase), sheet = sheet))
 }
 
-// Profilo chiuso in basso: [top] dà la y in px per ogni t tra 0 e 1. Si chiude ben sotto il fondo (parallasse).
+/**
+ * Costruisce il profilo di una cresta come poligono chiuso: per ogni posizione orizzontale, campionata ogni [step]
+ * pixel, [top] restituisce l'altezza (y in pixel) in funzione di t, la posizione normalizzata tra 0 e 1. Il poligono
+ * si chiude molto sotto il fondo, così spostando la cresta verso il basso con la parallasse non compare un vuoto.
+ */
 private fun ridge(w: Float, h: Float, step: Float, top: (Float) -> Float): Path = Path().apply {
     moveTo(-step, h + 40 * step)
     var x = -step
@@ -346,14 +389,24 @@ private fun ridge(w: Float, h: Float, step: Float, top: (Float) -> Float): Path 
     close()
 }
 
-// Creste "ridged": 1 - |sin| ha punte verso l'alto, come le cime. Tre ottave, valore tra 0 e 1.
+/**
+ * Funzione che dà la forma alle creste, con valori tra 0 e 1. La funzione 1 - |sin| ha punte verso l'alto, simili
+ * a cime; si sommano tre ottave con frequenze crescenti e pesi decrescenti per avere dettagli di diversa scala.
+ * [freq] e [phase] cambiano la forma, così le due file di creste non sono uguali.
+ */
 private fun peaks(t: Float, freq: Float, phase: Float): Float {
+    /** Una singola ottava: punte verso l'alto con frequenza f e sfasamento p. */
     fun r(f: Float, p: Float) = 1f - abs(sin(PI.toFloat() * f * t + p))
     return 0.62f * r(freq, phase) + 0.28f * r(freq * 2.3f, phase * 1.7f + 1f) + 0.10f * r(freq * 5.9f, phase + 2.3f)
 }
 
-// Fila di abeti lungo [base], a boschetti; [dp] = 1 dp in px. La massa sotto le chiome scende oltre il fondo.
+/**
+ * Disegna la fila di abeti in primo piano lungo una linea ondulata attorno all'altezza [base]. Ogni abete è un
+ * triangolo con altezza pseudo-casuale, modulata per formare boschetti più alti e radure più basse. [dp] è la
+ * misura di 1 dp in pixel. La massa scura sotto le chiome scende oltre il fondo, per lo stesso motivo di [ridge].
+ */
 private fun forest(w: Float, h: Float, base: Float, dp: Float): Path = Path().apply {
+    /** Altezza della linea del bosco nel punto x: un'onda lenta di 6 dp attorno a base. */
     fun y(x: Float) = base - 6 * dp * sin(2 * PI.toFloat() * (x / w * 1.4f + 0.3f))
     moveTo(-8 * dp, h + 200 * dp)
     var x = -8 * dp
@@ -379,11 +432,17 @@ private fun forest(w: Float, h: Float, base: Float, dp: Float): Path = Path().ap
     }
 }
 
-// Stelle ripetibili nel cielo sopra le creste
+/**
+ * Le 26 stelle del cielo notturno, sopra le creste ([maxY] è il bordo superiore della fascia delle creste): per
+ * ciascuna posizione e raggio. Sono pseudo-casuali ma sempre uguali, così non cambiano a ogni disegno.
+ */
 private fun stars(w: Float, maxY: Float): List<Pair<Offset, Float>> =
     List(26) { i -> Offset(noise(i * 3 + 1) * w, noise(i * 7 + 5) * maxY * 0.9f) to (0.6f + 1.1f * noise(i + 41)) }
 
-// Pseudo-casuale ripetibile tra 0 e 1
+/**
+ * Numero pseudo-casuale tra 0 e 1 che dipende solo da [i]: la parte frazionaria di un seno moltiplicato per una
+ * costante grande, un metodo classico degli shader. È ripetibile, quindi il disegno è sempre lo stesso.
+ */
 private fun noise(i: Int): Float {
     val s = sin(i * 12.9898f) * 43758.547f
     return s - floor(s)

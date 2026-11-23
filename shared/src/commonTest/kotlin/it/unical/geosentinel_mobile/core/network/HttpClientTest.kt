@@ -1,3 +1,6 @@
+// Test della configurazione del client HTTP creato da HttpClientFactory: refresh del token su 401 (uno solo alla
+// volta), bearer inviato solo al backend, redirect non seguiti, ripetizione automatica delle richieste secondo le
+// regole dell'API e tolleranza verso i valori di enum sconosciuti.
 package it.unical.geosentinel_mobile.core.network
 
 import io.ktor.client.HttpClient
@@ -35,26 +38,43 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Indirizzo del backend finto: solo verso questo schema, host e porta il client invia il bearer. */
 private const val BASE_URL = "http://api.test"
 
+/** Verifica i plugin di autenticazione e di retry del client HTTP con un motore finto. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class HttpClientTest {
 
+    /**
+     * Repository della sessione finto. Parte con un access token "old"; il refresh restituisce [refreshResult] e conta
+     * quante volte viene chiamato.
+     */
     private class FakeSession : SessionRepository {
+        /** Token correnti della sessione. */
         var tokens: AuthTokens? = AuthTokens(accessToken = "old", refreshToken = "r1", accessExpiresAt = Instant.fromEpochSeconds(0))
+        /** Token restituiti dal refresh; null simula un refresh fallito. */
         var refreshResult: AuthTokens? = AuthTokens(accessToken = "new", refreshToken = "r2", accessExpiresAt = Instant.fromEpochSeconds(0))
+        /** Numero di refresh richiesti. */
         var refreshCalls = 0
 
+        /** Restituisce i token correnti. */
         override suspend fun getTokens() = tokens
 
+        /**
+         * Simula un refresh che dura 100 ms, così le richieste parallele arrivano mentre il refresh è in corso, e salva i
+         * nuovi token se il refresh riesce.
+         */
         override suspend fun refreshTokens(refreshToken: String): AuthTokens? {
             refreshCalls++
-            delay(100) // così le richieste parallele arrivano mentre il refresh è in corso
+            delay(100)
             return refreshResult?.also { tokens = it }
         }
     }
 
-    // Il motore gira sul dispatcher del test: i delay del retry usano il tempo virtuale
+    /**
+     * Crea il client dell'app sopra un motore finto che risponde con [handler]. Il motore gira sul dispatcher del test,
+     * quindi le attese tra un tentativo e l'altro usano il tempo virtuale.
+     */
     private fun TestScope.client(
         session: SessionRepository = FakeSession(),
         handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData,
@@ -66,14 +86,16 @@ class HttpClientTest {
         return HttpClientFactory.createHttpClient(AppConfig(BASE_URL, isDebug = false), session, engine)
     }
 
+    /** Risposta 401 con l'header WWW-Authenticate che fa scattare il refresh nel plugin Auth. */
     private fun MockRequestHandleScope.unauthorized() =
         respond("", HttpStatusCode.Unauthorized, headersOf(HttpHeaders.WWWAuthenticate, "Bearer"))
 
+    /** Risposta vuota con lo stato e gli header indicati. */
     private fun MockRequestHandleScope.status(code: HttpStatusCode, vararg headers: Pair<String, String>) =
         respond("", code, headersOf(*headers.map { it.first to listOf(it.second) }.toTypedArray()))
 
-    // ---- refresh ---------------------------------------------------------------------------------------------
 
+    /** Dopo un 401 il client fa il refresh e ripete la richiesta una sola volta con il nuovo token. */
     @Test
     fun `un 401 seguito da un refresh riuscito ripete la richiesta una volta`() = runTest {
         val session = FakeSession()
@@ -90,6 +112,7 @@ class HttpClientTest {
         assertEquals(1, session.refreshCalls)
     }
 
+    /** Due richieste parallele che ricevono 401 producono un solo refresh: il refresh token vale una volta sola. */
     @Test
     fun `due richieste parallele con 401 fanno un solo refresh`() = runTest {
         val session = FakeSession()
@@ -106,6 +129,11 @@ class HttpClientTest {
         assertEquals(1, session.refreshCalls)
     }
 
+    /**
+     * Se il refresh non restituisce token nuovi il 401 arriva al chiamante, ma il client non svuota la sessione:
+     * decidere se la sessione è finita spetta al repository, che lo fa solo su un 401 del refresh e mai per un errore
+     * di rete.
+     */
     @Test
     fun `se il refresh non da token nuovi resta il 401 e il client non svuota la sessione`() = runTest {
         val session = FakeSession().apply { refreshResult = null }
@@ -117,10 +145,10 @@ class HttpClientTest {
         assertEquals(HttpStatusCode.Unauthorized, response.status)
         assertEquals(1, calls)
         assertEquals(1, session.refreshCalls)
-        // decidere se la sessione è finita spetta al repository (solo su 401 del refresh, non su un errore di rete)
         assertNotNull(session.tokens)
     }
 
+    /** Una richiesta verso un altro host (lo storage delle foto) parte senza bearer. */
     @Test
     fun `il token va solo al backend e non ad altri host`() = runTest {
         var authorization: String? = "non letto"
@@ -131,6 +159,7 @@ class HttpClientTest {
         assertNull(authorization)
     }
 
+    /** Un 401 da un altro host non fa partire il refresh e la richiesta non viene ripetuta con il token. */
     @Test
     fun `un 401 da un altro host non fa rimandare la richiesta con il token`() = runTest {
         val session = FakeSession()
@@ -144,6 +173,7 @@ class HttpClientTest {
         assertEquals(0, session.refreshCalls)
     }
 
+    /** Lo stesso host su una porta diversa è considerato un altro server e non riceve il bearer. */
     @Test
     fun `il token non va allo stesso host su un'altra porta`() = runTest {
         var authorization: String? = "non letto"
@@ -154,6 +184,7 @@ class HttpClientTest {
         assertNull(authorization)
     }
 
+    /** Un 401 sul login significa credenziali errate: non fa partire il refresh e la richiesta parte una volta sola senza bearer. */
     @Test
     fun `un 401 sul login non fa partire il refresh e non manda il bearer`() = runTest {
         val session = FakeSession()
@@ -167,6 +198,7 @@ class HttpClientTest {
         assertEquals(0, session.refreshCalls)
     }
 
+    /** I redirect non vengono seguiti, così il bearer non può essere inoltrato a un host diverso indicato da Location. */
     @Test
     fun `un redirect non si segue`() = runTest {
         var calls = 0
@@ -178,8 +210,8 @@ class HttpClientTest {
         assertEquals(1, calls)
     }
 
-    // ---- retry -----------------------------------------------------------------------------------------------
 
+    /** Un 429 con Retry-After di 2 secondi viene ripetuto dopo almeno 2 secondi (di tempo virtuale). */
     @Test
     fun `un 429 con Retry-After 2 si ripete dopo almeno 2 secondi`() = runTest {
         var calls = 0
@@ -196,6 +228,7 @@ class HttpClientTest {
         assertTrue(currentTime - start >= 2_000, "atteso almeno 2000 ms, passati ${currentTime - start}")
     }
 
+    /** Un 409 con Retry-After (risorsa occupata) su una POST con Idempotency-Key viene ripetuto. */
     @Test
     fun `un 409 resource-busy con Retry-After si ripete`() = runTest {
         var calls = 0
@@ -210,6 +243,7 @@ class HttpClientTest {
         assertEquals(2, calls)
     }
 
+    /** 422 e 409 senza Retry-After sono risposte definitive e non vengono ripetuti. */
     @Test
     fun `422 e 409 senza Retry-After non si ripetono`() = runTest {
         for (code in listOf(HttpStatusCode.UnprocessableEntity, HttpStatusCode.Conflict)) {
@@ -223,6 +257,7 @@ class HttpClientTest {
         }
     }
 
+    /** Se il Retry-After supera il limite di attesa del client la risposta arriva subito al chiamante invece di bloccarlo. */
     @Test
     fun `un Retry-After oltre il limite non blocca la richiesta`() = runTest {
         var calls = 0
@@ -234,6 +269,10 @@ class HttpClientTest {
         assertEquals(1, calls)
     }
 
+    /**
+     * Un errore di rete si ritenta su una GET, che è idempotente, e su una POST con Idempotency-Key; una POST senza
+     * chiave non si ripete, perché il server potrebbe averla già eseguita.
+     */
     @Test
     fun `un errore di rete si ritenta su una GET e su una POST con Idempotency-Key - non su una POST senza`() = runTest {
         var calls = 0
@@ -252,8 +291,11 @@ class HttpClientTest {
         assertEquals(5, calls)
     }
 
-    // ---- enum ------------------------------------------------------------------------------------------------
 
+    /**
+     * Un valore di enum sconosciuto e un campo in più nella risposta non fanno fallire la deserializzazione: il ruolo
+     * diventa il valore di riserva generato dal client.
+     */
     @Test
     fun `un valore di enum sconosciuto non fa fallire la deserializzazione`() = runTest {
         val client = client {

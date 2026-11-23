@@ -1,3 +1,4 @@
+// Contenuto della scheda "Pericoli" nel foglio "Vicino a te" della mappa.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import androidx.compose.foundation.clickable
@@ -43,8 +44,9 @@ import org.jetbrains.compose.resources.stringResource
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
 /**
- * La scheda "Pericoli" del foglio "Vicino a te" (il foglio sta in MapScreen): mentre cerca la posizione e carica, poi la
- * lista dal più vicino (ordine del server).
+ * Scheda "Pericoli" del foglio "Vicino a te" (il foglio è in MapScreen). Mostra un indicatore mentre attende la
+ * posizione o carica, un messaggio con "Riprova" in caso di errore e poi la lista dei pericoli dal più vicino, nell'ordine
+ * restituito dal server. Il tocco su una riga chiama [onSelect].
  */
 @Composable
 fun NearbyHazardsList(nearby: NearbyHazards, onSelect: (HazardResponse) -> Unit, onRetry: () -> Unit) {
@@ -87,7 +89,10 @@ fun NearbyHazardsList(nearby: NearbyHazards, onSelect: (HazardResponse) -> Unit,
     }
 }
 
-// Tipo, distanza e gravità a parole (il colore del triangolo non basta, §2). Il tocco centra la mappa sul pericolo
+/**
+ * Riga della lista: tipo, distanza da [from] e gravità scritta a parole, perché il colore del triangolo da solo non
+ * basta per l'accessibilità. Il tocco chiama [onClick], che sulla mappa centra la vista sul pericolo.
+ */
 @Composable
 private fun HazardRow(hazard: HazardResponse, from: GeoPoint, onClick: () -> Unit) {
     val distance = distanceLabel(from.distanceTo(hazard.location.toGeoPoint()))
@@ -99,7 +104,7 @@ private fun HazardRow(hazard: HazardResponse, from: GeoPoint, onClick: () -> Uni
             .padding(horizontal = 20.dp, vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // decorativa: la gravità è scritta sotto
+        // Icona decorativa: la gravità è scritta nel testo sotto.
         Icon(AppIcons.Alert, contentDescription = null, tint = hazard.severity.color(), modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(16.dp))
         Column(Modifier.weight(1f)) {

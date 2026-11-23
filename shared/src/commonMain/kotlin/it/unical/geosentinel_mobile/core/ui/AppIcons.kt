@@ -1,3 +1,6 @@
+// Icone vettoriali dell'app, definite direttamente in codice.
+// Ogni icona è costruita come ImageVector a partire dai tracciati SVG della libreria Lucide, così l'app non
+// dipende da file di risorse o da un pacchetto di icone esterno.
 package it.unical.geosentinel_mobile.core.ui
 
 import androidx.compose.ui.graphics.Color
@@ -9,9 +12,13 @@ import androidx.compose.ui.graphics.vector.addPathNodes
 import androidx.compose.ui.unit.dp
 
 /**
- * Icone dell'app (redesign "Luce di quota"): a tratto, 24 dp, linea da 2, angoli tondi. I tracciati sono quelli di
- * Lucide (lucide.dev, licenza ISC, © Lucide Contributors; testo in composeResources/files/LICENSE-Lucide.txt).
- * Sostituiscono le icone piene di material-icons-core: stessa misura, `Icon(...)` le colora con il tint.
+ * Raccolta delle icone dell'app: disegnate a tratto, 24 dp, linea spessa 2 con estremità e angoli arrotondati.
+ * I tracciati sono quelli di Lucide (lucide.dev, licenza ISC, © Lucide Contributors; il testo della licenza è in
+ * composeResources/files/LICENSE-Lucide.txt).
+ *
+ * Hanno la stessa misura delle icone di Material, quindi si usano con `Icon(...)`, che le colora con il tint.
+ * Ogni icona è creata in modo pigro (`by lazy`) la prima volta che serve. Il nome della proprietà descrive
+ * il disegno, non l'uso.
  */
 object AppIcons {
     val Alert by lazy { icon("alert", "m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3", "M12 9v4", "M12 17h.01") }
@@ -118,6 +125,10 @@ object AppIcons {
     }
 }
 
+/**
+ * Costruisce un'icona a tratto in un riquadro di 24x24 unità con il nome [name] e uno o più tracciati SVG
+ * ([paths], nel formato dell'attributo `d`). Il colore nero è solo un segnaposto: `Icon` lo sostituisce con il tint.
+ */
 private fun icon(name: String, vararg paths: String): ImageVector =
     ImageVector.Builder(name = name, defaultWidth = 24.dp, defaultHeight = 24.dp, viewportWidth = 24f, viewportHeight = 24f).apply {
         paths.forEach { data ->
@@ -132,8 +143,12 @@ private fun icon(name: String, vararg paths: String): ImageVector =
         }
     }.build()
 
-// <circle> e <rect rx> di SVG come tracciati
+// Lucide usa anche gli elementi SVG circle e rect con angoli arrotondati; queste due funzioni li convertono in
+// tracciati equivalenti, perché ImageVector accetta solo tracciati.
+
+/** Cerchio di centro ([cx], [cy]) e raggio [r], disegnato con due archi di mezzo giro. */
 private fun circle(cx: Float, cy: Float, r: Float) = "M${cx - r} ${cy}a$r $r 0 1 0 ${2 * r} 0a$r $r 0 1 0 ${-2 * r} 0"
 
+/** Rettangolo con angolo in alto a sinistra in ([x], [y]), dimensioni [w] per [h] e raggio degli angoli [rx]. */
 private fun rect(x: Float, y: Float, w: Float, h: Float, rx: Float) =
     "M${x + rx} ${y}h${w - 2 * rx}a$rx $rx 0 0 1 $rx ${rx}v${h - 2 * rx}a$rx $rx 0 0 1 ${-rx} ${rx}h${-(w - 2 * rx)}a$rx $rx 0 0 1 ${-rx} ${-rx}v${-(h - 2 * rx)}a$rx $rx 0 0 1 $rx ${-rx}z"

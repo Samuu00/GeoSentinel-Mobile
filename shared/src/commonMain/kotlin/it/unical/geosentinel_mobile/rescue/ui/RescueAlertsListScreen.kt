@@ -1,3 +1,5 @@
+// Scheda Allerte degli operatori del soccorso: elenco delle allerte SOS aperte con stato, età e squadra, aggiornato
+// periodicamente e a ogni notifica. Contiene anche alcune funzioni condivise con il dettaglio (ora corrente, "da quanto").
 package it.unical.geosentinel_mobile.rescue.ui
 
 import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
@@ -98,14 +100,17 @@ import it.unical.geosentinel_mobile.core.ui.coordinatesLabel
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 import it.unical.geosentinel_mobile.core.ui.SkyStatusBarScrim
 
+/** Quanti elementi prima della fine della lista si chiede la pagina successiva. */
 private const val PrefetchDistance = 3
-// con la schermata aperta lista e dettaglio si rileggono ogni 30 s, come lo stato nella schermata SOS (M6.2)
+
+/** Intervallo di rilettura di lista e dettaglio con la schermata aperta, lo stesso dello stato nella schermata SOS. */
 internal val RescueRefreshEvery = 30.seconds
 
 /**
- * Scheda Allerte (M7.2), per `RESCUE_OPERATOR` e `ADMIN`: le allerte aperte, chi aspetta da più tempo in cima. Per ognuna
- * lo stato a parole, da quanto è aperta e la squadra se c'è; le note mediche solo nel dettaglio. Si rilegge trascinando in
- * basso, ogni 30 s in primo piano e subito a ogni push di un SOS nuovo.
+ * Scheda Allerte, per `RESCUE_OPERATOR` e `ADMIN`: le allerte aperte, con chi aspetta da più tempo in cima. Per
+ * ognuna mostra lo stato a parole, da quanto è aperta e la squadra se c'è; le note mediche compaiono solo nel
+ * dettaglio. Si rilegge trascinando in basso, ogni 30 secondi in primo piano e subito a ogni notifica di un nuovo SOS.
+ * [onCreateTeam] non è null solo per gli amministratori e mostra il link per creare una squadra.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -126,7 +131,8 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit, onCreateTeam: (() -> U
             .filter { it }
             .collect { viewModel.loadMore() }
     }
-    // al ritorno in primo piano o dal dettaglio subito (la prima volta il ViewModel sta già caricando), poi ogni 30 s
+    // Al ritorno in primo piano o dal dettaglio si rilegge subito (alla prima apertura il ViewModel sta già
+    // caricando e la chiamata non fa nulla), poi ogni 30 secondi.
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -152,7 +158,7 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit, onCreateTeam: (() -> U
                     PageHeader(
                         title = stringResource(Res.string.rescue_alerts_title),
                         intro = stringResource(Res.string.rescue_alerts_intro),
-                        // "Nuova squadra di soccorso" (M8.3), solo per ADMIN
+                        // Link "Nuova squadra di soccorso", solo per gli amministratori.
                         below = onCreateTeam?.let { { HeaderLink(stringResource(Res.string.staff_team_open), it) } },
                     )
                 }
@@ -183,8 +189,11 @@ fun RescueAlertsListScreen(onOpenAlert: (String) -> Unit, onCreateTeam: (() -> U
     }
 }
 
-// Un'allerta (Figma, "08 Allerte"): una card per allerta, entra a cascata. In alto la tessera della campanella (rossa
-// senza squadra), lo stato e da quanto è aperta; sotto un filo, la squadra o, senza squadra, dove si trova.
+/**
+ * Card di un'allerta, che entra a cascata secondo [index]. In alto il simbolo della campanella (rosso pieno se manca
+ * la squadra), lo stato e da quanto è aperta; sotto una linea sottile, la squadra assegnata o, senza squadra, dove si
+ * trova l'escursionista.
+ */
 @Composable
 private fun AlertCard(alert: SosAlertResponse, now: Instant, index: Int, onOpen: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -224,8 +233,10 @@ private fun AlertCard(alert: SosAlertResponse, now: Instant, index: Int, onOpen:
     }
 }
 
-// Campanella nel tondo rosso: pieno senza squadra, chiaro con il bordo rosso con la squadra (come sulla mappa).
-// Decorativa: lo stato è scritto accanto.
+/**
+ * Campanella in un tondo rosso: pieno se l'allerta aspetta ancora una squadra ([waiting]), chiaro con il bordo rosso
+ * se la squadra è stata inviata, come sulla mappa. È decorativa perché lo stato è scritto accanto.
+ */
 @Composable
 internal fun AlertBadge(waiting: Boolean) {
     Box(
@@ -240,6 +251,7 @@ internal fun AlertBadge(waiting: Boolean) {
     }
 }
 
+/** Indicatore di caricamento centrato; [small] per quello in fondo alla lista. */
 @Composable
 private fun CenteredProgress(small: Boolean = false) {
     Box(Modifier.fillMaxWidth().padding(vertical = if (small) 12.dp else 48.dp), contentAlignment = Alignment.Center) {
@@ -247,7 +259,7 @@ private fun CenteredProgress(small: Boolean = false) {
     }
 }
 
-// Stato vuoto o d'errore: testo centrato e al massimo un'azione
+/** Messaggio per lo stato vuoto o d'errore: testo centrato, titolo facoltativo e al massimo un'azione. */
 @Composable
 private fun Message(text: String, title: String? = null, isError: Boolean = false, action: (@Composable () -> Unit)? = null) {
     Column(
@@ -272,6 +284,7 @@ private fun Message(text: String, title: String? = null, isError: Boolean = fals
     }
 }
 
+/** Errore in fondo alla lista, con il pulsante "Riprova". */
 @Composable
 private fun InlineError(message: String, onRetry: () -> Unit) {
     Row(
@@ -290,7 +303,7 @@ private fun InlineError(message: String, onRetry: () -> Unit) {
     }
 }
 
-// L'ora di adesso, aggiornata ogni 30 s: "da quanto" cambia anche quando i dati restano uguali
+/** Ora corrente aggiornata ogni 30 secondi, così i testi "da quanto" avanzano anche quando i dati non cambiano. */
 @Composable
 internal fun rememberNow(): Instant = produceState(Clock.System.now()) {
     while (true) {
@@ -299,7 +312,7 @@ internal fun rememberNow(): Instant = produceState(Clock.System.now()) {
     }
 }.value
 
-// "adesso", "12 min fa", "3 h fa"
+/** Tempo trascorso da [then] a [now] in forma breve: "adesso", poi i minuti, poi le ore. */
 @Composable
 internal fun ago(then: Instant, now: Instant): String {
     val minutes = (now - then).inWholeMinutes.coerceAtLeast(0)

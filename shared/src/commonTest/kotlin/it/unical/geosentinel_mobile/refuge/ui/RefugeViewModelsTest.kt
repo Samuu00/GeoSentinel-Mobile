@@ -1,3 +1,5 @@
+// Test dei ViewModel dei rifugi: pagina di dettaglio (rifugio, disponibilità per notte, foto e sentieri vicini),
+// lista dei rifugi vicini a un punto e rifugi sulla mappa per gli utenti autenticati.
 package it.unical.geosentinel_mobile.refuge.ui
 
 import io.ktor.client.HttpClient
@@ -38,21 +40,32 @@ import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
+/** Verifica RefugeDetailViewModel, RefugeListViewModel e RefugeMapViewModel contro rotte finte dei rifugi. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RefugeViewModelsTest {
 
     private val backend = FakeBackend()
+    /** Posti letto del rifugio restituiti dal server finto, modificabile per simulare un aggiornamento. */
     private var capacity = 4
+    /** JSON del rifugio di prova, calcolato a ogni lettura con la capienza corrente. */
     private val refugeJson get() = """{"id":"r1","name":"Rifugio Monte Botte Donato","location":{"lat":39.278,"lon":16.452},"capacity":$capacity,"managerId":"m1","amenities":[]}"""
-    // le foto arrivano fuori contratto (un campo obbligatorio mancante)
+    /** Se vero, le foto arrivano fuori contratto, con un campo obbligatorio mancante. */
     private var mediaBroken = false
+    /** Data usata come "oggi" dal ViewModel del dettaglio. */
     private val today = LocalDate(2026, 10, 5)
-    // il percorso e la query di ogni richiesta ai rifugi, nell'ordine
+    /** Percorso e parametri di ogni richiesta ricevuta dalle rotte finte, nell'ordine. */
     private val calls = mutableListOf<Pair<String, Parameters>>()
+    /** Stato HTTP della risposta al dettaglio del rifugio. */
     private var refugeStatus = HttpStatusCode.OK
+    /** Se vero, la richiesta della disponibilità fallisce con un errore di rete. */
     private var availabilityOffline = false
+    /** Se vero, tutte le richieste ai rifugi falliscono con un errore di rete. */
     private var offline = false
 
+    /**
+     * Installa le rotte finte di rifugi, foto allegate e sentieri vicini, fa l'accesso e restituisce il repository dei
+     * rifugi. Salva anche il client in [httpClient] per gli altri repository.
+     */
     private suspend fun TestScope.repository(): RefugeRepository {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         backend.extraRoutes = { request, _ ->
@@ -86,7 +99,7 @@ class RefugeViewModelsTest {
                     }
                     "/api/v1/refuges/r1/availability" -> {
                         if (availabilityOffline) throw IOException("rete assente")
-                        // in disordine e con una notte piena: l'app le ordina
+                        // La disponibilità arriva in disordine e con una notte piena: è l'app a ordinarla.
                         respond(
                             """{"refugeId":"r1","totalCapacity":4,"from":"2026-10-05","to":"2026-10-19","availableBedsPerNight":{"2026-10-07":0,"2026-10-05":4,"2026-10-06":2}}""",
                             HttpStatusCode.OK,
@@ -104,8 +117,10 @@ class RefugeViewModelsTest {
         return RefugeRepository({ client }, TEST_BASE_URL)
     }
 
+    /** Client autenticato creato da repository(), usato anche dai repository di media e sentieri. */
     private lateinit var httpClient: HttpClient
 
+    /** Crea il ViewModel del dettaglio del rifugio "r1" con tutti i repository collegati alle rotte finte. */
     private suspend fun TestScope.detailViewModel(): RefugeDetailViewModel {
         val refuges = repository()
         return RefugeDetailViewModel(
@@ -117,11 +132,16 @@ class RefugeViewModelsTest {
         )
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    // ---- Dettaglio ----
 
+    /**
+     * Il dettaglio carica il rifugio e la disponibilità di 14 notti a partire da oggi, ordinate per data. L'intervallo
+     * richiesto è semiaperto (dal giorno "from" incluso al giorno "to" escluso): 14 notti esatte, il massimo
+     * consentito dal server.
+     */
     @Test
     fun `il dettaglio carica il rifugio e 14 notti da oggi in ordine`() = runTest {
         val viewModel = detailViewModel()
@@ -134,28 +154,30 @@ class RefugeViewModelsTest {
         assertEquals(LocalDate(2026, 10, 5), nights.first().date)
         assertTrue(nights.last().isFull)
         assertFalse(nights.first().isFull)
-        // [from, to): 14 notti esatte, il massimo del server
         val query = calls.single { it.first.endsWith("/availability") }.second
         assertEquals("2026-10-05", query["from"])
         assertEquals("2026-10-19", query["to"])
     }
 
+    /**
+     * Il dettaglio mostra solo le foto pronte del rifugio (non quella in quarantena) e cerca i sentieri attorno alla
+     * posizione del rifugio, con latitudine e longitudine nell'ordine giusto ed entro il raggio previsto.
+     */
     @Test
     fun `il dettaglio carica le foto pronte e i sentieri attorno al rifugio`() = runTest {
         val viewModel = detailViewModel()
         advanceUntilIdle()
 
-        // solo la foto READY, non quella in quarantena
         assertEquals(listOf("m1"), viewModel.state.value.photos.map { it.id })
         assertEquals(1, viewModel.state.value.nearbyTrails.size)
         assertEquals("REFUGE", calls.single { it.first == "/api/v1/media/attached" }.second["entityType"])
-        // i sentieri si cercano dal rifugio (lat 39.278), non invertito, entro 5 km
         val query = calls.single { it.first == "/api/v1/trails/nearby" }.second
         assertEquals(39.278, query["lat"]!!.toDouble(), 0.0001)
         assertEquals(16.452, query["lon"]!!.toDouble(), 0.0001)
         assertEquals(TRAILS_NEAR_REFUGE_METERS, query["radius"]!!.toDouble(), 0.1)
     }
 
+    /** Se il rifugio non esiste compare l'errore; "Riprova" ricarica tutto il dettaglio. */
     @Test
     fun `rifugio inesistente mostra l'errore e riprova ricarica tutto`() = runTest {
         refugeStatus = HttpStatusCode.NotFound
@@ -171,6 +193,7 @@ class RefugeViewModelsTest {
         assertEquals(2, calls.count { it.first == "/api/v1/refuges/r1" })
     }
 
+    /** Se fallisce solo la disponibilità il rifugio resta visibile, e "Riprova" richiede soltanto le notti. */
     @Test
     fun `senza calendario il rifugio resta e riprova chiede solo le notti`() = runTest {
         availabilityOffline = true
@@ -187,6 +210,10 @@ class RefugeViewModelsTest {
         assertEquals(1, calls.count { it.first == "/api/v1/refuges/r1" })
     }
 
+    /**
+     * L'aggiornamento rilegge posti e notti senza tornare alla schermata di caricamento; se fallisce per un errore di
+     * rete i dati già mostrati restano.
+     */
     @Test
     fun `refresh rilegge posti e notti senza tornare al caricamento e un errore lascia i dati`() = runTest {
         val viewModel = detailViewModel()
@@ -205,6 +232,7 @@ class RefugeViewModelsTest {
         assertIs<Section.Loaded<List<NightAvailability>>>(viewModel.state.value.nights)
     }
 
+    /** Foto che non rispettano il contratto non fanno fallire il dettaglio: il rifugio si vede, senza foto. */
     @Test
     fun `foto fuori contratto non fanno cadere il dettaglio`() = runTest {
         mediaBroken = true
@@ -215,6 +243,7 @@ class RefugeViewModelsTest {
         assertTrue(viewModel.state.value.photos.isEmpty())
     }
 
+    /** Il toString dello stato del dettaglio non contiene il nome del rifugio. */
     @Test
     fun `lo stato nei log non ha il nome del rifugio`() = runTest {
         val viewModel = detailViewModel()
@@ -223,8 +252,8 @@ class RefugeViewModelsTest {
         assertFalse("Botte" in viewModel.state.value.toString())
     }
 
-    // ---- Lista ----
 
+    /** La lista chiede al server i rifugi entro 50 km dal punto scelto e ricorda se il punto è la posizione dell'utente. */
     @Test
     fun `la lista chiede i rifugi entro 50 km dal punto scelto`() = runTest {
         val viewModel = RefugeListViewModel(repository())
@@ -242,6 +271,7 @@ class RefugeViewModelsTest {
         assertEquals(50000.0, query["radius"]!!.toDouble())
     }
 
+    /** Senza rete la lista mostra l'errore, e "Riprova" ripete la ricerca dallo stesso punto. */
     @Test
     fun `la lista senza rete mostra l'errore e riprova dallo stesso punto`() = runTest {
         val viewModel = RefugeListViewModel(repository())
@@ -259,8 +289,8 @@ class RefugeViewModelsTest {
         assertEquals(calls[0].second["lat"], calls.last().second["lat"])
     }
 
-    // ---- Mappa ----
 
+    /** Da ospite la mappa non chiede i rifugi al server: sono visibili solo agli utenti autenticati. */
     @Test
     fun `sulla mappa da ospite nessuna richiesta`() = runTest {
         val viewModel = RefugeMapViewModel(repository())
@@ -272,6 +302,10 @@ class RefugeViewModelsTest {
         assertTrue(viewModel.state.value.isEmpty())
     }
 
+    /**
+     * Da utente autenticato la mappa carica i rifugi dell'area visibile; spostandosi dentro un'area già caricata non
+     * si fanno nuove richieste, e al logout i rifugi spariscono.
+     */
     @Test
     fun `sulla mappa da loggato carica i rifugi e al logout spariscono`() = runTest {
         val viewModel = RefugeMapViewModel(repository())
@@ -280,7 +314,6 @@ class RefugeViewModelsTest {
         advanceUntilIdle()
         assertEquals(listOf("r1"), viewModel.state.value.map { it.id })
 
-        // dentro l'area già caricata non si richiede
         viewModel.onCameraIdle(GeoBounds.of(16.42, 39.26, 16.48, 39.30), zoom = 13.0)
         advanceUntilIdle()
         assertEquals(1, calls.size)
@@ -289,6 +322,7 @@ class RefugeViewModelsTest {
         assertTrue(viewModel.state.value.isEmpty())
     }
 
+    /** Sotto lo zoom minimo la mappa non chiede i rifugi, perché l'area visibile sarebbe troppo grande. */
     @Test
     fun `sulla mappa sotto lo zoom minimo niente richiesta`() = runTest {
         val viewModel = RefugeMapViewModel(repository())

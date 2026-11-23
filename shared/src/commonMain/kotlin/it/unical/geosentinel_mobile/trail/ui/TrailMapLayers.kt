@@ -1,3 +1,7 @@
+// Livelli MapLibre disegnati sopra la mappa base: linee dei sentieri, percorso da A a B, simboli dei POI, pallino della
+// posizione e funzioni di supporto (dissolvenze, bollini, gestione dei tocchi) condivise con rifugi e pericoli. I
+// colori dello stato sono fissi (Color.kt) e uguali su tutti gli stili di mappa; un sentiero chiuso è anche
+// tratteggiato, così si riconosce senza distinguere i colori.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.compose.material.icons.Icons
@@ -82,15 +86,14 @@ import org.maplibre.spatialk.geojson.LineString
 import org.maplibre.spatialk.geojson.Point
 import org.maplibre.spatialk.geojson.Position
 
-// Layer dei sentieri e dei POI sopra la mappa base. I colori dello stato sono fissi (Color.kt) e uguali su tutti gli
-// stili; un bordo chiaro sotto ogni linea la stacca anche dal satellite. Un sentiero chiuso è anche tratteggiato:
-// si riconosce senza distinguere i colori (§2).
-
+/** Nome della proprietà GeoJSON che contiene l'id dell'elemento, letta al tocco. */
 private const val IdProperty = "id"
 
 /**
- * Le linee dei sentieri, una sorgente per stato: in MapLibre il tratteggio non può dipendere da un dato. Discrete come
- * nel Figma (11/2026): sottili, senza bordo chiaro, così un percorso evidenziato risalta sopra di loro.
+ * Disegna le linee dei sentieri sulla mappa, con una sorgente GeoJSON per ogni stato: in MapLibre il tratteggio non può
+ * dipendere da una proprietà dell'elemento, quindi i sentieri chiusi devono stare in un livello a parte. Le linee sono
+ * discrete (sottili e senza bordo chiaro), così un percorso evidenziato risalta sopra di loro. [unknownColor] è il
+ * colore per uno stato sconosciuto; il tocco su una linea chiama [onTrailClick] con l'id del sentiero.
  */
 @Composable
 @MaplibreComposable
@@ -104,7 +107,10 @@ fun TrailLines(trails: List<TrailSummaryResponse>, unknownColor: Color, onTrailC
     }
 }
 
-/** Il percorso completo di un solo sentiero (dettaglio). */
+/**
+ * Disegna il percorso completo di un solo sentiero, nella mappa della pagina di dettaglio, nel colore del suo stato e
+ * con il bordo [casing] che lo stacca dalla mappa.
+ */
 @Composable
 @MaplibreComposable
 fun TrailPath(positions: List<Position>, state: TrailState, casing: Color, unknownColor: Color) {
@@ -114,8 +120,9 @@ fun TrailPath(positions: List<Position>, state: TrailState, casing: Color, unkno
 }
 
 /**
- * Il percorso A→B evidenziato come su Google Maps: spesso, con il bordo chiaro, sopra i sentieri discreti della mappa.
- * [color] è il pino del tema (`tertiary`, l'azione piena): non è un colore di stato.
+ * Disegna il percorso da A a B evidenziato, come nelle app di navigazione: linea spessa con il bordo chiaro, sopra i
+ * sentieri discreti della mappa. [color] è il colore `tertiary` del tema (il pino, usato per l'azione principale), non un
+ * colore di stato.
  */
 @Composable
 @MaplibreComposable
@@ -126,8 +133,8 @@ fun RouteLine(positions: List<Position>, color: Color, casing: Color) {
 }
 
 /**
- * I tratti fuori dai sentieri, dalla partenza al primo sentiero e dall'ultimo all'arrivo: tratteggiati, come il tratto
- * a piedi di Google Maps.
+ * Disegna i tratti fuori dai sentieri (dalla partenza al primo sentiero e dall'ultimo sentiero all'arrivo) come linee
+ * tratteggiate, alla maniera del tratto a piedi nelle app di navigazione.
  */
 @Composable
 @MaplibreComposable
@@ -139,7 +146,7 @@ fun RouteConnectors(segments: List<Pair<Position, Position>>, color: Color) {
     PathLayers("percorso-fuori", source, color, casing = null, dashed = true, onClick = null)
 }
 
-/** Il segnaposto dell'arrivo, sempre visibile (niente collisioni): è il punto che l'utente ha scelto. */
+/** Disegna il segnaposto dell'arrivo, sempre visibile (collisioni disattivate) perché è il punto scelto dall'utente. */
 @Composable
 @MaplibreComposable
 fun RouteDestination(at: Position) {
@@ -154,6 +161,7 @@ fun RouteDestination(at: Position) {
     )
 }
 
+/** Colore della linea di un sentiero in base allo stato; [unknown] per uno stato sconosciuto. */
 private fun TrailState.lineColor(unknown: Color): Color = when (this) {
     TrailState.OPEN -> TrailOpen
     TrailState.WARNING -> TrailWarning
@@ -161,20 +169,31 @@ private fun TrailState.lineColor(unknown: Color): Color = when (this) {
     TrailState.UNKNOWN -> unknown
 }
 
-// Spessore che cresce con lo zoom: da lontano linee sottili, così i sentieri vicini restano distinti (prima 4 dp sempre)
+/** Spessore delle linee in funzione dello zoom: sottili da lontano, così i sentieri vicini restano distinguibili. */
 private val LineWidth = interpolate(exponential(1.4f), zoom(), 7 to const(1.dp), 11 to const(2.dp), 14 to const(3.5.dp), 17 to const(5.dp))
-// I sentieri della mappa: più sottili del percorso evidenziato
+/** Spessore dei sentieri della mappa principale, più sottili del percorso evidenziato. */
 private val QuietLineWidth = interpolate(exponential(1.4f), zoom(), 9 to const(1.dp), 12 to const(1.5.dp), 14 to const(2.5.dp), 17 to const(3.5.dp))
-// Il bordo chiaro sotto la linea: sempre un po' più largo, per staccarla dalla mappa
+/** Spessore del bordo chiaro sotto la linea, sempre un po' più largo della linea per staccarla dalla mappa. */
 private val CasingWidth = interpolate(exponential(1.4f), zoom(), 7 to const(2.5.dp), 11 to const(3.5.dp), 14 to const(6.dp), 17 to const(8.dp))
 
 /**
- * Comparsa graduale: un livello con `minZoom = from` è spento sotto [from] e da lì diventa pieno in [FadeZoom] livelli.
- * Così sentieri e simboli compaiono e spariscono in dissolvenza mentre si zooma, non di colpo.
+ * Espressione di opacità per una comparsa graduale: un livello con `minZoom = from` è invisibile sotto [from] e diventa
+ * pieno nei successivi [FadeZoom] livelli di zoom. Così sentieri e simboli compaiono e scompaiono in dissolvenza mentre
+ * si zooma, invece che di colpo.
  */
 internal fun fadeInFrom(from: Double): Expression<FloatValue> = interpolate(linear(), zoom(), from to const(0f), from + FadeZoom to const(1f))
+/** Ampiezza della dissolvenza, in livelli di zoom. */
 internal const val FadeZoom = 0.6
 
+/**
+ * Disegna una linea come uno o due livelli MapLibre: il bordo opzionale [casing] sotto e la linea vera sopra.
+ *
+ * @param id prefisso degli id dei livelli.
+ * @param dashed true per una linea tratteggiata (sentieri chiusi, tratti fuori dai sentieri).
+ * @param onClick gestore del tocco, oppure null se la linea non è toccabile.
+ * @param minZoom soglia di zoom da cui il livello compare in dissolvenza; null per una linea sempre visibile.
+ * @param width spessore in funzione dello zoom.
+ */
 @Composable
 @MaplibreComposable
 private fun PathLayers(
@@ -187,7 +206,7 @@ private fun PathLayers(
     minZoom: Double? = null,
     width: Expression<DpValue> = LineWidth,
 ) {
-    // senza soglia (dettaglio del sentiero) sempre pieno
+    // Senza soglia (come nel dettaglio del sentiero) la linea è sempre a piena opacità.
     val opacity = minZoom?.let(::fadeInFrom) ?: const(1f)
     val from = minZoom?.toFloat() ?: 0f
     if (casing != null) {
@@ -211,18 +230,19 @@ private fun PathLayers(
         opacity = opacity,
         cap = const(if (dashed) LineCap.Butt else LineCap.Round),
         join = const(LineJoin.Round),
-        // trattini lunghi due volte lo spessore, spazi di una volta e mezza
+        // Trattini lunghi due volte lo spessore della linea, spazi lunghi una volta e mezza.
         dasharray = if (dashed) const(listOf(2, 1.5)) else null,
         onClick = onClick,
-        // la linea è sottile: il dito la prende anche un po' più in là
+        // La linea è sottile: l'area di tocco si allarga di 16 dp, così il dito la prende anche se non la centra.
         hitPadding = 16.dp,
     )
 }
 
 /**
- * I POI come le categorie di Apple Maps (11/2026): bollino pieno nel colore del tipo, simbolo bianco, anello bianco e
- * un'ombra leggera; da vicino il nome sotto. Il simbolo dice il tipo anche senza colori. Cliccabili.
- * [label] e [halo]: testo dei nomi e il suo alone (scuro su chiaro di giorno, il contrario di notte).
+ * Disegna i POI sulla mappa nello stile delle categorie di Apple Maps: bollino pieno nel colore del tipo, simbolo
+ * bianco, anello bianco e un'ombra leggera; da vicino compare il nome sotto. Il simbolo identifica il tipo anche senza
+ * distinguere i colori. Il tocco chiama [onPoiClick] con l'id del POI. [label] e [halo] sono il colore del testo dei
+ * nomi e del suo alone (scuro su chiaro di giorno, il contrario sulle mappe scure).
  */
 @Composable
 @MaplibreComposable
@@ -253,11 +273,11 @@ fun PoiMarkers(pois: List<PoiResponse>, label: Color, halo: Color, onPoiClick: (
                 .map { type -> case(type.value, image(badges.getValue(type), PoiBadge)) }.toTypedArray(),
             fallback = image(badges.getValue(PoiResponse.Type.unknown_default_open_api), PoiBadge),
         ),
-        // più piccoli da lontano, pieni da vicino
+        // Bollini più piccoli da lontano, a grandezza piena da vicino.
         iconSize = interpolate(linear(), zoom(), from to const(0.7f), 14 to const(1f)),
         iconOpacity = fadeInFrom(from),
-        // Collisioni: un POI che coprirebbe un altro simbolo (o un rifugio, che ha la precedenza) si nasconde, con una
-        // dissolvenza, e torna avvicinandosi. Il nome è facoltativo: se non c'è posto resta il bollino
+        // Collisioni attive: un POI che coprirebbe un altro simbolo (o un rifugio, che ha la precedenza) si nasconde in
+        // dissolvenza e ricompare avvicinandosi. Il nome è facoltativo: se non c'è spazio resta solo il bollino.
         iconAllowOverlap = const(false),
         iconIgnorePlacement = const(false),
         onClick = onClick,
@@ -272,26 +292,36 @@ fun PoiMarkers(pois: List<PoiResponse>, label: Color, halo: Color, onPoiClick: (
         textOffset = textOffset(0.em, 1.4.em),
         textMaxWidth = const(8.em),
         textOptional = const(true),
-        // i nomi solo da vicino, in dissolvenza
+        // I nomi compaiono solo da vicino, in dissolvenza.
         textOpacity = fadeInFrom(PoiLabelZoom),
     )
 }
 
+/** Dimensione dell'immagine di un bollino sulla mappa. */
 private val PoiBadge = DpSize(30.dp, 30.dp)
+
+/** Nome della proprietà GeoJSON con il nome del POI. */
 private const val NameProperty = "name"
+
+/** Zoom da cui compaiono i nomi dei POI. */
 private const val PoiLabelZoom = 13.0
 
-/** Testo e alone dei nomi sopra la mappa: dipendono dalla mappa (satellite e notte scuri), non dal tema. */
+/**
+ * Colore del testo dei nomi sopra la mappa. Dipende dalla mappa (satellite e mappa notturna sono scuri), non dal tema
+ * dell'app.
+ */
 internal fun mapLabelInk(mapIsDark: Boolean): Color = if (mapIsDark) MapLabelInkDark else MapLabelInkLight
+/** Colore dell'alone dei nomi sopra la mappa, con lo stesso criterio di mapLabelInk. */
 internal fun mapLabelHalo(mapIsDark: Boolean): Color = if (mapIsDark) Color.Black.copy(alpha = 0.75f) else Color.White
 
-/** Il carattere dei nomi sulla mappa: quello che il server dei glifi di OpenFreeMap ha (lo stesso dello stile). */
+/** Carattere dei nomi sulla mappa: deve essere uno di quelli offerti dal server dei glifi di OpenFreeMap, come nello stile. */
 internal val MapFont = const(listOf("Noto Sans Regular"))
 
 /**
- * Un "bollino" da mappa nello stile di Apple Maps: tondo pieno nel colore della categoria, anello bianco, simbolo
- * bianco e un'ombra morbida sotto, in un'immagine sola (così il bollino intero partecipa alle collisioni). Lo usano
- * anche i rifugi (RefugeMapLayers).
+ * Crea un "bollino" da mappa nello stile di Apple Maps: cerchio pieno nel colore [fill] della categoria, anello bianco,
+ * simbolo [icon] bianco e un'ombra morbida sotto, tutto in un'unica immagine (così l'intero bollino partecipa alle
+ * collisioni). [glyphFraction] è la frazione del diametro occupata dal simbolo. È usato anche per i rifugi
+ * (RefugeMapLayers).
  */
 @Composable
 internal fun rememberBadge(icon: ImageVector, fill: Color, glyphFraction: Float = 0.56f): Painter {
@@ -299,13 +329,15 @@ internal fun rememberBadge(icon: ImageVector, fill: Color, glyphFraction: Float 
     return remember(glyph, fill, glyphFraction) { BadgePainter(glyph, fill, glyphFraction) }
 }
 
+/** Painter che disegna il bollino descritto in rememberBadge. */
 private class BadgePainter(private val glyph: Painter, private val fill: Color, private val glyphFraction: Float) : Painter() {
     override val intrinsicSize: Size get() = Size.Unspecified
 
+    /** Disegna ombra, anello bianco, cerchio colorato e simbolo bianco al centro. */
     override fun DrawScope.onDraw() {
         val ring = 2.dp.toPx()
         val shadow = 1.5.dp.toPx()
-        // il tondo lascia spazio all'ombra, che scende di poco
+        // Il cerchio è un po' più piccolo dell'immagine per lasciare spazio all'ombra, spostata leggermente in basso.
         val radius = size.minDimension / 2 - shadow
         val center = Offset(size.width / 2, size.height / 2 - shadow / 2)
         drawCircle(Color.Black.copy(alpha = 0.22f), radius + shadow * 0.4f, center.copy(y = center.y + shadow))
@@ -318,16 +350,18 @@ private class BadgePainter(private val glyph: Painter, private val fill: Color, 
     }
 }
 
-/** Il blu della posizione di Apple Maps: lo riconosce chiunque come "sei qui". Colore della mappa, non del tema. */
+/** Blu della posizione dell'utente, lo stesso di Apple Maps, riconoscibile come "sei qui". È un colore della mappa, non del tema. */
 internal val LocationBlue = Color(0xFF0A84FF)
 
-/** Il pallino "sei qui" come su iPhone: blu pieno, anello bianco spesso e ombra morbida. */
+/** Crea l'immagine del pallino "sei qui" come su iPhone: blu pieno, anello bianco spesso e ombra morbida. */
 @Composable
 internal fun rememberLocationDot(): Painter = remember { LocationDotPainter() }
 
+/** Painter che disegna il pallino della posizione. */
 private class LocationDotPainter : Painter() {
     override val intrinsicSize: Size get() = Size.Unspecified
 
+    /** Disegna ombra, cerchio bianco e pallino blu al centro. */
     override fun DrawScope.onDraw() {
         val shadow = 2.dp.toPx()
         val radius = size.minDimension / 2 - shadow
@@ -338,7 +372,7 @@ private class LocationDotPainter : Painter() {
     }
 }
 
-/** Il colore della categoria di un POI sulla mappa (Color.kt, Marker*). */
+/** Colore della categoria di un POI sulla mappa, dai colori Marker* di Color.kt. */
 internal fun PoiResponse.Type.markerColor(): Color = when (this) {
     PoiResponse.Type.SHELTER -> MarkerShelter
     PoiResponse.Type.WATER_SOURCE -> MarkerWater
@@ -349,7 +383,7 @@ internal fun PoiResponse.Type.markerColor(): Color = when (this) {
     PoiResponse.Type.unknown_default_open_api -> MarkerOther
 }
 
-/** Il simbolo di un tipo di POI, uguale sulla mappa e nella lista del dettaglio. */
+/** Simbolo di un tipo di POI, uguale sulla mappa e nella lista del dettaglio. */
 fun PoiResponse.Type.icon(): ImageVector = when (this) {
     PoiResponse.Type.SHELTER -> Icons.Filled.Home
     PoiResponse.Type.WATER_SOURCE -> WaterDrop
@@ -360,7 +394,7 @@ fun PoiResponse.Type.icon(): ImageVector = when (this) {
     PoiResponse.Type.unknown_default_open_api -> Icons.Filled.Place
 }
 
-// Panorama: due cime (material-icons-core non ha né le montagne né il binocolo)
+/** Icona del punto panoramico: due cime. Disegnata a mano perché material-icons-core non ha né montagne né binocolo. */
 private val Peak: ImageVector by lazy {
     ImageVector.Builder("Peak", 24.dp, 24.dp, 24f, 24f).apply {
         path(fill = SolidColor(Color.Black)) {
@@ -374,7 +408,7 @@ private val Peak: ImageVector by lazy {
     }.build()
 }
 
-// Goccia per le sorgenti: material-icons-core non ce l'ha
+/** Icona a goccia per le sorgenti d'acqua, disegnata a mano perché material-icons-core non la include. */
 private val WaterDrop: ImageVector by lazy {
     ImageVector.Builder("WaterDrop", 24.dp, 24.dp, 24f, 24f).apply {
         path(fill = SolidColor(Color.Black)) {
@@ -388,14 +422,18 @@ private val WaterDrop: ImageVector by lazy {
     }.build()
 }
 
+/** Converte un sentiero in feature GeoJSON con il suo id; null se il percorso ha meno di due punti. */
 private fun TrailSummaryResponse.toFeature(): Feature<LineString, JsonObject>? {
     val positions = path.toPositions()
     if (positions.size < 2) return null
     return Feature(geometry = LineString(positions), properties = buildJsonObject { put(IdProperty, id) })
 }
 
-// Il primo elemento toccato che ha un id: si apre quello, e il tocco non arriva alla mappa sotto.
-// Lo usano anche i pericoli (hazard/ui/HazardMapLayers.kt), con la stessa proprietà "id"
+/**
+ * Crea un gestore dei tocchi per un livello: prende il primo elemento toccato che ha un id, chiama [onClick] e consuma
+ * il tocco, che quindi non arriva alla mappa sotto; se nessun elemento ha un id il tocco passa oltre. È usato anche dai
+ * pericoli (hazard/ui/HazardMapLayers.kt), che usano la stessa proprietà "id".
+ */
 internal fun idClickHandler(onClick: (String) -> Unit): FeaturesClickHandler = { features ->
     val id = features.firstNotNullOfOrNull { it.properties?.get(IdProperty)?.jsonPrimitive?.contentOrNull }
     if (id != null) {

@@ -1,3 +1,4 @@
+// ViewModel del cambio di stato di un sentiero, nella sezione "Gestione" del suo dettaglio.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
@@ -15,15 +16,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Stato del cambio di stato del sentiero. */
 data class TrailStatusUiState(
-    // lo stato chiesto, finché il server non risponde
+    /** Stato richiesto, in attesa della risposta del server; null se non c'è una richiesta in corso. */
     val pending: UpdateTrailStatusRequest.Status? = null,
     val error: UiMessage? = null,
 ) {
+    /** Vero mentre una richiesta è in corso. */
     val busy: Boolean get() = pending != null
 }
 
-// Stato del sentiero per il gestore. La risposta va nella cache: dettaglio e mappa la leggono da lì.
+/**
+ * ViewModel del cambio di stato del sentiero [trailId] per il gestore. La risposta del server si salva nella cache del
+ * catalogo, da cui leggono sia il dettaglio sia la mappa.
+ */
 class TrailStatusViewModel(
     private val trailId: String,
     private val staff: StaffRepository,
@@ -33,14 +39,16 @@ class TrailStatusViewModel(
     private val _state = MutableStateFlow(TrailStatusUiState())
     val state: StateFlow<TrailStatusUiState> = _state.asStateFlow()
 
+    /** Chiede al server di portare il sentiero allo stato [status]; ignora la richiesta se ce n'è già una in corso. */
     fun change(status: UpdateTrailStatusRequest.Status) {
         if (_state.value.busy) return
         _state.update { it.copy(pending = status, error = null) }
         viewModelScope.launch {
             val result = safely { staff.changeTrailStatus(trailId, status) }
-            // la cache è un aiuto: se non si scrive, il dettaglio si aggiorna al prossimo giro
+            // La cache è solo un aiuto: se la scrittura non riesce, il dettaglio si aggiorna alla lettura successiva.
             result.onSuccess { trails.saveDetail(it) }
-            // 422 (CLOSED -> WARNING): lo dice il server, l'app non duplica la regola; il messaggio spiega solo cosa fare
+            // Un 422 indica una transizione non ammessa (per esempio da chiuso ad attenzione): la regola sta sul
+            // server e l'app non la duplica, il messaggio spiega solo cosa fare.
             _state.update { it.copy(pending = null, error = result.exceptionOrNull()?.toUiMessage(onRuleViolation = Res.string.staff_trail_status_rejected)) }
         }
     }

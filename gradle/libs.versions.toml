@@ -1,3 +1,8 @@
+# Catalogo delle versioni di Gradle: l'unico posto in cui sono scritte le versioni di librerie e plugin.
+# Gli script di build le richiamano con libs.<nome>; Dependabot aggiorna le versioni direttamente qui.
+
+# Versioni, richiamate con version.ref dalle librerie e dai plugin qui sotto. compileSdk e targetSdk sono il
+# livello delle API Android con cui si compila e per cui l'app è pensata; minSdk 24 corrisponde ad Android 7.
 [versions]
 agp = "9.1.1"
 android-compileSdk = "37"
@@ -24,14 +29,15 @@ kotlinx-serialization = "1.11.0"
 ksp = "2.3.12"
 ktor = "3.6.0"
 maplibre-compose = "0.19.0"
-# motore nativo di MapLibre: la stessa versione che maplibre-compose usa per maplibre-native-ffi (aggiornarli insieme)
+# Motore nativo di MapLibre: deve avere la stessa versione che maplibre-compose usa per maplibre-native-ffi,
+# quindi i due vanno aggiornati insieme.
 maplibre-native-ffi = "0.202609.5"
 navigation = "2.9.2"
 openapiGenerator = "7.25.0"
-# push (M7.1): BOM di Firebase e plugin che legge google-services.json
+# Push: BOM di Firebase (allinea le versioni delle librerie Firebase) e plugin che legge google-services.json.
 firebase-bom = "35.0.0"
 googleServices = "4.5.0"
-# login con Google su Android (ADR-0024 del backend): Credential Manager e il suo ID token
+# Login con Google su Android: Credential Manager e la libreria che fornisce l'ID token di Google.
 androidx-credentials = "1.5.0"
 googleid = "1.1.1"
 robolectric = "4.17"
@@ -39,6 +45,7 @@ room = "2.8.5"
 sqlite = "2.7.1"
 turbine = "1.2.1"
 
+# Librerie. Le prime sono quelle di base per test, AndroidX e Compose Multiplatform.
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
@@ -58,15 +65,15 @@ androidx-lifecycle-runtimeCompose = { module = "org.jetbrains.androidx.lifecycle
 compose-runtime = { module = "org.jetbrains.compose.runtime:runtime", version.ref = "composeMultiplatform" }
 compose-foundation = { module = "org.jetbrains.compose.foundation:foundation", version.ref = "composeMultiplatform" }
 compose-material3 = { module = "org.jetbrains.compose.material3:material3", version.ref = "material3" }
-# ultima versione pubblicata: le icone non seguono più le release di Compose
+# Icone Material: si usa l'ultima versione pubblicata, perché non seguono più le release di Compose.
 compose-materialIconsCore = { module = "org.jetbrains.compose.material:material-icons-core", version = "1.7.3" }
 compose-ui = { module = "org.jetbrains.compose.ui:ui", version.ref = "composeMultiplatform" }
-# Indietro di sistema intercettabile anche su iOS (BackHandler): parte di Compose Multiplatform, stessa versione
+# Gestione del tasto Indietro di sistema (BackHandler) anche su iOS; fa parte di Compose Multiplatform.
 compose-ui-backhandler = { module = "org.jetbrains.compose.ui:ui-backhandler", version.ref = "composeMultiplatform" }
 compose-components-resources = { module = "org.jetbrains.compose.components:components-resources", version.ref = "composeMultiplatform" }
 compose-uiToolingPreview = { module = "org.jetbrains.compose.ui:ui-tooling-preview", version.ref = "composeMultiplatform" }
 
-# rete
+# Rete: client HTTP Ktor con i motori OkHttp (Android) e Darwin (iOS), autenticazione, log, JSON e motore finto per i test.
 ktor-client-core = { module = "io.ktor:ktor-client-core", version.ref = "ktor" }
 ktor-client-auth = { module = "io.ktor:ktor-client-auth", version.ref = "ktor" }
 ktor-client-contentNegotiation = { module = "io.ktor:ktor-client-content-negotiation", version.ref = "ktor" }
@@ -75,35 +82,37 @@ ktor-client-okhttp = { module = "io.ktor:ktor-client-okhttp", version.ref = "kto
 ktor-client-darwin = { module = "io.ktor:ktor-client-darwin", version.ref = "ktor" }
 ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 ktor-serialization-kotlinxJson = { module = "io.ktor:ktor-serialization-kotlinx-json", version.ref = "ktor" }
-# kotlinx
+# Librerie kotlinx: coroutine, date e serializzazione JSON.
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "kotlinx-coroutines" }
 kotlinx-coroutines-test = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-test", version.ref = "kotlinx-coroutines" }
 kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime" }
 kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
-# DI e navigazione
+# Iniezione delle dipendenze e navigazione tra le schermate.
 koin-core = { module = "io.insert-koin:koin-core", version.ref = "koin" }
 koin-composeViewmodel = { module = "io.insert-koin:koin-compose-viewmodel", version.ref = "koin" }
 navigation-compose = { module = "org.jetbrains.androidx.navigation:navigation-compose", version.ref = "navigation" }
-# persistenza
+# Persistenza: Room con SQLite incluso nell'app (cache e outbox) e DataStore per le preferenze.
 room-runtime = { module = "androidx.room:room-runtime", version.ref = "room" }
 room-compiler = { module = "androidx.room:room-compiler", version.ref = "room" }
 sqlite-bundled = { module = "androidx.sqlite:sqlite-bundled", version.ref = "sqlite" }
 datastore-preferences = { module = "androidx.datastore:datastore-preferences", version.ref = "datastore" }
-# mappa, immagini, log
+# Mappa (MapLibre e il suo motore OpenGL per Android), caricamento delle immagini (Coil) e log (Kermit).
 maplibre-compose = { module = "org.maplibre.compose:maplibre-compose", version.ref = "maplibre-compose" }
 maplibre-native-runtime-opengl = { module = "org.maplibre.nativeffi:maplibre-native-ffi-runtime-opengl", version.ref = "maplibre-native-ffi" }
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-network-ktor3 = { module = "io.coil-kt.coil3:coil-network-ktor3", version.ref = "coil" }
 kermit = { module = "co.touchlab:kermit", version.ref = "kermit" }
-# test
+# Test: verifica dei Flow.
 turbine = { module = "app.cash.turbine:turbine", version.ref = "turbine" }
-# test di UI di Compose sulla JVM (M9.1): porta anche ui-test-manifest (ComponentActivity)
+# Test di UI di Compose sulla JVM con Robolectric; porta anche il manifest con ComponentActivity per i test.
 compose-uiTestJunit4 = { module = "org.jetbrains.compose.ui:ui-test-junit4", version.ref = "composeMultiplatform" }
 robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
 
+# Firebase: la versione di firebase-messaging viene dalla BOM.
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebase-bom" }
 firebase-messaging = { module = "com.google.firebase:firebase-messaging" }
 
+# Plugin Gradle: Android, Kotlin Multiplatform, Compose, serializzazione, KSP e Room, openapi-generator e Google Services.
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

@@ -1,3 +1,4 @@
+// Pannello che compare sulla mappa durante il calcolo di un percorso da A a B a piedi.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.compose.foundation.background
@@ -47,9 +48,10 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Il pannello del percorso A→B, un'isola come la card dei POI (Figma "Luce di quota"): "Da" con la scelta tra la
- * posizione dell'utente e il centro della mappa, "A" con la destinazione, e sotto lunghezza e sentieri, l'attesa o
- * l'errore. La X chiude il percorso.
+ * Pannello del percorso da A a B, un'isola fluttuante con lo stesso aspetto della card dei POI. Nella riga "Da" si
+ * sceglie la partenza tra la posizione dell'utente e il centro della mappa ([onOrigin]); nella riga "A" c'è la
+ * destinazione; sotto compaiono lunghezza e numero di sentieri del percorso, l'attesa oppure l'errore. La X chiude il
+ * percorso con [onClose].
  */
 @Composable
 internal fun RoutePanel(plan: RoutePlan, onOrigin: (RouteOrigin) -> Unit, onClose: () -> Unit, modifier: Modifier = Modifier) {
@@ -57,7 +59,8 @@ internal fun RoutePanel(plan: RoutePlan, onOrigin: (RouteOrigin) -> Unit, onClos
     Surface(
         shape = MaterialTheme.shapes.large,
         color = colors.surfaceContainerLowest,
-        // i tocchi sul pannello (anche tra le righe) non arrivano alla mappa sotto: aprivano il sentiero toccato
+        // Il pannello consuma i tocchi (anche negli spazi tra le righe), così non arrivano alla mappa sottostante, dove
+        // aprirebbero il sentiero che si trova sotto il dito.
         modifier = modifier.widthIn(max = 560.dp).islandShadow(MaterialTheme.shapes.large).pointerInput(Unit) { detectTapGestures() },
     ) {
         Column(Modifier.padding(start = 16.dp, top = 8.dp, end = 4.dp, bottom = 16.dp)) {
@@ -76,7 +79,8 @@ internal fun RoutePanel(plan: RoutePlan, onOrigin: (RouteOrigin) -> Unit, onClos
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Label(Res.string.route_to)
                 Text(plan.destination.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
-                // la X di iOS, come nella card dei POI: tondo grigio da 30 dentro un bersaglio da 48
+                // Pulsante di chiusura nello stile di iOS, come nella card dei POI: un cerchio grigio da 30 dp dentro
+                // un'area toccabile da 48 dp.
                 Box(
                     Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClose),
                     contentAlignment = Alignment.Center,
@@ -87,7 +91,7 @@ internal fun RoutePanel(plan: RoutePlan, onOrigin: (RouteOrigin) -> Unit, onClos
                 }
             }
             Spacer(Modifier.size(8.dp))
-            // l'esito si annuncia da solo (cerco, trovato, errore)
+            // La riga dell'esito è una live region: i lettori di schermo annunciano da soli ricerca, risultato o errore.
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.padding(end = 12.dp).semantics { liveRegion = LiveRegionMode.Polite },
@@ -99,7 +103,7 @@ internal fun RoutePanel(plan: RoutePlan, onOrigin: (RouteOrigin) -> Unit, onClos
                         Text(stringResource(Res.string.route_loading), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                     }
                     is RouteResult.Found -> {
-                        // decorativa: il testo dice già che è un percorso
+                        // Icona decorativa: il testo dice già che si tratta di un percorso.
                         Icon(AppIcons.Route, contentDescription = null, tint = colors.tertiary, modifier = Modifier.size(20.dp))
                         Spacer(Modifier.width(10.dp))
                         Text(
@@ -115,6 +119,7 @@ internal fun RoutePanel(plan: RoutePlan, onOrigin: (RouteOrigin) -> Unit, onClos
     }
 }
 
+/** Etichetta a larghezza fissa ("Da", "A") all'inizio di una riga del pannello. */
 @Composable
 private fun Label(text: org.jetbrains.compose.resources.StringResource) {
     Text(

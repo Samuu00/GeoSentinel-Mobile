@@ -1,3 +1,6 @@
+// Costruzione del database Room su iOS.
+// Il builder viene passato a `startKoinWith` da MainViewController, che crea l'unica istanza di AppDatabase.
+// Questo file viene compilato solo sul runner macOS della CI, perché iOS non si compila su Windows.
 package it.unical.geosentinel_mobile.core.db
 
 import androidx.room.Room
@@ -9,9 +12,15 @@ import platform.Foundation.NSNumber
 import platform.Foundation.NSURLIsExcludedFromBackupKey
 import platform.Foundation.NSUserDomainMask
 
-// In Application Support e non in Documents: Documents finisce nel backup di iCloud e si vede nell'app File. Il
-// database (da M5/M6: outbox, posizioni dell'SOS) resta su questo telefono, come i token nel Keychain ThisDeviceOnly.
-// Compilato solo nel job ios della CI.
+/**
+ * Restituisce il builder di Room per un file nella cartella Application Support, esclusa dal backup.
+ *
+ * Non si usa Documents perché finirebbe nel backup di iCloud e sarebbe visibile nell'app File. Il database
+ * contiene la coda delle azioni e le posizioni inviate durante un SOS, quindi resta solo su questo telefono,
+ * come i token nel Keychain con accesso `ThisDeviceOnly`.
+ *
+ * Lancia `IllegalArgumentException` se il sistema non fornisce la cartella Application Support.
+ */
 @OptIn(ExperimentalForeignApi::class)
 internal fun iosDatabaseBuilder(): RoomDatabase.Builder<AppDatabase> {
     val directory = requireNotNull(

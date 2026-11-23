@@ -1,3 +1,5 @@
+// Test di ReportHazardViewModel, il ViewModel del form "Segnala un pericolo": validazione dei campi, invio della
+// segnalazione, gestione degli errori del server e foto allegate dopo l'invio.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -35,18 +37,23 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Verifica il form di segnalazione e il caricamento delle foto contro il backend finto e lo storage finto. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class ReportHazardViewModelTest {
 
     private val backend = FakeBackend()
-    // corpi delle POST /hazards ricevute
+    /** Corpi delle richieste POST /hazards ricevute. */
     private val sent = mutableListOf<String>()
-    // risposta del backend finto: null = 201 con la segnalazione SUBMITTED
+    /** Risposta del backend finto alla segnalazione; se null risponde 201 con la segnalazione in stato SUBMITTED. */
     private var answer: (suspend () -> Pair<HttpStatusCode, String>)? = null
 
-    // Sila, lat 39 e lon 16: invertite finirebbero nel Golfo di Aden
+    /** Posizione sulla Sila: con latitudine e longitudine invertite finirebbe nel Golfo di Aden. */
     private val sila = GeoPoint(lat = 39.3, lon = 16.5)
 
+    /**
+     * Installa la rotta finta POST /hazards e quelle dei media, fa l'accesso e restituisce il ViewModel. [trailId] è il
+     * sentiero da cui parte la segnalazione, null se parte dalla mappa.
+     */
     private suspend fun TestScope.viewModel(trailId: String? = "t1"): ReportHazardViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         backend.extraRoutes = { request, _ ->
@@ -58,7 +65,7 @@ class ReportHazardViewModelTest {
                 null
             }
         }
-        // dopo le rotte dei pericoli: FakeMedia le tiene e aggiunge quelle dei media
+        // FakeMedia va creato dopo la rotta dei pericoli: la conserva e aggiunge quelle dei media.
         media = FakeMedia(backend)
         val (session, client) = sessionWith(backend)
         session.restore()
@@ -66,9 +73,12 @@ class ReportHazardViewModelTest {
         return ReportHazardViewModel(HazardRepository({ client }, TEST_BASE_URL), with(media) { uploader(client) }, MediaRepository({ client }, TEST_BASE_URL), trailId)
     }
 
+    /** API dei media e storage finti, ricreati a ogni ViewModel. */
     private lateinit var media: FakeMedia
+    /** Contenuto di una foto di prova. */
     private val jpeg = byteArrayOf(1, 2, 3, 4)
 
+    /** Restituisce un ViewModel con una segnalazione già inviata con successo, punto di partenza per i test delle foto. */
     private suspend fun TestScope.sentViewModel(): ReportHazardViewModel {
         val viewModel = viewModel()
         viewModel.fill()
@@ -78,11 +88,13 @@ class ReportHazardViewModelTest {
         return viewModel
     }
 
+    /** JSON di un ProblemDetail con lo slug indicato e, se richiesto, un errore sul campo [field]. */
     private fun problem(status: Int, slug: String, field: String? = null): String {
         val errors = field?.let { ""","errors":[{"field":"$it","message":"invalid"}]""" }.orEmpty()
         return """{"type":"https://geosentinel.dev/problems/$slug","title":"x","status":$status$errors}"""
     }
 
+    /** Compila i campi obbligatori del form (tipo, gravità, posizione) e la descrizione. */
     private fun ReportHazardViewModel.fill(description: String = "") {
         onTypeChange(CreateHazardRequest.Type.FALLEN_TREE)
         onSeverityChange(CreateHazardRequest.Severity.HIGH)
@@ -90,9 +102,14 @@ class ReportHazardViewModelTest {
         onDescriptionChange(description)
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
+    /**
+     * Senza tipo, gravità e posizione il form segna i tre campi e non invia nulla; scegliere il tipo toglie solo
+     * l'errore del tipo.
+     */
     @Test
     fun `senza tipo gravità e posizione il form segna i campi e non manda niente`() = runTest {
         val viewModel = viewModel()
@@ -103,11 +120,11 @@ class ReportHazardViewModelTest {
         val ui = viewModel.state.value
         assertEquals(setOf(HazardField.TYPE, HazardField.SEVERITY, HazardField.LOCATION), ui.fieldErrors.keys)
         assertTrue(sent.isEmpty())
-        // scegliere il tipo toglie solo il suo errore
         viewModel.onTypeChange(CreateHazardRequest.Type.LANDSLIDE)
         assertEquals(setOf(HazardField.SEVERITY, HazardField.LOCATION), viewModel.state.value.fieldErrors.keys)
     }
 
+    /** La richiesta contiene tipo, gravità, coordinate, sentiero e descrizione senza spazi ai lati. */
     @Test
     fun `la segnalazione parte con tipo gravità lat lon sentiero e descrizione senza spazi`() = runTest {
         val viewModel = viewModel()
@@ -125,6 +142,7 @@ class ReportHazardViewModelTest {
         assertTrue("\"description\":\"Abete caduto dopo il ponte\"" in body, body)
     }
 
+    /** Una segnalazione fatta dalla mappa non ha sentiero, e una descrizione fatta di soli spazi non viene inviata. */
     @Test
     fun `dalla mappa la segnalazione non ha sentiero e una descrizione vuota non si manda`() = runTest {
         val viewModel = viewModel(trailId = null)
@@ -139,6 +157,7 @@ class ReportHazardViewModelTest {
         assertFalse("\"description\":\"" in body, body)
     }
 
+    /** Una descrizione più lunga del massimo si ferma nel form con l'errore sul campo. */
     @Test
     fun `una descrizione oltre i 1000 caratteri si ferma nel form`() = runTest {
         val viewModel = viewModel()
@@ -151,6 +170,10 @@ class ReportHazardViewModelTest {
         assertTrue(sent.isEmpty())
     }
 
+    /**
+     * Un 400 sulla descrizione segna quel campo; un 400 su un campo che il form non mostra diventa un errore generale
+     * di validazione.
+     */
     @Test
     fun `un 400 sulla descrizione segna il campo e uno su un campo che il form non ha da un errore generico`() = runTest {
         val viewModel = viewModel()
@@ -173,6 +196,7 @@ class ReportHazardViewModelTest {
         assertEquals(Res.string.error_validation, ui.error?.text)
     }
 
+    /** Un errore del server su una coordinata della posizione diventa l'errore del campo posizione. */
     @Test
     fun `posizione fuori range dal server diventa errore della posizione`() = runTest {
         val viewModel = viewModel()
@@ -185,6 +209,10 @@ class ReportHazardViewModelTest {
         assertEquals(setOf(HazardField.LOCATION), viewModel.state.value.fieldErrors.keys)
     }
 
+    /**
+     * Senza rete la segnalazione viene tentata una sola volta (è una POST senza Idempotency-Key, quindi non si ripete
+     * da sola), compare l'errore di rete e il form resta compilato.
+     */
     @Test
     fun `senza rete un solo tentativo e il form resta compilato`() = runTest {
         val viewModel = viewModel()
@@ -202,6 +230,7 @@ class ReportHazardViewModelTest {
         assertEquals(CreateHazardRequest.Type.FALLEN_TREE, ui.type)
     }
 
+    /** Un 403 mostra il messaggio di permesso negato. */
     @Test
     fun `un 403 mostra il messaggio del ruolo`() = runTest {
         val viewModel = viewModel()
@@ -214,6 +243,7 @@ class ReportHazardViewModelTest {
         assertEquals(Res.string.error_forbidden, viewModel.state.value.error?.text)
     }
 
+    /** Due tocchi su "Invia", e un terzo dopo l'invio, producono una sola segnalazione. */
     @Test
     fun `due tocchi su Invia mandano una sola segnalazione`() = runTest {
         val viewModel = viewModel()
@@ -222,13 +252,14 @@ class ReportHazardViewModelTest {
         viewModel.submit()
         viewModel.submit()
         advanceUntilIdle()
-        viewModel.submit() // già inviata
+        viewModel.submit()
         advanceUntilIdle()
 
         assertEquals(1, sent.size)
         assertTrue(viewModel.state.value.sent)
     }
 
+    /** Il toString dello stato non contiene posizione né descrizione, che sono dati personali. */
     @Test
     fun `lo stato nei log non contiene posizione né descrizione`() = runTest {
         val viewModel = viewModel()
@@ -239,6 +270,7 @@ class ReportHazardViewModelTest {
         assertFalse("Mario" in text, text)
     }
 
+    /** Una foto aggiunta dopo l'invio viene caricata allegandola alla segnalazione appena creata e diventa pronta. */
     @Test
     fun `una foto dopo l'invio si allega alla segnalazione appena creata`() = runTest {
         val viewModel = sentViewModel()
@@ -253,6 +285,7 @@ class ReportHazardViewModelTest {
         assertEquals(1, media.confirms)
     }
 
+    /** Prima dell'invio non si possono caricare foto, perché la segnalazione a cui allegarle non esiste ancora. */
     @Test
     fun `prima dell'invio non si caricano foto`() = runTest {
         val viewModel = viewModel()
@@ -264,6 +297,10 @@ class ReportHazardViewModelTest {
         assertTrue(media.uploadRequests.isEmpty())
     }
 
+    /**
+     * Senza rete la foto resta non caricata con l'errore di rete; "Riprova" la carica, una volta sola anche con un
+     * doppio tocco.
+     */
     @Test
     fun `senza rete la foto resta non caricata e Riprova la manda una volta sola`() = runTest {
         val viewModel = sentViewModel()
@@ -277,7 +314,7 @@ class ReportHazardViewModelTest {
 
         media.storageOffline = false
         viewModel.retryPhoto(photo.id)
-        viewModel.retryPhoto(photo.id) // doppio tocco
+        viewModel.retryPhoto(photo.id)
         advanceUntilIdle()
 
         assertEquals(PhotoStatus.READY, viewModel.state.value.photos.single().status)
@@ -285,6 +322,7 @@ class ReportHazardViewModelTest {
         assertEquals(1, media.confirms)
     }
 
+    /** Una foto messa in quarantena dal server risulta rifiutata e "Riprova" non la ricarica. */
     @Test
     fun `una foto in quarantena e non accettata senza Riprova`() = runTest {
         val viewModel = sentViewModel()
@@ -300,6 +338,7 @@ class ReportHazardViewModelTest {
         assertEquals(1, media.uploadRequests.size)
     }
 
+    /** Una foto che non si riesce a leggere non entra nella lista, mostra un messaggio e non viene caricata. */
     @Test
     fun `una foto illeggibile non entra in lista e da un messaggio`() = runTest {
         val viewModel = sentViewModel()
@@ -312,6 +351,7 @@ class ReportHazardViewModelTest {
         assertTrue(media.uploadRequests.isEmpty())
     }
 
+    /** Togliere una foto caricata la cancella sul server (una volta sola anche con un doppio tocco) e la toglie dalla lista. */
     @Test
     fun `togliere una foto caricata la cancella sul server e la toglie dalla lista`() = runTest {
         val viewModel = sentViewModel()
@@ -321,13 +361,14 @@ class ReportHazardViewModelTest {
 
         viewModel.removePhoto(photo.id)
         assertEquals(PhotoStatus.REMOVING, viewModel.state.value.photos.single().status)
-        viewModel.removePhoto(photo.id) // doppio tocco
+        viewModel.removePhoto(photo.id)
         advanceUntilIdle()
 
         assertEquals(listOf("m1"), media.deleted)
         assertTrue(viewModel.state.value.photos.isEmpty())
     }
 
+    /** Se la cancellazione sul server fallisce la foto resta nella lista con l'errore. */
     @Test
     fun `se la cancellazione non riesce la foto resta con l'errore`() = runTest {
         val viewModel = sentViewModel()
@@ -342,6 +383,7 @@ class ReportHazardViewModelTest {
         assertTrue(viewModel.state.value.photoError != null)
     }
 
+    /** Una foto che non è mai arrivata allo storage si toglie dalla lista senza chiamare il server. */
     @Test
     fun `una foto non partita si toglie senza chiamare il server`() = runTest {
         val viewModel = sentViewModel()
@@ -355,6 +397,7 @@ class ReportHazardViewModelTest {
         assertTrue(media.deleted.isEmpty())
     }
 
+    /** Oltre il numero massimo di foto per segnalazione le altre vengono ignorate e non caricate. */
     @Test
     fun `oltre il limite di foto non se ne aggiungono altre`() = runTest {
         val viewModel = sentViewModel()
@@ -366,6 +409,7 @@ class ReportHazardViewModelTest {
         assertEquals(MAX_HAZARD_PHOTOS, media.uploadRequests.size)
     }
 
+    /** Risposta del server finto a una segnalazione creata con successo. */
     private companion object {
         const val CREATED_JSON =
             """{"id":"h9","trailId":"t1","type":"FALLEN_TREE","severity":"HIGH","status":"SUBMITTED","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-05T10:00:00Z"}"""

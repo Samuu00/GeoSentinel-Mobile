@@ -1,33 +1,35 @@
-"""
-Genera gli stili della mappa in shared/src/commonMain/composeResources/files/map/.
+"""Genera gli stili della mappa in shared/src/commonMain/composeResources/files/map/.
 
-Parte dallo stile "liberty" di OpenFreeMap (tile vettoriali OpenMapTiles, licenza BSD dello stile, dati ODbL)
-e lo ricolora con una palette tipo Apple Maps, in chiaro e in scuro, con le cime con la quota; toglie i POI generici
-di OpenStreetMap. Niente rilievo ombreggiato (tolto il 23/11: zoomando, le tile delle quote facevano laggare l'iPhone).
-Produce anche:
-- satellite.json: immagini Sentinel-2 cloudless di EOX (2016, CC BY 4.0, gratuite e senza chiave; 10 m, nitide
-  fino allo zoom 15) con sopra strade, sentieri ed etichette (vista "ibrida");
+Parte dallo stile "liberty" di OpenFreeMap (tessere vettoriali OpenMapTiles, stile con licenza BSD, dati ODbL) e
+lo ricolora con una palette in stile Apple Maps, in versione chiara e scura, aggiungendo le cime con la quota e
+togliendo i POI generici di OpenStreetMap. Gli stili non contengono il rilievo ombreggiato, perché durante lo zoom
+le tessere delle quote rendevano lenta la mappa sull'iPhone.
+Produce anche satellite.json: immagini Sentinel-2 cloudless di EOX (2016, CC BY 4.0, gratuite e senza chiave,
+risoluzione 10 m, nitide fino allo zoom 15) con sopra strade, sentieri ed etichette (vista "ibrida").
 
-Uso:  python tools/map-styles/build_map_styles.py
-Da rilanciare quando si vuole aggiornare la base di OpenFreeMap; i JSON generati si committano.
+Uso: python tools/map-styles/build_map_styles.py
+Va rilanciato quando si vuole aggiornare la base di OpenFreeMap; i JSON generati si salvano nel repository.
 """
 import copy
 import json
 import pathlib
 import urllib.request
 
+# Stile di partenza di OpenFreeMap e cartella in cui si scrivono gli stili generati.
 LIBERTY_URL = "https://tiles.openfreemap.org/styles/liberty"
 OUT = pathlib.Path(__file__).resolve().parents[2] / "shared/src/commonMain/composeResources/files/map"
 
-# Il livello 2016 ("s2cloudless_3857") è CC BY 4.0; gli anni dal 2018 sono CC BY-NC-SA (solo uso non commerciale)
+# Immagini satellitari EOX: il livello del 2016 ("s2cloudless_3857") è CC BY 4.0, quelli dal 2018 in poi sono
+# CC BY-NC-SA, cioè solo per uso non commerciale. L'attribuzione è richiesta dalla licenza.
 EOX_TILES = "https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless_3857/default/g/{z}/{y}/{x}.jpg"
 EOX_ATTRIBUTION = (
     '<a href="https://s2maps.eu">Sentinel-2 cloudless</a> by EOX IT Services GmbH '
     '(contiene dati Copernicus Sentinel 2016 modificati)'
 )
 
-# Palette tipo Apple Maps (11/2026): terra calda e chiara, boschi verde salvia, acqua azzurra, strade bianche con un filo
-# di bordo, statali gialle. Di notte grafite con i boschi appena verdi. Chiave = gruppo di livelli (vedi group()).
+# Palette ispirata ad Apple Maps: terra calda e chiara, boschi verde salvia, acqua azzurra, strade bianche con un
+# filo di bordo e statali gialle. Di notte grafite con i boschi appena verdi. Le chiavi sono i gruppi di livelli
+# restituiti da group() e text_group().
 LIGHT = {
     "land": "#f6f3ec", "park": "#d3e7c1", "wood": "#c8e0b2", "grass": "#dcecc9", "residential": "#efebe3",
     "ice": "#ffffff", "sand": "#f2ead3", "pitch": "#d3e7c1", "cemetery": "#d7e6cb", "hospital": "#f6e1df",
@@ -57,7 +59,8 @@ DARK = {
 
 
 def group(layer):
-    """Il gruppo di colore di un livello di liberty, dal suo id."""
+    """Restituisce il gruppo di colore di un livello dello stile liberty in base al suo id, o None se il livello
+    non va ricolorato."""
     i = layer["id"]
     if i == "background": return "land"
     if i.startswith("park"): return "park"
@@ -86,6 +89,7 @@ def group(layer):
 
 
 def text_group(layer):
+    """Restituisce il gruppo di colore del testo di un livello di etichette."""
     i = layer["id"]
     if i.startswith("water"): return "text_water"
     if i == "poi_transit": return "text_transit"
@@ -95,7 +99,8 @@ def text_group(layer):
 
 
 def peaks(pal):
-    """Le cime (OpenMapTiles "mountain_peak") con nome e quota, in corsivo marrone come sulle carte escursionistiche."""
+    """Crea il livello delle cime (mountain_peak di OpenMapTiles) con nome e quota, in corsivo marrone come sulle
+    carte escursionistiche; compare da zoom 10."""
     name = ["coalesce", ["get", "name:it"], ["get", "name"]]
     return {
         "id": "mountain_peak", "type": "symbol", "source": "openmaptiles", "source-layer": "mountain_peak",
@@ -109,9 +114,10 @@ def peaks(pal):
     }
 
 
-# Stile leggero (22/11, lag su iPhone): solo i livelli che servono in montagna, da 89 a circa 30. Restano aree
-# naturali e acqua, le strade senza i doppioni di ponti, tunnel e svincoli, e le scritte di località, cime e acqua.
-# Tolti: edifici, confini, ferrovie leggere, aree sportive, nomi e cartelli delle strade, regioni e stati.
+# Livelli tenuti nello stile leggero, circa 30: solo quelli che servono in montagna. Restano aree naturali e acqua,
+# le strade senza i doppioni di ponti, tunnel e svincoli, e le scritte di località, cime e acqua. Mancano edifici,
+# confini, ferrovie leggere, aree sportive, nomi e cartelli delle strade, regioni e stati: meno livelli rendono la
+# mappa più fluida sul telefono.
 KEEP = {
     "background", "park", "landuse_residential", "landcover_wood", "landcover_grass", "landcover_wetland",
     "landcover_ice", "landcover_sand", "waterway_river", "waterway_other", "water",
@@ -123,10 +129,16 @@ KEEP = {
 
 
 def bridges_as_roads(layer):
-    """Senza i livelli bridge_*, i ponti li disegnano le strade normali: dal filtro si toglie solo "bridge". I tunnel
-    restano fuori: una galleria disegnata come strada sembrerebbe un passaggio attraverso la montagna."""
+    """Modifica il filtro di un livello stradale perché disegni anche i ponti.
+
+    Lo stile leggero non ha i livelli bridge_*, quindi i ponti li disegnano le strade normali: dal filtro si toglie
+    solo "bridge". I tunnel restano esclusi, perché una galleria disegnata come strada sembrerebbe un passaggio
+    attraverso la montagna.
+    """
     def fix(f):
+        """Riscrive ricorsivamente un filtro MapLibre togliendo "bridge" dalla condizione su brunnel."""
         if isinstance(f, list):
+            # Sostituisce il confronto con ["bridge", "tunnel"] con uno che esclude soltanto i tunnel.
             if len(f) == 5 and f[0] == "match" and f[1] == ["get", "brunnel"] and f[2] == ["bridge", "tunnel"]:
                 return ["match", ["get", "brunnel"], ["tunnel"], False, True]
             return [fix(x) for x in f]
@@ -136,23 +148,25 @@ def bridges_as_roads(layer):
 
 
 def recolor(style, pal, dark):
+    """Restituisce una copia dello stile liberty ricolorata con la palette indicata, ridotta ai livelli di KEEP,
+    senza rilievo ombreggiato e senza i POI generici, con in più le cime."""
     s = copy.deepcopy(style)
     s["name"] = "GeoSentinel " + ("scura" if dark else "chiara")
-    # niente rilievo: né quello di Natural Earth né le Terrain Tiles (tolte il 23/11, lag su iPhone zoomando)
+    # Niente rilievo ombreggiato: le tessere delle quote rendevano lenta la mappa sull'iPhone durante lo zoom.
     s["sources"].pop("ne2_shaded", None)
     layers = []
     for layer in s["layers"]:
         paint = layer.setdefault("paint", {})
         if layer["type"] == "raster":
             continue
-        # i punti d'interesse generici di OpenStreetMap: sulla mappa ci sono i POI del parco, gli altri erano rumore
+        # I punti d'interesse generici di OpenStreetMap si tolgono: sulla mappa ci sono già i POI del parco.
         if layer.get("source-layer") == "poi":
             continue
-        # stile leggero: tutto il resto si toglie (lag su iPhone, 22/11)
+        # Stile leggero: si tengono solo i livelli elencati in KEEP.
         if layer["id"] not in KEEP:
             continue
         bridges_as_roads(layer)
-        # le cime prima delle località: a parità di posto vince il nome del paese
+        # Le cime si inseriscono prima delle località: a parità di posto, vince il nome del paese.
         if layer["id"] == "label_other":
             layers.append(peaks(pal))
         if layer["type"] == "symbol":
@@ -177,7 +191,8 @@ def recolor(style, pal, dark):
 
 
 def satellite(style):
-    """Immagini EOX + strade principali, sentieri ed etichette chiare con alone scuro (come la vista ibrida)."""
+    """Crea lo stile satellitare: immagini EOX con sopra strade principali, sentieri ed etichette chiare con un
+    alone scuro, come la vista ibrida delle mappe."""
     base = recolor(style, LIGHT, dark=False)
     keep_lines = ("road_motorway", "road_trunk_primary", "road_secondary_tertiary", "road_path_pedestrian")
     layers = [
@@ -190,7 +205,7 @@ def satellite(style):
             line["paint"]["line-color"] = "#fde293" if "motorway" in line["id"] else "#ffffff"
             line["paint"]["line-opacity"] = 0.55 if "path" not in line["id"] else 0.8
             layers.append(line)
-        # niente punti di interesse né cartelli stradali: su sfondo fotografico il testo bianco sparirebbe nel cartello
+        # Niente punti d'interesse né cartelli stradali: su sfondo fotografico il testo bianco sparirebbe nel cartello.
         elif (layer["type"] == "symbol" and layer.get("layout", {}).get("text-field")
               and not layer["id"].startswith("poi") and "shield" not in layer["id"]):
             label = copy.deepcopy(layer)
@@ -202,7 +217,7 @@ def satellite(style):
         "glyphs": style["glyphs"], "sprite": style["sprite"],
         "sources": {
             "openmaptiles": style["sources"]["openmaptiles"],
-            # oltre lo zoom 15 le immagini si ingrandiscono e basta: maxzoom 15 evita richieste inutili
+            # Oltre lo zoom 15 le immagini si ingrandirebbero soltanto: maxzoom 15 evita richieste inutili.
             "eox": {"type": "raster", "tiles": [EOX_TILES], "tileSize": 256, "maxzoom": 15, "attribution": EOX_ATTRIBUTION},
         },
         "layers": layers,
@@ -210,7 +225,8 @@ def satellite(style):
 
 
 def main():
-    # OpenFreeMap rifiuta lo user agent di default di Python (403)
+    """Scarica lo stile liberty, genera i tre stili dell'app e li scrive nella cartella OUT."""
+    # OpenFreeMap rifiuta lo user agent predefinito di Python con un 403.
     request = urllib.request.Request(LIBERTY_URL, headers={"User-Agent": "GeoSentinel-map-styles/1.0"})
     with urllib.request.urlopen(request) as r:
         liberty = json.load(r)

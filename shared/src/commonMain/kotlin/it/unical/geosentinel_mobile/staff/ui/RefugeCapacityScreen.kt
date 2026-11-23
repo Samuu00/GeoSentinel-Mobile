@@ -1,3 +1,4 @@
+// Schermata per modificare i posti letto di un rifugio.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.compose.foundation.text.KeyboardOptions
@@ -19,7 +20,10 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
-// Capacità del rifugio, aperta dal dettaglio del rifugio quando il rifugio è del gestore o l'utente è ADMIN.
+/**
+ * Form dei posti letto del rifugio [refugeId], aperto dal dettaglio del rifugio quando l'utente ne è il gestore o è un
+ * amministratore. [capacity] è il valore di partenza.
+ */
 @Composable
 fun RefugeCapacityScreen(refugeId: String, capacity: Int, onBack: () -> Unit) {
     val viewModel = koinViewModel<RefugeCapacityViewModel>(key = refugeId) { parametersOf(refugeId, capacity) }

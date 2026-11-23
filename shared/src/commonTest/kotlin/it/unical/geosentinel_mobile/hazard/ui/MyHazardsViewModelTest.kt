@@ -1,3 +1,5 @@
+// Test di MyHazardsViewModel, il ViewModel della schermata "Le mie segnalazioni" nel profilo: lista paginata delle
+// segnalazioni dell'utente, caricamento della pagina successiva, errori di rete, aggiornamento trascinando in basso.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -30,22 +32,28 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Verifica la paginazione delle segnalazioni dell'utente contro una rotta finta che serve pagine da 20 elementi. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class MyHazardsViewModelTest {
 
     private val backend = FakeBackend()
-    // le segnalazioni dell'utente sul server, dalla più recente
+    /** Le segnalazioni dell'utente sul server, dalla più recente alla più vecchia. */
     private var mine = (1..25).map { hazard("h$it") }
-    // pagine chieste, nell'ordine
+    /** Numeri delle pagine richieste al server, nell'ordine. */
     private val pagesRequested = mutableListOf<Int>()
-    // pagine che cadono per la rete
+    /** Pagine la cui richiesta fallisce con un errore di rete. */
     private val offlinePages = mutableSetOf<Int>()
 
+    /** JSON di una segnalazione con l'id, lo stato e la descrizione facoltativa indicati. */
     private fun hazard(id: String, status: String = "SUBMITTED", description: String? = null): String {
         val desc = description?.let { ""","description":"$it"""" }.orEmpty()
         return """{"id":"$id","type":"FALLEN_TREE","severity":"HIGH","status":"$status","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-05T10:00:00Z"$desc}"""
     }
 
+    /**
+     * Installa la rotta finta GET /hazards/mine, che pagina la lista [mine] secondo i parametri page e size, fa
+     * l'accesso e restituisce il ViewModel.
+     */
     private suspend fun TestScope.viewModel(): MyHazardsViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         backend.extraRoutes = { request, _ ->
@@ -71,9 +79,11 @@ class MyHazardsViewModelTest {
         return MyHazardsViewModel(HazardRepository({ client }, TEST_BASE_URL))
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
+    /** All'apertura si carica la prima pagina (20 segnalazioni, dalla più recente) e la lista non risulta finita. */
     @Test
     fun `all'apertura carica la prima pagina dalla piu recente`() = runTest {
         val viewModel = viewModel()
@@ -89,6 +99,10 @@ class MyHazardsViewModelTest {
         assertEquals(listOf(0), pagesRequested)
     }
 
+    /**
+     * Arrivati in fondo si carica la seconda pagina, senza doppioni; dopo l'ultima pagina la lista è finita e un
+     * ulteriore caricamento non fa richieste.
+     */
     @Test
     fun `in fondo arriva la seconda pagina senza doppioni e poi la lista e finita`() = runTest {
         val viewModel = viewModel()
@@ -96,7 +110,7 @@ class MyHazardsViewModelTest {
 
         viewModel.loadMore()
         advanceUntilIdle()
-        viewModel.loadMore() // già in fondo: nessuna richiesta
+        viewModel.loadMore()
         advanceUntilIdle()
 
         val ui = viewModel.state.value
@@ -105,6 +119,7 @@ class MyHazardsViewModelTest {
         assertEquals(listOf(0, 1), pagesRequested)
     }
 
+    /** Due richieste ravvicinate della pagina successiva producono una sola richiesta al server. */
     @Test
     fun `due richieste di fila chiedono la pagina dopo una volta sola`() = runTest {
         val viewModel = viewModel()
@@ -117,11 +132,14 @@ class MyHazardsViewModelTest {
         assertEquals(listOf(0, 1), pagesRequested)
     }
 
+    /**
+     * Se nel frattempo l'utente ha inviato una nuova segnalazione, l'ultima della prima pagina scivola nella seconda:
+     * la lista unita non deve contenere la stessa riga due volte.
+     */
     @Test
     fun `una segnalazione nuova in cima non duplica la riga che scivola nella pagina dopo`() = runTest {
         val viewModel = viewModel()
         advanceUntilIdle()
-        // nel frattempo l'utente ne ha fatta un'altra: h20 passa dalla prima alla seconda pagina
         mine = listOf(hazard("nuova")) + mine
 
         viewModel.loadMore()
@@ -132,6 +150,7 @@ class MyHazardsViewModelTest {
         assertEquals(25, ids.size)
     }
 
+    /** Senza rete la prima pagina mostra l'errore di rete; "Riprova" la ricarica quando la rete torna. */
     @Test
     fun `senza rete la prima pagina da l'errore e Riprova la ricarica`() = runTest {
         offlinePages += 0
@@ -152,6 +171,11 @@ class MyHazardsViewModelTest {
         assertNull(viewModel.state.value.error)
     }
 
+    /**
+     * Se fallisce la pagina successiva le righe già caricate restano, e il ViewModel non riprova da solo: con
+     * l'errore in vista serve "Riprova". La richiesta GET è idempotente, quindi i tentativi automatici su un errore
+     * di rete li fa già il client HTTP.
+     */
     @Test
     fun `senza rete sulla pagina dopo le righe restano e non si riprova da soli`() = runTest {
         val viewModel = viewModel()
@@ -160,9 +184,8 @@ class MyHazardsViewModelTest {
 
         viewModel.loadMore()
         advanceUntilIdle()
-        // la GET è idempotente: il client ripete già da solo sugli errori di rete (RetryPolicy)
         val afterFailure = pagesRequested.size
-        viewModel.loadMore() // con l'errore in vista serve "Riprova"
+        viewModel.loadMore()
         advanceUntilIdle()
 
         assertEquals(20, viewModel.state.value.items.size)
@@ -178,6 +201,7 @@ class MyHazardsViewModelTest {
         assertNull(viewModel.state.value.error)
     }
 
+    /** Trascinando in basso la lista riparte dalla prima pagina e sostituisce le righe con quelle aggiornate. */
     @Test
     fun `trascinando in basso la lista riparte dalla prima pagina`() = runTest {
         val viewModel = viewModel()
@@ -196,6 +220,7 @@ class MyHazardsViewModelTest {
         assertTrue(ui.endReached)
     }
 
+    /** Senza segnalazioni la lista è vuota, finita e senza errori. */
     @Test
     fun `nessuna segnalazione da una lista vuota e finita`() = runTest {
         mine = emptyList()
@@ -208,6 +233,7 @@ class MyHazardsViewModelTest {
         assertNull(ui.error)
     }
 
+    /** Uno stato sconosciuto inviato dal server non fa crashare l'app e viene mostrato come "non disponibile". */
     @Test
     fun `uno stato nuovo del server non fa crashare e si legge come non disponibile`() = runTest {
         mine = listOf(hazard("h1", status = "ARCHIVED"))
@@ -219,6 +245,7 @@ class MyHazardsViewModelTest {
         assertEquals(Res.string.my_hazards_status_unknown, status.label())
     }
 
+    /** Il toString dello stato non contiene le descrizioni né le coordinate delle segnalazioni, che sono dati personali. */
     @Test
     fun `lo stato nei log non contiene le descrizioni`() = runTest {
         mine = listOf(hazard("h1", description = "vicino alla baita di Mario"))

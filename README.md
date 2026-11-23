@@ -1,32 +1,26 @@
-This is a Kotlin Multiplatform project targeting Android, iOS.
+# GeoSentinel Mobile
 
-* [/iosApp](./iosApp/iosApp) contains an iOS application. Even if you’re sharing your UI with Compose Multiplatform,
-  you need this entry point for your iOS app. This is also where you should add SwiftUI code for your project.
+App per chi va in montagna, progetto di tesi triennale: mappa dei sentieri, segnalazione dei pericoli, rifugi e SOS,
+più le schermate per i gestori del parco e i soccorritori. Kotlin Multiplatform (Android e iOS) con la UI tutta in
+Compose Multiplatform; unico client del backend in `../GeoSentinel-Backend`. Gira solo in locale, contro il backend
+avviato sul PC.
 
-* [/shared](./shared/src) is for code that will be shared across your Compose Multiplatform applications.
-  It contains several subfolders:
-    - [commonMain](./shared/src/commonMain/kotlin) is for code that’s common for all targets.
-    - Other folders are for Kotlin code that will be compiled for only the platform indicated in the folder name.
-      For example, if you want to use Apple’s CoreCrypto for the iOS part of your Kotlin app,
-      the [iosMain](./shared/src/iosMain/kotlin) folder would be the right place for such calls.
-      Similarly, if you want to edit the Desktop (JVM) specific part, the [jvmMain](./shared/src/jvmMain/kotlin)
-      folder is the appropriate location.
+- [`CLAUDE.md`](CLAUDE.md): stato, stack, vincoli e comandi.
+- [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md): milestone, contratti, checkpoint e cosa manca (§9).
+- [`tools/ios-device/README.md`](tools/ios-device/README.md): installare l'app su un iPhone vero dal PC.
 
-### Running the apps
+## Moduli
 
-Use the run configurations provided by the run widget in your IDE's toolbar. You can also use these commands and
-options:
+- [`shared`](shared/src): tutto il codice comune (feature, rete, sessione, database, UI); `androidMain` e `iosMain`
+  per le parti di piattaforma.
+- [`androidApp`](androidApp): ingresso Android (Koin, `MainActivity`, push).
+- [`iosApp`](iosApp/iosApp): ingresso iOS in Swift (Firebase, APNs).
+- [`apiClient`](apiClient): client generato da `api/openapi.json` a ogni build.
 
-- Android app: `./gradlew :androidApp:assembleDebug`
-- iOS app: open the [/iosApp](./iosApp) directory in Xcode and run it from there.
+## Comandi
 
-### Running tests
-
-Use the run button in your IDE's editor gutter, or run tests using Gradle tasks:
-
-- Android tests: `./gradlew :shared:testAndroidHostTest`
-- iOS tests: `./gradlew :shared:iosSimulatorArm64Test`
-
----
-
-Learn more about [Kotlin Multiplatform](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)…
+```bash
+./gradlew :androidApp:assembleDebug        # app Android in debug, verso il backend locale (10.0.2.2:8080)
+./gradlew :shared:testAndroidHostTest      # test sulla JVM
+./gradlew :shared:iosSimulatorArm64Test    # test comuni sul simulatore iOS (serve un Mac)
+```

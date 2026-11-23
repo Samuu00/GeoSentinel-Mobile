@@ -1,17 +1,22 @@
+// Impostazioni di build dell'app iOS, lette dal progetto Xcode e scritte nell'Info.plist.
 TEAM_ID=
 
+// Nome del prodotto e identificativo del bundle; TEAM_ID (vuoto) viene aggiunto in fondo all'identificativo.
 PRODUCT_NAME=geosentinel_mobile
 PRODUCT_BUNDLE_IDENTIFIER=it.unical.geosentinel-mobile.geosentinel-mobile$(TEAM_ID)
 
-// In un xcconfig "//" apre un commento: $() spezza la doppia barra dell'URL.
-// Sul simulatore localhost è il Mac.
+// Indirizzo del backend. In un xcconfig "//" apre un commento, quindi $() spezza la doppia barra dell'URL. In
+// Debug punta a localhost, che sul simulatore è il Mac. Release ha un indirizzo segnaposto: le build per l'iPhone
+// ricevono quello del backend locale dal workflow "iOS device build" (input api_base_url).
 API_BASE_URL[config=Debug]=http:/$()/localhost:8080
 API_BASE_URL[config=Release]=https:/$()/api.geosentinel.dev
 
-// Login con Google: client OAuth di tipo iOS (Google Cloud Console) e lo stesso al contrario per lo schema URL.
-// Vuoto: niente pulsante "Continua con Google". Il workflow "iOS device build" li prende dalle variabili del repo.
+// Login con Google: client OAuth di tipo iOS della Google Cloud Console e lo stesso al contrario, usato come
+// schema URL di ritorno. Se è vuoto il pulsante "Continua con Google" non compare. Il workflow "iOS device build"
+// li riceve dalle variabili del repository.
 GOOGLE_IOS_CLIENT_ID=
 GOOGLE_REVERSED_CLIENT_ID=geosentinel-google-non-configurato
 
+// Numero di build e versione mostrata dell'app.
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0

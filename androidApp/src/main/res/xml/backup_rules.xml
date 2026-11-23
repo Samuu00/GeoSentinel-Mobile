@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 11 e precedenti: stessa regola di data_extraction_rules.xml -->
+<!-- Regole del backup per Android 11 e precedenti, uguali a quelle di data_extraction_rules.xml: esclude il file
+     con i token cifrati della sessione e il database. -->
 <full-backup-content>
     <exclude domain="file" path="geosentinel.session.preferences_pb"/>
     <exclude domain="database" path="."/>

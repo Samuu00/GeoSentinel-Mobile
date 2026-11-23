@@ -1,3 +1,4 @@
+// Card che compare sopra la mappa quando l'utente tocca il simbolo di un pericolo.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -35,7 +36,12 @@ import it.unical.geosentinel_mobile.trail.ui.label
 import org.jetbrains.compose.resources.stringResource
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
-/** Il pericolo toccato sulla mappa: tipo, gravità a parole, descrizione e, se c'è, il sentiero. Come la card dei POI. */
+/**
+ * Mostra il pericolo toccato sulla mappa: tipo, gravità scritta a parole, descrizione (al massimo tre righe), foto e,
+ * se la segnalazione è legata a un sentiero, il collegamento per aprirlo. Ha la stessa struttura della card dei POI.
+ * [onOpenTrail] è null quando non c'è un sentiero; [onClose] chiude la card. La card è una live region, così i lettori
+ * di schermo annunciano il nuovo contenuto.
+ */
 @Composable
 fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -> Unit, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
@@ -47,7 +53,7 @@ fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -
         modifier = modifier.widthIn(max = 420.dp).semantics { liveRegion = LiveRegionMode.Polite },
     ) {
         Row(Modifier.padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 4.dp), verticalAlignment = Alignment.Top) {
-            // decorativa: tipo e gravità sono scritti accanto
+            // Icona decorativa (contentDescription null): tipo e gravità sono già scritti accanto.
             Icon(
                 AppIcons.Alert,
                 contentDescription = null,
@@ -57,7 +63,8 @@ fun HazardCard(hazard: HazardResponse, onOpenTrail: (() -> Unit)?, onClose: () -
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f).padding(top = 8.dp)) {
                 Text(stringResource(hazard.type.label()), style = MaterialTheme.typography.titleMedium)
-                // una propria segnalazione in verifica lo dice a parole (sulla mappa è solo attenuata)
+                // Se è una propria segnalazione ancora in verifica lo si scrive a parole, perché sulla mappa è solo
+                // attenuata.
                 val severity = stringResource(hazard.severity.label())
                 Text(
                     if (hazard.status == HazardResponse.Status.SUBMITTED) severity + " · " + stringResource(hazard.status.label()) else severity,

@@ -1,3 +1,5 @@
+// Schermata di dettaglio di un'allerta SOS per l'operatore del soccorso: posizione, note mediche, squadra assegnata o
+// squadre libere da scegliere, e in fondo le azioni per inviare una squadra o chiudere l'allerta.
 package it.unical.geosentinel_mobile.rescue.ui
 
 import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
@@ -84,13 +86,15 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import kotlin.time.Instant
 
+/** Forma delle card informative della schermata. */
 private val CardShape = RoundedCornerShape(20.dp)
 
 /**
- * Dettaglio di un'allerta per l'operatore (M7.2), spinto dalla scheda Allerte, dalla mappa o dalla push. Posizione con la
- * sua età, note mediche (solo qui, mai in lista o nella notifica), squadra. Con l'allerta `ACTIVE` si sceglie una squadra
- * libera e la si invia; con `ACTIVE` o `DISPATCHED` si chiude, con conferma. L'azione principale sta in fondo, fissa.
- * Con la schermata aperta l'allerta si rilegge ogni 30 s: l'escursionista manda la posizione ogni 60 s.
+ * Dettaglio dell'allerta [alertId] per l'operatore, aperto dalla scheda Allerte, dalla mappa o da una notifica push.
+ * Mostra la posizione con la sua età, le note mediche (solo qui, mai nella lista o nella notifica) e la squadra. Con
+ * l'allerta `ACTIVE` si sceglie una squadra libera e la si invia; con `ACTIVE` o `DISPATCHED` la si chiude, dopo una
+ * conferma. L'azione principale sta in fondo, fissa. Con la schermata in primo piano l'allerta si rilegge ogni 30
+ * secondi, perché l'escursionista invia la posizione ogni 60. Quando l'allerta è chiusa si torna indietro.
  */
 @Composable
 fun RescueAlertDetailScreen(alertId: String, onBack: () -> Unit) {
@@ -134,7 +138,7 @@ fun RescueAlertDetailScreen(alertId: String, onBack: () -> Unit) {
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
                     .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top))
-                    // sotto il pulsante Indietro
+                    // Margine in alto per non finire sotto il pulsante Indietro.
                     .padding(top = 64.dp, bottom = 16.dp),
             ) {
                 Column(
@@ -164,6 +168,7 @@ fun RescueAlertDetailScreen(alertId: String, onBack: () -> Unit) {
     }
 }
 
+/** Contenuto scorrevole del dettaglio: intestazione con lo stato, errori, posizione, note mediche e squadre. */
 @Composable
 private fun AlertContent(
     alert: SosAlertResponse,
@@ -177,7 +182,8 @@ private fun AlertContent(
         Spacer(Modifier.width(14.dp))
         Column {
             Text(stringResource(Res.string.rescue_detail_title), style = MaterialTheme.typography.headlineMedium, modifier = Modifier.semantics { heading() })
-            // lo stato cambia con la schermata aperta (squadra di un collega, chiusura): lo si annuncia
+            // Lo stato può cambiare con la schermata aperta (squadra inviata da un collega, chiusura): la regione "live"
+            // lo fa annunciare dallo screen reader.
             Text(
                 stringResource(alert.status.label()) + " · " + stringResource(Res.string.rescue_raised_ago, ago(alert.createdAt, now)),
                 style = MaterialTheme.typography.bodyLarge,
@@ -234,6 +240,7 @@ private fun AlertContent(
     }
 }
 
+/** Card con un titolo piccolo e un contenuto libero. */
 @Composable
 private fun InfoCard(title: String, content: @Composable ColumnScope.() -> Unit) {
     Column(
@@ -250,13 +257,14 @@ private fun InfoCard(title: String, content: @Composable ColumnScope.() -> Unit)
     }
 }
 
+/** Nome, nominativo radio e numero di contatto di una squadra. */
 @Composable
 private fun TeamText(team: RescueTeamResponse) {
     Text("${team.name} (${team.callSign})", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.SemiBold)
     Text(stringResource(Res.string.rescue_team_contact, team.contactNumber), style = MaterialTheme.typography.bodyMedium)
 }
 
-// Una squadra libera: tutta la riga si tocca (radio), bordo primary quando è scelta
+/** Squadra libera selezionabile: tutta la riga funziona da pulsante radio e ha il bordo nel colore primario quando è scelta. */
 @Composable
 private fun TeamOption(team: RescueTeamResponse, selected: Boolean, enabled: Boolean, onSelect: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -272,13 +280,16 @@ private fun TeamOption(team: RescueTeamResponse, selected: Boolean, enabled: Boo
             .padding(horizontal = 16.dp, vertical = 12.dp),
     ) {
         Column(Modifier.weight(1f)) { TeamText(team) }
-        // la riga intera è il radio: questo lo mostra e basta
+        // Il RadioButton è solo visivo: il tocco lo gestisce la riga intera.
         RadioButton(selected = selected, onClick = null)
     }
 }
 
-// In fondo, fisso: "Invia la squadra" con l'allerta in attesa, "Chiudi l'allerta" con la squadra in viaggio.
-// Un'allerta in attesa si può chiudere lo stesso (falso allarme), con il link sotto.
+/**
+ * Azioni fisse in fondo alla schermata: "Invia la squadra" con l'allerta in attesa, "Chiudi l'allerta" con la squadra
+ * già in viaggio. Un'allerta in attesa si può anche chiudere direttamente (per esempio un falso allarme) con il link
+ * sotto. Per le allerte già chiuse non mostra nulla.
+ */
 @Composable
 private fun BottomActions(alert: SosAlertResponse, state: RescueAlertDetailUiState, onDispatch: () -> Unit, onResolve: () -> Unit) {
     val waiting = alert.status == SosAlertResponse.Status.ACTIVE

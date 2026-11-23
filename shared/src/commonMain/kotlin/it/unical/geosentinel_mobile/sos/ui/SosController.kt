@@ -1,3 +1,6 @@
+// Cuore della funzione SOS dell'app: lancio dell'allerta con l'outbox e i tentativi ripetuti, ripresa dopo un
+// riavvio, aggiornamento della posizione e dello stato, annullamento con verifica sul server. È un singleton che
+// sopravvive alle schermate, così un SOS non si perde chiudendo la UI.
 package it.unical.geosentinel_mobile.sos.ui
 
 import it.unical.geosentinel_mobile.api.model.SosAlertResponse
@@ -33,47 +36,54 @@ import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
 /**
- * L'SOS dell'escursionista (M6.1, posizione e stato in M6.2). Una sola istanza per processo (singleton Koin) con un suo [scope]: l'invio va avanti
- * anche se l'utente lascia la schermata. La regola è una: l'utente deve sempre sapere se il soccorso ha la richiesta,
- * e [state] lo dice.
+ * Gestore dell'SOS dell'escursionista. Ne esiste una sola istanza per processo (singleton Koin), con un proprio
+ * [scope]: l'invio continua anche se l'utente lascia la schermata. Il principio guida è uno solo: l'utente deve
+ * sempre sapere se il soccorso ha ricevuto la richiesta, e [state] lo dice.
  *
- * La `Idempotency-Key` nasce con l'SOS, si salva nell'outbox PRIMA della richiesta e si cancella solo con una risposta
- * definitiva: si ritenta finché non c'è, anche dopo un riavvio ([restore]), e il server non crea doppioni.
- * La posizione arriva da fuori: il provider di MapLibre vive nella UI (A11).
+ * La `Idempotency-Key` nasce con l'SOS, si salva nell'outbox prima della richiesta e si cancella solo con una
+ * risposta definitiva. Fino ad allora si ritenta, anche dopo un riavvio ([restore]), e il server non crea doppioni.
+ * La posizione arriva da fuori, perché il provider della posizione di MapLibre vive nella UI.
+ *
+ * @param ownerId restituisce l'id dell'utente loggato (anche senza profilo letto), null da ospite: l'outbox lega l'SOS
+ * a quell'utente.
+ * @param clock e [newKey] sono parametri per poterli sostituire nei test.
+ * @param retryDelay attesa dopo il tentativo fallito numero n: cresce fino a 30 secondi, per non consumare la
+ * batteria quando manca la rete.
  */
 @OptIn(ExperimentalUuidApi::class)
 class SosController(
     private val sos: SosRepository,
     private val outbox: OutboxDao,
-    // l'utente loggato (anche senza profilo letto), null da ospite: l'outbox lega a lui l'SOS
     private val ownerId: suspend () -> String?,
     private val scope: CoroutineScope,
     private val clock: Clock = Clock.System,
     private val newKey: () -> String = { Uuid.random().toString() },
-    // attesa dopo il tentativo fallito n (1, 2, …): cresce fino a 30 s, per non consumare la batteria senza rete
     private val retryDelay: (attempt: Int) -> Duration = { attempt -> (5.seconds * attempt).coerceAtMost(30.seconds) },
 ) {
     private val json = Json { ignoreUnknownKeys = true }
     private val _state = MutableStateFlow<SosState>(SosState.Idle)
     val state: StateFlow<SosState> = _state.asStateFlow()
 
-    // Stato, outbox e job si cambiano solo con il lock preso; il lock non avvolge MAI una richiesta di rete, così un
-    // SOS non aspetta una rete lenta (restore all'avvio, annullamento, posizione). Dieci tocchi veloci fanno un solo SOS.
+    // Stato, outbox e job si modificano solo tenendo il lock. Il lock invece non avvolge mai una richiesta di rete:
+    // così un SOS non resta in attesa dietro a una richiesta lenta (ripresa all'avvio, annullamento, posizione).
+    // Grazie al lock, dieci tocchi veloci producono un solo SOS.
     private val lock = Mutex()
     private var sending: Job? = null
-    // verifica sul server dopo l'annullamento di un SOS ancora senza risposta (vedi [cancelQueued])
+    // Verifica sul server dopo l'annullamento di un SOS ancora senza risposta (vedi cancelQueued).
     private var verifyCancel: Job? = null
 
     /**
-     * Lancia l'SOS in [at]. Da ospite (o con la sessione scaduta) restituisce false e non fa nulla: la UI propone 112
-     * e accesso. Mentre un invio è già in corso non ne parte un altro. Gira nello [scope] del controller: se la
+     * Lancia l'SOS dalla posizione [at] con le note mediche (vuote: nessuna nota).
+     *
+     * Da ospite, o con la sessione scaduta, non fa nulla e restituisce false: la UI propone allora il 112 e l'accesso.
+     * Se un invio è già in corso non ne parte un altro. Il lavoro gira nello [scope] del controller: anche se la
      * schermata si chiude subito dopo il tocco, l'SOS parte lo stesso.
      */
     suspend fun raise(at: GeoPoint, medicalNotes: String?): Boolean = scope.async {
         lock.withLock {
             val owner = ownerId() ?: return@withLock false
             if (_state.value is SosState.Sending) return@withLock true
-            // un SOS nuovo: la verifica di un annullamento precedente non deve chiudere questo
+            // Un SOS nuovo: la verifica di un annullamento precedente non deve chiudere proprio questo.
             verifyCancel?.cancel()
             outbox.pending(ActionKind.SOS_CANCEL, owner).forEach { outbox.delete(it.idempotencyKey) }
             val payload = SosPayload(at.lat, at.lon, medicalNotes?.trim()?.takeIf { it.isNotEmpty() })
@@ -91,8 +101,9 @@ class SosController(
     }.await()
 
     /**
-     * All'avvio da loggati (e a ogni login): un SOS rimasto in coda riparte con la sua chiave, altrimenti si chiede al
-     * server se c'è un'allerta attiva (anche lanciata da un altro dispositivo). Senza rete lo stato resta com'è.
+     * Ripristina lo stato all'avvio da loggati e a ogni login. Un SOS rimasto in coda riparte con la sua chiave; un
+     * annullamento ancora da verificare riprende la verifica; altrimenti si chiede al server se c'è un'allerta attiva,
+     * magari lanciata da un altro dispositivo. Senza rete lo stato resta com'è.
      */
     suspend fun restore(): Unit = scope.async {
         val askServer = lock.withLock {
@@ -108,8 +119,8 @@ class SosController(
                 startSending(queued)
                 return@withLock false
             }
-            // un annullamento ancora da verificare (app chiusa nel frattempo): l'utente voleva annullare, si riprende
-            // la verifica invece di mostrargli di nuovo l'allerta
+            // Un annullamento ancora da verificare (l'app si è chiusa nel frattempo): l'utente voleva annullare, quindi
+            // si riprende la verifica invece di mostrargli di nuovo l'allerta.
             val cancelling = outbox.pending(ActionKind.SOS_CANCEL, owner).firstOrNull()
             if (cancelling != null) {
                 _state.value = SosState.Idle
@@ -120,27 +131,30 @@ class SosController(
         }
         if (!askServer) return@async
         val result = call { sos.active() }
-        // nel frattempo può essere partito un SOS (Sending o Raised): quello vince
+        // Mentre si aspettava la rete può essere partito un SOS (Sending o Raised): in quel caso vince quello.
         lock.withLock { if (_state.value.isSettled()) applyActive(result) }
     }.await()
 
     /**
-     * M6.2: manda la posizione nuova dell'allerta attiva (dalla UI, ogni 60 s in primo piano). La risposta aggiorna anche
-     * lo stato (es. la squadra assegnata). Senza allerta non fa nulla; un errore di rete si lascia al giro successivo.
+     * Invia la nuova posizione dell'allerta attiva; la chiama la UI ogni 60 secondi con l'app in primo piano. La
+     * risposta aggiorna anche lo stato, per esempio con la squadra assegnata. Senza un'allerta non fa nulla; un errore
+     * di rete si lascia al giro successivo.
      */
     suspend fun updateLocation(at: GeoPoint): Unit = scope.async {
         val alertId = raisedAlertId() ?: return@async
         val result = call { sos.updateLocation(alertId, at) }
-        // 404 o 422: l'allerta non è più attiva (chiusa dal soccorso), si chiede al server com'è adesso
+        // Un 404 o un 422 vuol dire che l'allerta non è più attiva (chiusa dal soccorso): si chiede al server lo stato
+        // attuale.
         val closed = result.exceptionOrNull()?.apiError().let { it is ApiError.NotFound || it is ApiError.BusinessRule }
         val now = if (closed) call { sos.active() } else result
         lock.withLock { if (raisedAlertId() == alertId) applyActive(now) }
     }.await()
 
     /**
-     * Rilegge l'allerta attiva: ogni 30 s con la schermata aperta (M6.2) e a ogni push `SOS_DISPATCHED`/`SOS_RESOLVED`
-     * (M7.1). Anche da Idle o Failed: la push può arrivare dopo una risposta persa o un riavvio senza rete. Durante
-     * l'invio no: la risposta arriva al job, con la stessa chiave.
+     * Rilegge l'allerta attiva: ogni 30 secondi con la schermata SOS aperta e a ogni notifica push `SOS_DISPATCHED` o
+     * `SOS_RESOLVED`. Funziona anche da Idle o Failed, perché la notifica può arrivare dopo una risposta persa o un
+     * riavvio senza rete. Durante l'invio invece non fa nulla: la risposta arriverà al job di invio, con la stessa
+     * chiave.
      */
     suspend fun refresh(): Unit = scope.async {
         if (_state.value is SosState.Sending) return@async
@@ -155,12 +169,17 @@ class SosController(
         }
     }.await()
 
+    /** Id dell'allerta a schermo, se lo stato è Raised. */
     private fun raisedAlertId(): String? = (_state.value as? SosState.Raised)?.alert?.id
 
-    // Idle o Failed: nessun invio in corso e nessuna allerta a schermo
+    /** Vero in Idle o Failed: nessun invio in corso e nessuna allerta a schermo. */
     private fun SosState.isSettled() = this is SosState.Idle || this is SosState.Failed
 
-    // 404 = nessuna allerta attiva (chiusa dal soccorso o annullata altrove); senza rete lo stato resta com'è
+    /**
+     * Applica la risposta sull'allerta attiva: con un'allerta lo stato diventa Raised; un 404 (nessuna allerta attiva,
+     * perché chiusa dal soccorso o annullata altrove) riporta a Idle; con altri errori, come la rete assente, lo stato
+     * resta com'è.
+     */
     private fun applyActive(result: Result<SosAlertResponse>) {
         result.fold(
             onSuccess = { _state.value = SosState.Raised(it) },
@@ -169,9 +188,9 @@ class SosController(
     }
 
     /**
-     * Logout o sessione chiusa: si smette di inviare e di verificare. Con la sessione scaduta l'SOS resta in coda e
-     * riparte al login dello stesso utente; con il logout la coda la svuota SessionManager (resta solo la verifica di un
-     * annullamento, che riparte al suo login).
+     * Chiamata al logout o alla chiusura della sessione: smette di inviare e di verificare e torna a Idle. Con la
+     * sessione scaduta l'SOS resta in coda e riparte al login dello stesso utente; con il logout la coda la svuota
+     * SessionManager (resta solo la verifica di un annullamento, che riparte al login di quell'utente).
      */
     suspend fun reset(): Unit = lock.withLock {
         sending?.cancelAndJoin()
@@ -180,8 +199,9 @@ class SosController(
     }
 
     /**
-     * Annulla l'SOS. Gira nello [scope] del controller: lasciare la schermata a metà non lo interrompe.
-     * Un errore (di solito la rete) lascia l'allerta com'è e si restituisce, così la UI lo mostra.
+     * Annulla l'SOS, sia ancora in invio sia già ricevuto. Gira nello [scope] del controller: lasciare la schermata a
+     * metà non lo interrompe. Un errore (di solito la rete) lascia l'allerta com'è e viene restituito, così la UI lo
+     * mostra.
      */
     suspend fun cancel(): Result<Unit> = scope.async {
         when (val current = _state.value) {
@@ -194,10 +214,13 @@ class SosController(
         }
     }.await()
 
-    // Ancora senza risposta: si smette di inviare e si toglie dalla coda. La richiesta però può essere arrivata (risposta
-    // persa, o in volo al momento dell'annullamento): finché il server non risponde, verifyCancelled continua a
-    // chiederlo e chiude l'allerta se c'è. La verifica è un'azione dell'outbox (SOS_CANCEL, senza dati personali):
-    // se l'app si chiude prima, riparte al riavvio (restore) invece di perdersi.
+    /**
+     * Annulla un SOS ancora senza risposta: smette di inviarlo e lo toglie dalla coda. La richiesta però potrebbe
+     * essere già arrivata al server (risposta persa, o richiesta in volo al momento dell'annullamento): per questo
+     * verifyCancelled continua a chiedere al server e chiude l'allerta se esiste. La verifica è a sua volta un'azione
+     * dell'outbox (`SOS_CANCEL`, senza dati personali): se l'app si chiude prima, riparte al riavvio con [restore]
+     * invece di perdersi. Da chiamare con il lock preso.
+     */
     private suspend fun cancelQueued(): Result<Unit> {
         sending?.cancelAndJoin()
         verifyCancel?.cancel()
@@ -218,7 +241,7 @@ class SosController(
         return Result.success(Unit)
     }
 
-    // Finita la verifica (allerta chiusa, o mai arrivata) l'azione si toglie dall'outbox
+    /** Esegue la verifica dell'annullamento e, quando ha una risposta (allerta chiusa o mai arrivata), toglie l'azione [key] dall'outbox. */
     private suspend fun verifyCancelled(key: String) {
         try {
             verifyUntilAnswered()
@@ -226,10 +249,15 @@ class SosController(
         } catch (e: CancellationException) {
             throw e
         } catch (_: Exception) {
-            // database guasto: la riga resta e la verifica riparte al prossimo restore
+            // Errore del database: la riga resta e la verifica riparte al prossimo restore.
         }
     }
 
+    /**
+     * Chiede al server se c'è un'allerta attiva finché non ottiene una risposta definitiva. Se c'è, la annulla; se non
+     * c'è, ricontrolla una seconda volta prima di concludere. Si ferma anche su un errore definitivo; sugli errori
+     * temporanei attende [retryDelay] e riprova.
+     */
     private suspend fun verifyUntilAnswered() {
         var attempt = 0
         var notFound = 0
@@ -242,7 +270,8 @@ class SosController(
                     val closeError = closed.exceptionOrNull()?.apiError()
                     if (closed.isSuccess || closeError is ApiError.NotFound || closeError is ApiError.BusinessRule) return
                 }
-                // nessuna allerta: si ricontrolla una volta dopo una pausa, perché una richiesta in volo può arrivare dopo
+                // Nessuna allerta: si ricontrolla una volta dopo una pausa, perché una richiesta ancora in volo può
+                // arrivare al server più tardi.
                 error is ApiError.NotFound -> if (++notFound >= 2) return
                 error != null && !error.isTransient() -> return
             }
@@ -250,24 +279,32 @@ class SosController(
         }
     }
 
-    // La richiesta senza il lock: un SOS lanciato nel frattempo non aspetta la rete
+    /**
+     * Annulla un'allerta già ricevuta dal server. La richiesta si fa senza il lock, così un SOS lanciato nel frattempo
+     * non deve aspettare la rete.
+     */
     private suspend fun cancelRaised(alertId: String): Result<Unit> {
         val result = call { sos.cancel(alertId) }
         val failure = result.exceptionOrNull()
-        // 404 o 422 (già chiusa dal soccorso): l'allerta non è più attiva, che è quello che l'utente voleva
+        // Un 404 o un 422 (allerta già chiusa dal soccorso) vuol dire che non è più attiva, cioè proprio quello che
+        // l'utente voleva: si tratta come un successo.
         val error = failure?.apiError()
         if (failure != null && error !is ApiError.NotFound && error !is ApiError.BusinessRule) return Result.failure(failure)
         lock.withLock { if (raisedAlertId() == alertId) _state.value = SosState.Idle }
         return Result.success(Unit)
     }
 
-    // Da chiamare con il lock preso
+    /**
+     * Avvia il job che invia l'azione SOS [action] e ritenta sugli errori temporanei, aggiornando [state] a ogni
+     * tentativo. Da chiamare con il lock preso.
+     */
     private suspend fun startSending(action: PendingActionEntity) {
         val key = action.idempotencyKey
         val payload = try {
             json.decodeFromString(SosPayload.serializer(), action.payloadJson)
         } catch (_: SerializationException) {
-            // riga illeggibile (es. formato cambiato in un aggiornamento): non si può mandare, e l'utente deve saperlo
+            // Riga illeggibile (per esempio formato cambiato con un aggiornamento dell'app): non si può inviare, e
+            // l'utente deve saperlo.
             outbox.delete(key)
             _state.value = SosState.Failed(NotConfirmed)
             return
@@ -292,7 +329,8 @@ class SosController(
                             delay(retryDelay(attempts))
                         }
                         else -> {
-                            // un 4xx definitivo (es. 403): ripeterlo uguale non serve, ma l'utente deve saperlo subito
+                            // Un 4xx definitivo (per esempio 403): ripetere la stessa richiesta non serve, ma l'utente
+                            // deve saperlo subito.
                             outbox.delete(key)
                             _state.value = SosState.Failed(error ?: ApiError.Network)
                             return@launch
@@ -302,15 +340,17 @@ class SosController(
             } catch (e: CancellationException) {
                 throw e
             } catch (_: Exception) {
-                // il database ha fallito: niente crash. L'SOS resta in coda per il prossimo restore e la UI propone il 112
+                // Errore del database: l'app non crasha. L'SOS resta in coda per il prossimo restore e la UI propone
+                // il 112.
                 _state.value = SosState.Failed(NotConfirmed)
             }
         }
     }
 
     /**
-     * Le chiamate del controller non lanciano mai: una risposta 2xx fuori contratto (un bug) vale come un errore del
-     * server, che si ritenta. Niente crash, e niente crash a ogni avvio con l'SOS in coda.
+     * Esegue una chiamata del repository senza mai lanciare eccezioni (tranne la cancellazione). Una risposta 2xx che
+     * non rispetta il contratto (un bug) vale come un errore del server e quindi si ritenta: così l'app non crasha,
+     * nemmeno a ogni avvio con l'SOS in coda.
      */
     private suspend fun <T> call(block: suspend () -> Result<T>): Result<T> = try {
         block()
@@ -321,9 +361,10 @@ class SosController(
     }
 
     private companion object {
-        // azione in coda illeggibile o database guasto: per l'utente è "non confermato", con il 112 in primo piano
+        /** Errore usato per un'azione in coda illeggibile o un database guasto: per l'utente è "non confermato", con il 112 in evidenza. */
         val NotConfirmed = ApiError.Server(status = 0, traceId = null)
     }
 }
 
+/** Errore dell'API contenuto nell'eccezione, oppure null se l'eccezione non viene dal server. */
 private fun Throwable.apiError(): ApiError? = (this as? ApiException)?.error

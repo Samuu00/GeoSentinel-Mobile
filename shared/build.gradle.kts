@@ -1,3 +1,5 @@
+// Script di build del modulo shared, il cuore dell'app in Kotlin Multiplatform: contiene logica, accesso ai dati e
+// interfaccia in Compose, condivisi tra Android e iOS. Su iOS diventa il framework statico "Shared" usato da Xcode.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 
 plugins {
@@ -11,11 +13,13 @@ plugins {
 }
 
 kotlin {
-    // Room KMP vuole un expect object (AppDatabaseConstructor): le classi expect/actual sono ancora Beta
     compilerOptions {
+        // Room in KMP richiede un expect object (AppDatabaseConstructor), e le classi expect/actual sono ancora in Beta:
+        // l'opzione abilita esplicitamente la funzionalità.
         freeCompilerArgs.add("-Xexpect-actual-classes")
     }
     listOf(
+        // Target iOS (dispositivo e simulatore Apple Silicon): ognuno produce il framework statico "Shared".
         iosArm64(),
         iosSimulatorArm64()
     ).forEach { iosTarget ->
@@ -33,38 +37,43 @@ kotlin {
         compilerOptions {
             jvmTarget = JvmTarget.JVM_11
         }
+        // Le risorse Android sono abilitate e disponibili anche ai test host (Robolectric).
         androidResources {
             enable = true
         }
         withHostTest {
             isIncludeAndroidResources = true
         }
-        // Albero separato da commonTest: i test comuni girano già sulla JVM e su iOS, e i loro nomi con gli
-        // spazi non passano da D8 sotto Android 11 (minSdk 24)
+        // Test sul dispositivo in un albero separato da commonTest: i test comuni girano già sulla JVM e su iOS, e i loro
+        // nomi con gli spazi non passano da D8 per le versioni di Android precedenti alla 11 (minSdk 24).
         withDeviceTestBuilder {}.configure {
             instrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         }
     }
 
     sourceSets {
+        // Dipendenze solo Android: motore HTTP OkHttp, Credential Manager e ID token di Google per il login.
         androidMain.dependencies {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.compose.uiTooling)
             implementation(libs.ktor.client.okhttp)
-            // Photo Picker (M4.2): già nel catalogo, la usa anche androidApp
+            // Activity Compose serve al selettore di foto di sistema (Photo Picker).
             implementation(libs.androidx.activity.compose)
             implementation(libs.androidx.credentials)
             implementation(libs.androidx.credentials.playServices)
             implementation(libs.googleid)
-            // Su Android il motore di MapLibre va scelto (OpenGL ES o Vulkan): senza, la mappa va in crash all'apertura
-            // (libmaplibre-native-c.so mancante). OpenGL ES: tutti i telefoni e l'emulatore. Su iOS arriva Metal da solo.
+            // Su Android il motore di MapLibre va scelto esplicitamente (OpenGL ES o Vulkan): senza, la mappa va in crash
+            // all'apertura perché manca libmaplibre-native-c.so. OpenGL ES funziona su tutti i telefoni e sull'emulatore;
+            // su iOS il motore Metal arriva da solo.
             implementation(libs.maplibre.native.runtime.opengl)
         }
+        // Dipendenze solo iOS: motore HTTP Darwin (URLSession).
         iosMain.dependencies {
             implementation(libs.ktor.client.darwin)
         }
+        // Dipendenze comuni: client generato dell'API, Compose, ciclo di vita, Ktor, kotlinx, Koin, navigazione, Room,
+        // DataStore, MapLibre, Coil e Kermit.
         commonMain.dependencies {
-            // client generato dal contratto (M1.1)
             implementation(project(":apiClient"))
             implementation(libs.compose.runtime)
             implementation(libs.compose.foundation)
@@ -96,18 +105,19 @@ kotlin {
             implementation(libs.coil.network.ktor3)
             implementation(libs.kermit)
         }
+        // Dipendenze dei test comuni: kotlin-test, coroutine di test, Turbine e motore HTTP finto di Ktor.
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
             implementation(libs.turbine)
             implementation(libs.ktor.client.mock)
         }
-        // test di UI di Compose (M9.1) sulla JVM con Robolectric: girano nel job android della CI
+        // Test di UI di Compose sulla JVM con Robolectric: girano nel job android della CI.
         getByName("androidHostTest").dependencies {
             implementation(libs.compose.uiTestJunit4)
             implementation(libs.robolectric)
         }
-        // test sull'emulatore: ./gradlew :shared:connectedAndroidDeviceTest (Keystore vero, M2.1)
+        // Test sull'emulatore o su un dispositivo (./gradlew :shared:connectedAndroidDeviceTest), con il Keystore vero.
         getByName("androidDeviceTest").dependencies {
             implementation(libs.kotlin.testJunit)
             implementation(libs.androidx.testRunner)
@@ -116,13 +126,14 @@ kotlin {
     }
 }
 
+// Cartella in cui Room esporta lo schema del database a ogni versione; va salvata nel repository per le migrazioni.
 room {
     schemaDirectory("$projectDir/schemas")
 }
 
 dependencies {
     androidRuntimeClasspath(libs.compose.uiTooling)
-    // Room in KMP: il compilatore va aggiunto per ogni target
+    // Room in KMP: il compilatore delle annotazioni va aggiunto a KSP per ogni target.
     add("kspAndroid", libs.room.compiler)
     add("kspIosArm64", libs.room.compiler)
     add("kspIosSimulatorArm64", libs.room.compiler)

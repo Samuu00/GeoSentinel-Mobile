@@ -1,3 +1,4 @@
+// ViewModel della lista dei ticket di manutenzione, con i filtri per stato, priorità e "solo i miei".
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
@@ -17,17 +18,18 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Stato della lista dei ticket con i filtri scelti. */
 data class TicketListUiState(
     val tickets: List<TicketResponse> = emptyList(),
     val loading: Boolean = true,
     val error: UiMessage? = null,
     val status: MaintenanceApi.StatusSearchTickets? = null,
     val priority: MaintenanceApi.PrioritySearchTickets? = null,
-    // solo i ticket assegnati a chi è loggato
+    /** Mostra solo i ticket assegnati all'utente loggato. */
     val mineOnly: Boolean = false,
 )
 
-// Lista dei ticket, con filtri. Un cambio di filtro o un "Riprova" annulla la richiesta in corso.
+/** ViewModel della lista dei ticket. Un cambio di filtro o un "Riprova" annulla la richiesta in corso e ne avvia una nuova. */
 class TicketListViewModel(
     private val tickets: TicketRepository,
     private val session: SessionManager,
@@ -40,31 +42,39 @@ class TicketListViewModel(
 
     init { reload() }
 
+    /** Ricarica la lista annullando la richiesta in corso. */
     fun reload() {
         job?.cancel()
         job = viewModelScope.launch { load() }
     }
 
-    // Al ritorno dal dettaglio: si rilegge, ma non sopra una lettura già in corso (la prima, all'apertura)
+    /** Rilegge la lista al ritorno dal dettaglio, ma non se una lettura è già in corso (come la prima, all'apertura). */
     fun refresh() {
         if (job?.isActive != true) reload()
     }
 
+    /** Imposta il filtro per stato (null: tutti) e ricarica. */
     fun onStatusChange(status: MaintenanceApi.StatusSearchTickets?) {
         _state.update { it.copy(status = status) }
         reload()
     }
 
+    /** Imposta il filtro per priorità (null: tutte) e ricarica. */
     fun onPriorityChange(priority: MaintenanceApi.PrioritySearchTickets?) {
         _state.update { it.copy(priority = priority) }
         reload()
     }
 
+    /** Attiva o disattiva il filtro "solo i miei" e ricarica. */
     fun onMineChange(mineOnly: Boolean) {
         _state.update { it.copy(mineOnly = mineOnly) }
         reload()
     }
 
+    /**
+     * Esegue la ricerca con i filtri attuali. Con "solo i miei" serve l'id dell'utente: se non è disponibile si mostra
+     * un errore invece di cercare senza filtro.
+     */
     private suspend fun load() {
         _state.update { it.copy(loading = true, error = null) }
         val filter = _state.value

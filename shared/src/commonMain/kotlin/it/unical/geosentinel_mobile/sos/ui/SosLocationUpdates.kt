@@ -1,3 +1,5 @@
+// Invio periodico della posizione mentre c'è un SOS attivo, così il soccorso segue gli spostamenti
+// dell'escursionista.
 package it.unical.geosentinel_mobile.sos.ui
 
 import androidx.compose.runtime.Composable
@@ -10,13 +12,15 @@ import kotlinx.coroutines.delay
 import org.maplibre.compose.location.rememberDefaultLocationProvider
 import kotlin.time.Duration.Companion.seconds
 
+/** Intervallo tra due invii della posizione. */
 private val LocationEvery = 60.seconds
 
 /**
- * M6.2: con un'allerta attiva manda la posizione ogni 60 s, solo con l'app in primo piano (la posizione in background
- * non c'è in questa versione, §7), e subito a ogni ritorno in primo piano: `repeatOnLifecycle` riparte da capo.
- * Sta in `App`, non nella schermata SOS, così vale anche mentre l'utente guarda la mappa. Il provider esiste solo
- * finché questa funzione è nella composizione: il GPS lavora solo con un SOS attivo (M9.2).
+ * Con un'allerta attiva invia la posizione ogni 60 secondi, solo con l'app in primo piano (la posizione in background
+ * non è supportata), e subito a ogni ritorno in primo piano, perché `repeatOnLifecycle` riparte da capo.
+ *
+ * Si trova in `App` e non nella schermata SOS, così funziona anche mentre l'utente guarda la mappa. Il provider della
+ * posizione esiste solo finché questa funzione è nella composizione: in questo modo il GPS lavora solo durante un SOS.
  */
 @Composable
 fun SosLocationUpdates(controller: SosController) {
@@ -25,7 +29,8 @@ fun SosLocationUpdates(controller: SosController) {
     LaunchedEffect(provider, lifecycleOwner) {
         lifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
             while (true) {
-                // senza permesso o senza fix si salta il giro: il soccorso ha comunque l'ultima posizione inviata
+                // Senza permesso o senza una posizione disponibile si salta il giro: il soccorso ha comunque l'ultima
+                // posizione inviata.
                 provider.current()?.let { controller.updateLocation(it) }
                 delay(LocationEvery)
             }

@@ -1,10 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Manifest principale dell'app Android: permessi, classe Application, Activity unica che ospita l'interfaccia
+     Compose, servizio delle notifiche push di Firebase e FileProvider per le foto scattate con la fotocamera. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <uses-permission android:name="android.permission.INTERNET"/>
-    <!-- Push (M7.1), Android 13+: chiesto la prima volta che serve (operatore da loggato, escursionista al primo SOS) -->
+    <!-- Permesso delle notifiche (richiesto da Android 13 in poi): l'app lo chiede la prima volta che serve, cioè
+         all'accesso per un operatore del soccorso e al primo SOS per un escursionista. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
-    <!-- Posizione solo in primo piano: mappa, sentieri vicini, SOS (niente background in questa versione) -->
+    <!-- Posizione solo con l'app in primo piano (mappa, sentieri vicini, SOS): l'app non chiede la posizione in background. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION"/>
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION"/>
 
@@ -18,7 +21,8 @@
             android:roundIcon="@mipmap/ic_launcher_round"
             android:supportsRtl="true"
             android:theme="@style/Theme.GeoSentinel">
-        <!-- Push (M7.1). Con l'app in background la notifica la mostra FCM: canale e icona da qui -->
+        <!-- Servizio delle push di Firebase Cloud Messaging. Con l'app in background la notifica la mostra direttamente FCM,
+             usando il canale e l'icona indicati dai meta-data qui sotto. -->
         <service
                 android:name=".push.GeoSentinelFirebaseService"
                 android:exported="false">
@@ -32,8 +36,9 @@
         <meta-data
                 android:name="com.google.firebase.messaging.default_notification_icon"
                 android:resource="@drawable/ic_notification"/>
-        <!-- singleTop: il tocco su una notifica con l'app aperta arriva in onNewIntent, senza una seconda App sopra.
-             uiMode: chiaro/scuro (dal sistema o dal Profilo) lo ridisegna Compose, senza ricreare l'Activity -->
+        <!-- Activity unica dell'app. Con singleTop il tocco su una notifica ad app aperta arriva in onNewIntent, senza
+             creare una seconda istanza sopra. Con configChanges="uiMode" il passaggio tra tema chiaro e scuro lo gestisce
+             Compose ridisegnando, senza ricreare l'Activity. -->
         <activity
                 android:configChanges="uiMode"
                 android:exported="true"
@@ -45,8 +50,9 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-        <!-- Foto dalla fotocamera (M4.2): l'app della fotocamera scrive in cache/camera/ attraverso questo Uri.
-             Niente permesso CAMERA: dichiararlo obbligherebbe a chiederlo anche per l'intent di sistema -->
+        <!-- FileProvider per le foto scattate: l'app della fotocamera scrive nella cartella cache/camera tramite un Uri
+             temporaneo. Il permesso CAMERA non è dichiarato: dichiararlo obbligherebbe a chiederlo anche per usare l'app
+             della fotocamera di sistema. -->
         <provider
                 android:name="androidx.core.content.FileProvider"
                 android:authorities="${applicationId}.photos"

@@ -1,3 +1,5 @@
+// Scheda Rifugi con i due segmenti "Esplora" (rifugi vicini con foto e distanza) e "Prenotazioni" (prossimo
+// soggiorno, prenotazioni in arrivo e passate, avvisi dei rifiuti e foglio delle azioni su una prenotazione).
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.compose.foundation.background
@@ -136,20 +138,26 @@ import org.maplibre.compose.location.rememberLocationState
 import kotlin.time.Duration.Companion.seconds
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
-// Quanto si aspetta la posizione (con il permesso già dato) prima di ripiegare sull'area di partenza
+/** Quanto si aspetta la posizione (con il permesso già concesso) prima di ripiegare sull'area di partenza della mappa. */
 private val FixWait = 3.seconds
 
-/** Segmenti della scheda Rifugi. */
+/** Indice del segmento "Esplora" della scheda Rifugi. */
 const val REFUGES_EXPLORE = 0
+/** Indice del segmento "Prenotazioni" della scheda Rifugi. */
 const val REFUGES_BOOKINGS = 1
 
 /**
- * Scheda Rifugi (M5.1 e M5.2, rifatta con il redesign 11/2026, docs/UI_REDESIGN_PLAN.md §3.1 e §3.4), con due viste:
- * - Esplora: i rifugi entro 50 km, dal più vicino, con la foto. Con il permesso della posizione già dato si parte da
- *   lì; altrimenti dall'area di partenza della mappa, senza chiedere il permesso (lo chiede la mappa, quando serve);
- * - Prenotazioni: il prossimo soggiorno come un biglietto, poi in arrivo e passate. Un tocco su una prenotazione apre
- *   un foglio con le azioni (rifugio, indicazioni, chiamata, annulla).
- * [segment] lo tiene App, così "Vedi le prenotazioni" (dal foglio Prenota o dal Profilo) apre la vista giusta.
+ * Scheda Rifugi, con due viste.
+ *
+ * Esplora: i rifugi entro 50 km, dal più vicino, con la foto. Se il permesso della posizione è già concesso si parte
+ * dalla posizione dell'utente; altrimenti dall'area di partenza della mappa, senza chiedere il permesso (lo chiede la
+ * mappa, quando serve).
+ *
+ * Prenotazioni: il prossimo soggiorno come un biglietto, poi le prenotazioni in arrivo e quelle passate. Un tocco su
+ * una prenotazione apre un foglio con le azioni (apri il rifugio, indicazioni, chiamata, annulla).
+ *
+ * Il segmento scelto ([segment]) è tenuto da App, così "Vedi le prenotazioni" (dal foglio "Prenota" o dal Profilo)
+ * apre direttamente la vista giusta.
  */
 @Composable
 fun RefugeListScreen(segment: Int, onSegment: (Int) -> Unit, onOpenRefuge: (String) -> Unit) {
@@ -160,7 +168,8 @@ fun RefugeListScreen(segment: Int, onSegment: (Int) -> Unit, onOpenRefuge: (Stri
     val bookings by bookingsViewModel.state.collectAsStateWithLifecycle()
     val location = rememberLocationState()
 
-    // a ogni ingresso nella scheda: i posti e la posizione possono essere cambiati
+    // A ogni ingresso nella scheda (e quando cambia il permesso) i rifugi si ricaricano, perché posti e posizione
+    // possono essere cambiati.
     LaunchedEffect(location.permission is LocationPermission.Granted) {
         val fix = if (location.permission is LocationPermission.Granted) {
             withTimeoutOrNull(FixWait) { snapshotFlow { location.lastLocation }.filterNotNull().first() }
@@ -170,15 +179,15 @@ fun RefugeListScreen(segment: Int, onSegment: (Int) -> Unit, onOpenRefuge: (Stri
         if (fix != null) listViewModel.load(fix.position.toGeoPoint(), nearMe = true) else listViewModel.load(DefaultArea, nearMe = false)
     }
 
-    // a ogni apertura delle prenotazioni (anche tornando dal foglio "Prenota" di un rifugio) la lista si rilegge:
-    // il ViewModel vive con la scheda e non saprebbe della prenotazione nuova
+    // A ogni apertura delle prenotazioni (anche tornando dal foglio "Prenota" di un rifugio) la lista si rilegge: il
+    // ViewModel vive quanto la scheda e altrimenti non saprebbe della prenotazione nuova.
     LaunchedEffect(segment) { if (segment == REFUGES_BOOKINGS) bookingsViewModel.reload() }
 
-    // la prenotazione di cui è aperto il foglio delle azioni, e quella da annullare (dialogo di conferma)
+    // Id della prenotazione di cui è aperto il foglio delle azioni e di quella in attesa di conferma dell'annullamento.
     var actionsFor by rememberSaveable { mutableStateOf<String?>(null) }
     var confirming by rememberSaveable { mutableStateOf<String?>(null) }
 
-    // in invio o rifiutate: un pallino sul segmento, perché sono cose da guardare
+    // Prenotazioni in invio o rifiutate: un pallino sul segmento richiama l'attenzione dell'utente.
     val attention = bookings.pending.size + bookings.rejected.size
     val badgeLabel = pluralStringResource(Res.plurals.refuges_tab_bookings_badge, attention, attention)
     val badges = if (attention > 0) mapOf(REFUGES_BOOKINGS to badgeLabel) else emptyMap()
@@ -218,7 +227,7 @@ fun RefugeListScreen(segment: Int, onSegment: (Int) -> Unit, onOpenRefuge: (Stri
                 actionsFor = null
                 onOpenRefuge(opened.refugeId)
             },
-            // un foglio alla volta: il dialogo di conferma arriva dopo che il foglio si è chiuso
+            // Un solo elemento modale alla volta: il dialogo di conferma compare dopo che il foglio si è chiuso.
             onCancel = {
                 actionsFor = null
                 confirming = opened.id
@@ -242,10 +251,9 @@ fun RefugeListScreen(segment: Int, onSegment: (Int) -> Unit, onOpenRefuge: (Stri
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Esplora
-// ---------------------------------------------------------------------------------------------------------------------
+// Esplora.
 
+/** Elementi della lista del segmento Esplora: caricamento, errore, lista vuota oppure le card dei rifugi. */
 private fun LazyListScope.exploreItems(
     list: RefugeList,
     covers: Map<String, MediaResponse?>,
@@ -267,7 +275,8 @@ private fun LazyListScope.exploreItems(
                     modifier = Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 24.dp).padding(bottom = 8.dp),
                 )
             }
-            // una card per item (lazy: le foto si chiedono solo per le card che si vedono)
+            // Una card per elemento: la lista è lazy, quindi le copertine si chiedono solo per le card che entrano in
+            // vista.
             itemsIndexed(list.refuges, key = { _, refuge -> "refuge-" + refuge.id }) { index, refuge ->
                 LaunchedEffect(refuge.id) { onCover(refuge.id) }
                 RefugeCard(
@@ -283,8 +292,11 @@ private fun LazyListScope.exploreItems(
     }
 }
 
-// Un rifugio come una cartolina (redesign "Luce di quota"): card bianca con la foto in testa e la distanza in un chip
-// sulla foto; sotto il nome in Archivo, quota e posti. Tutta la card apre il dettaglio; entra a cascata e cede al tocco.
+/**
+ * Card di un rifugio in stile cartolina: la foto in testa con la distanza da [from] in un chip, sotto il nome, quota,
+ * posti e stagione. Tutta la card apre il dettaglio. [index] serve per l'entrata a cascata delle card; [coverKnown]
+ * dice se la risposta sulla copertina è già arrivata.
+ */
 @Composable
 private fun RefugeCard(
     refuge: RefugeResponse,
@@ -322,7 +334,6 @@ private fun RefugeCard(
                         listOf(
                             refuge.altitudeM?.let { stringResource(Res.string.refuge_altitude, it) },
                             pluralStringResource(Res.plurals.refuge_beds, refuge.capacity, refuge.capacity),
-                            // la stagione, come nel progetto Figma ("1 760 m · Sila · giu–set")
                             refuge.season,
                         ),
                     )
@@ -333,8 +344,11 @@ private fun RefugeCard(
     }
 }
 
-// La foto del rifugio a tutta larghezza (16:10) o, senza foto, il cielo dell'ora con le creste.
-// Decorativa: il nome è scritto sotto
+/**
+ * Copertina della card a tutta larghezza, in proporzione 16:9: la foto del rifugio oppure, se non ce n'è, il cielo
+ * dell'ora sopra le creste. Mentre la risposta non è arrivata ([loading]) resta un riquadro colorato. È decorativa per
+ * lo screen reader, perché il nome è scritto sotto.
+ */
 @Composable
 private fun Cover(cover: MediaResponse?, loading: Boolean) {
     val fill = MaterialTheme.colorScheme.primaryContainer
@@ -346,7 +360,7 @@ private fun Cover(cover: MediaResponse?, loading: Boolean) {
             .clearAndSetSemantics { },
     ) {
         if (cover == null) {
-            // senza foto: il cielo dell'ora sopra le creste, come in testata
+            // Senza foto: il cielo dell'ora sopra le creste, come nelle testate delle pagine.
             if (!loading) SkyPicture(Modifier.matchParentSize())
         } else {
             val media = koinInject<MediaRepository>()
@@ -365,10 +379,12 @@ private fun Cover(cover: MediaResponse?, loading: Boolean) {
     }
 }
 
-// ---------------------------------------------------------------------------------------------------------------------
-// Prenotazioni
-// ---------------------------------------------------------------------------------------------------------------------
+// Prenotazioni.
 
+/**
+ * Elementi della lista del segmento Prenotazioni: errore dell'annullamento, avvisi dei rifiuti, poi il prossimo
+ * soggiorno, le prenotazioni in arrivo e le passate, con il caricamento delle pagine successive in fondo.
+ */
 private fun LazyListScope.bookingItems(
     state: MyBookingsUiState,
     viewModel: MyBookingsViewModel,
@@ -383,7 +399,8 @@ private fun LazyListScope.bookingItems(
             }
         }
     }
-    // in coda e poi rifiutate (o scadute): l'utente le aveva viste "in invio", qui sa che non ci sono
+    // Prenotazioni passate dalla coda e poi rifiutate o scadute: l'utente le aveva viste "in invio" e qui scopre che
+    // non esistono.
     state.rejected.forEach { rejected ->
         item(key = "rejected-" + rejected.key) {
             RejectedNotice(rejected, state.refugeNames[rejected.payload.refugeId]) { viewModel.dismissRejected(rejected.key) }
@@ -408,7 +425,7 @@ private fun LazyListScope.bookingItems(
                 item(key = "next-title") { SectionHeader(stringResource(Res.string.my_bookings_next_title)) }
                 item(key = "next-" + next.id) { NextStay(next, state.refuges[next.refugeId], today) { onOpen(next.id) } }
             }
-            // in arrivo: quelle in coda (in invio) in cima, poi le confermate dalla più vicina
+            // In arrivo: prima quelle in coda (in invio), poi le confermate dalla più vicina.
             val upcomingRows = state.pending.map { BookingRowData.Pending(it) } + sections.upcoming.map { BookingRowData.Server(it) }
             if (upcomingRows.isNotEmpty()) {
                 item(key = "upcoming-title") { SectionHeader(stringResource(Res.string.my_bookings_upcoming_title)) }
@@ -421,7 +438,7 @@ private fun LazyListScope.bookingItems(
             when {
                 state.loadingMore -> item(key = "more") { LoadingMore() }
                 error != null -> item(key = "more-error") { ErrorState(error.resolve(), onRetry = viewModel::retry, compact = true) }
-                // in fondo alla lista: la pagina dopo
+                // Elemento invisibile in fondo: quando entra in vista chiede la pagina successiva.
                 !state.endReached -> item(key = "more-trigger") {
                     LaunchedEffect(state.items.size) { viewModel.loadMore() }
                     Spacer(Modifier.height(1.dp))
@@ -431,12 +448,15 @@ private fun LazyListScope.bookingItems(
     }
 }
 
-// Una riga della lista: o una prenotazione del server, o una in coda nell'outbox (senza id: non si apre)
+/** Riga della lista: una prenotazione del server oppure una in coda nell'outbox, che non ha ancora un id e non si apre. */
 private sealed interface BookingRowData {
+    /** Prenotazione ricevuta dal server. */
     data class Server(val booking: BookingResponse) : BookingRowData
+    /** Prenotazione ancora in coda nell'outbox. */
     data class Pending(val pending: PendingBooking) : BookingRowData
 }
 
+/** Aggiunge alla lista un gruppo di righe in una card unica; [group] rende uniche le chiavi, [muted] spegne i colori. */
 private fun LazyListScope.bookingRows(
     group: String,
     rows: List<BookingRowData>,
@@ -484,7 +504,11 @@ private fun LazyListScope.bookingRows(
     }
 }
 
-// Blocco della data, rifugio, date · notti · persone; lo stato a destra solo quando non è quello atteso ("Confermata" no)
+/**
+ * Riga di una prenotazione: blocco della data, nome del rifugio e riga con date, notti e persone. Lo stato compare a
+ * destra solo quando non è quello normale (per una prenotazione confermata non si scrive nulla); con [pending] c'è
+ * anche una rotella. Con [onClick] null la riga non si può toccare.
+ */
 @Composable
 private fun BookingRow(
     refugeName: String?,
@@ -532,7 +556,10 @@ private fun BookingRow(
     }
 }
 
-// Il prossimo soggiorno come biglietto, con "Tra 3 giorni" e le due azioni del posto sotto lo strappo
+/**
+ * Prossimo soggiorno disegnato come biglietto, con una nota sui giorni che mancano (oppure "in corso") e, se il
+ * rifugio è noto, le azioni "Chiama" e "Indicazioni" sotto la perforazione.
+ */
 @Composable
 private fun NextStay(booking: BookingResponse, refuge: RefugeResponse?, today: LocalDate, onClick: () -> Unit) {
     val dial = rememberDialer()
@@ -569,7 +596,10 @@ private fun NextStay(booking: BookingResponse, refuge: RefugeResponse?, today: L
     }
 }
 
-// Una prenotazione in coda rifiutata dal server (o scaduta): riquadro prugna con il motivo e "Ho capito"
+/**
+ * Avviso di una prenotazione in coda rifiutata dal server, o scaduta: riquadro nel colore degli errori con il motivo
+ * e il pulsante "Ho capito", che lo chiude.
+ */
 @Composable
 private fun RejectedNotice(rejected: RejectedBooking, refugeName: String?, onDismiss: () -> Unit) {
     val payload = rejected.payload
@@ -601,8 +631,10 @@ private fun RejectedNotice(rejected: RejectedBooking, refugeName: String?, onDis
     }
 }
 
-// Le azioni di una prenotazione in un foglio a metà altezza: il riepilogo, il rifugio, le indicazioni, la chiamata e,
-// separato in fondo, l'annullamento (prugna, con conferma)
+/**
+ * Foglio con le azioni su una prenotazione: il biglietto di riepilogo, poi apri il rifugio, indicazioni, chiamata e,
+ * separato in fondo, l'annullamento (che chiede conferma). Ogni azione chiude prima il foglio con l'animazione.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun BookingActionsSheet(
@@ -651,7 +683,7 @@ private fun BookingActionsSheet(
                 if (canCancel) {
                     Spacer(Modifier.height(16.dp))
                     GroupCard {
-                        // prugna come gli altri errori del tema: annullare non è un'emergenza (il rosso resta all'SOS)
+                        // Colore degli errori del tema e non rosso: annullare non è un'emergenza, il rosso resta all'SOS.
                         GroupRow(
                             stringResource(Res.string.booking_cancel),
                             color = MaterialTheme.colorScheme.error,
@@ -665,7 +697,7 @@ private fun BookingActionsSheet(
     }
 }
 
-/** Lo stato da scrivere accanto a una prenotazione: niente per quelle confermate (è il caso normale). */
+/** Stato da scrivere accanto a una prenotazione: null per quelle confermate, che sono il caso normale. */
 @Composable
 private fun BookingResponse.Status.label(): String? = when (this) {
     BookingResponse.Status.CONFIRMED -> null
@@ -673,7 +705,10 @@ private fun BookingResponse.Status.label(): String? = when (this) {
     BookingResponse.Status.unknown_default_open_api -> stringResource(Res.string.booking_status_unknown)
 }
 
-/** "sab 10/10 → lun 12/10 · 2 notti · 2 persone". [nights] null: si calcola dalle date. */
+/**
+ * Riga di riepilogo del soggiorno: arrivo e partenza abbreviati, numero di notti e numero di persone. Se [nights] è
+ * null si calcola dalle date.
+ */
 @Composable
 internal fun stayLabel(checkIn: LocalDate, checkOut: LocalDate, nights: Int?, guests: Int): String {
     val count = nights ?: (checkOut.toEpochDays() - checkIn.toEpochDays()).toInt()

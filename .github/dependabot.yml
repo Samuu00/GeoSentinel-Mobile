@@ -1,24 +1,26 @@
-# Aggiornamenti settimanali delle dipendenze (M0.5), come nel backend.
-# Deve stare in .github/ e non in .github/workflows/: lì GitHub lo tratterebbe come un workflow.
+# Configurazione di Dependabot: controlla ogni settimana gli aggiornamenti delle dipendenze e apre le pull request.
+# Deve stare in .github/ e non in .github/workflows/, dove GitHub lo tratterebbe come un workflow.
 version: 2
 updates:
-  # libs.versions.toml e plugin Gradle
+  # Dipendenze Gradle: catalogo libs.versions.toml e plugin.
   - package-ecosystem: gradle
     directory: /
     schedule:
       interval: weekly
     groups:
-      # Kotlin, KSP e Compose Multiplatform sono legati alla versione esatta di Kotlin (anche nelle minor):
-      # devono arrivare insieme in una sola PR, altrimenti ogni PR singola rompe la build
+      # Kotlin, KSP e Compose Multiplatform sono legati alla versione esatta di Kotlin, anche nelle minor: devono
+      # arrivare insieme in una sola pull request, altrimenti ogni pull request singola romperebbe la build.
       kotlin-toolchain:
         patterns:
           - "org.jetbrains.kotlin*"
           - "com.google.devtools.ksp*"
           - "org.jetbrains.compose*"
-      # tutto il resto: minor e patch in una PR, le major arrivano separate (possono rompere: vanno lette)
+      # Tutto il resto: minor e patch in un'unica pull request; le major arrivano separate, perché possono introdurre
+      # cambiamenti incompatibili e vanno lette.
       gradle-minor-patch:
         update-types: [minor, patch]
 
+  # Versioni delle azioni usate nei workflow.
   - package-ecosystem: github-actions
     directory: /
     schedule:

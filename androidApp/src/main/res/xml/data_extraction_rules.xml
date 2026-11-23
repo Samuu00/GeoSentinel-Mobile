@@ -1,12 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 12+. I token cifrati non vanno nel backup né nel trasferimento su un altro telefono: la chiave del
-     Keystore non si copia, e lì non si leggerebbero più (M2.1). Il database (da M4/M6: posizioni SOS, note mediche,
-     outbox) neppure: dati personali, e con Idempotency-Key valide solo qui. Il resto (es. il tema) sì. -->
+<!-- Regole di backup e trasferimento dei dati per Android 12 e successivi. I token cifrati non finiscono né nel
+     backup né nel trasferimento su un altro telefono: la chiave del Keystore non viene copiata e lì non si
+     potrebbero più decifrare. Nemmeno il database viene copiato: contiene dati personali (posizioni degli SOS, note
+     mediche, outbox) e chiavi di idempotenza valide solo su questo dispositivo. Il resto, per esempio il tema
+     scelto, viene salvato. -->
 <data-extraction-rules>
+    <!-- Backup nel cloud di Google. -->
     <cloud-backup>
         <exclude domain="file" path="geosentinel.session.preferences_pb"/>
         <exclude domain="database" path="."/>
     </cloud-backup>
+    <!-- Trasferimento diretto su un nuovo telefono. -->
     <device-transfer>
         <exclude domain="file" path="geosentinel.session.preferences_pb"/>
         <exclude domain="database" path="."/>

@@ -5,7 +5,7 @@ gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unic
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
 [`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 (verifica in due passaggi) → M11 (foto profilo), pianificate il 18/10 sul contratto di M8 e M9 del backend.
 
-**Stato (12/10/2026, in ordine di data):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, simulatore iPhone; job `ios` verde dal 12/10).
+**Stato (23/11/2026, in ordine di data; progetto di tesi triennale, gira solo in locale):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, simulatore iPhone; job `ios` verde dal 12/10).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,
 logout, refresh unico, nome, cambio password e cancellazione dell'account. M3.1 fatta: mappa (Stradale chiara/scura e
 Satellite EOX), posizione e permesso solo quando serve. Review e security review di M2 e M3.1 del 03/10 applicate e
@@ -61,10 +61,9 @@ righe in gruppi (`core/ui/PageLayout.kt`: `PageHeader`, `GroupCard`/`GroupRow`, 
 e nome "GeoSentinel" anche su iOS (`CFBundleDisplayName`); build installata sull'iPhone (12/10).
 Review di M8 (12/10, codice, Kotlin e sicurezza anche sul backend): nessun CRITICAL/HIGH, MEDIUM e LOW corretti
 (`safely` in `core/network`, liste dei ticket, controlli della mappa che scorrono, capacità del rifugio al massimo 1000
-nel backend), 316 test host. M9 fatta (12/10, progetto per ora in locale): test di UI di Compose con Robolectric in
+nel backend), 316 test host. M9 fatta (12/10): test di UI di Compose con Robolectric in
 `androidHostTest/.../ui` (login, SOS anche al 200%, prenotazione), R8 sulla release e build `staging` (release con R8
-verso il backend locale) provata sull'emulatore, `assembleRelease` in CI, 325 test host. Rimandato alla pubblicazione
-quello che serve agli store (fine di M9.3). Poi (12/10, dettaglio in "Dopo M9" del piano):
+verso il backend locale) provata sull'emulatore, `assembleRelease` in CI, 325 test host. Poi (12/10, dettaglio in "Dopo M9" del piano):
 card del POI e del pericolo chiuse tornando sulla mappa; avvio senza splash visibile (`Theme.GeoSentinel`,
 `setApplicationNightMode`); dati veri al posto di quelli di prova (da `../GeoSentinel-Backend/tools/osm-import`: 351
 sentieri, 944 POI e 61 rifugi della Calabria da OpenStreetMap, le 4 stazioni del Soccorso Alpino Calabria, foto dei
@@ -93,7 +92,11 @@ GraphHopper nel backend (ADR-0028); tutte le "Indicazioni" usano il nostro motor
 arrivo entro 1 km); stile leggero della mappa (89 → 31 livelli, rilievo da zoom 11). Build `ab7150e` sull'iPhone.
 Poi (23/11): rilievo ombreggiato tolto dagli stili (30 livelli, le Terrain Tiles restano solo per il profilo
 altimetrico e la quota dei rifugi), test di Room sul database vero (`CatalogDaoTest`, `OutboxDaoTest` in
-`androidHostTest`), Mailpit tolto dal backend, 389 test host. Da provare sull'iPhone.
+`androidHostTest`), Mailpit tolto dal backend (le prove di reset e 2FA in locale mandano email vere), "Apri il
+sentiero" tolto dalla card del POI sulla mappa (resta su quella del pericolo), commenti del codice riscritti in italiano
+in forma esplicativa (intestazione di file, KDoc su classi e funzioni), nel backend `User.passwordHash` nullable come
+la migrazione, tolti i riferimenti alla produzione e agli store, 389 test host. Da provare sull'iPhone: la mappa senza
+lag zoomando (§9 del piano).
 
 ## Come lavoriamo (regola tassativa)
 - **Il codice lo scrive l'utente, riga per riga.** Claude fa da mentore, architetto e reviewer: definisce struttura e
@@ -126,7 +129,7 @@ altimetrico e la quota dei rifugi), test di Room sul database vero (`CatalogDaoT
 | Navigazione | Navigation Compose Multiplatform, rotte `@Serializable` |
 | Persistenza | Room KMP (`sqlite-bundled`) per cache e outbox, un solo `AppDatabase` (`core/db`): builder dalla piattaforma (`initKoin(context, config)` su Android, `startKoinWith` su iOS), niente migrazioni distruttive, schema in `shared/schemas` da committare. ETag per rotta, non per riga (il backend lo calcola sul body). DataStore per le preferenze |
 | Sessione | `SecureTokenStore` (interfaccia) da `createSecureTokenStore(filesDir)`: AES-GCM con chiave nel Keystore + DataStore escluso dal backup su Android, Keychain `ThisDeviceOnly` su iOS (update, non delete + add; pulito alla prima lettura dopo un'installazione). Token in `AuthTokens`, il cui `toString` non li stampa. Errori dello store mai un crash: in `SessionManager` diventano un errore o "ospite" |
-| Mappa | MapLibre Compose 0.19. Sentieri e POI in `trail/ui/TrailMapLayers.kt` (una sorgente GeoJSON per stato, chiusi tratteggiati; spessore che cresce con lo zoom; ogni livello ha `minZoom` alla sua soglia e compare in dissolvenza con `fadeInFrom`; POI e rifugi sono "bollini" in un solo `SymbolLayer` con le collisioni attive, i pericoli restano sempre visibili; soglie: sentieri 9 (dal 21/11, sottili e senza bordo come nel Figma), rifugi e pericoli 7, POI 9; il percorso A→B è `RouteLine`, spesso, con il bordo, nel pino del tema; il server dà fino a 500 sentieri per riquadro e 300 POI per richiesta); bbox e `[lon, lat]` solo da `core/location/GeoBounds.kt`. Tipi Stradale (OpenFreeMap ricolorato tipo Apple Maps, chiaro/scuro, senza rilievo ombreggiato (tolto il 23/11: laggava su iPhone), con le cime e la quota, senza i POI generici di OSM) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. POI e rifugi come bollini colorati per categoria (`Marker*` in `Color.kt`) con il nome sotto da vicino; pallino della posizione blu con anello bianco. Il raster-dem PNG del rilievo su Android funziona; le mappe raster PNG (es. OpenTopoMap) no. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
+| Mappa | MapLibre Compose 0.19. Sentieri e POI in `trail/ui/TrailMapLayers.kt` (una sorgente GeoJSON per stato, chiusi tratteggiati; spessore che cresce con lo zoom; ogni livello ha `minZoom` alla sua soglia e compare in dissolvenza con `fadeInFrom`; POI e rifugi sono "bollini" in un solo `SymbolLayer` con le collisioni attive, i pericoli restano sempre visibili; soglie: sentieri 9 (dal 21/11, sottili e senza bordo come nel Figma), rifugi e pericoli 7, POI 9; il percorso A→B è `RouteLine`, spesso, con il bordo, nel pino del tema; il server dà fino a 500 sentieri per riquadro e 300 POI per richiesta); bbox e `[lon, lat]` solo da `core/location/GeoBounds.kt`. Tipi Stradale (OpenFreeMap ricolorato tipo Apple Maps, chiaro/scuro, senza rilievo ombreggiato (tolto il 23/11: laggava su iPhone), con le cime e la quota, senza i POI generici di OSM) e Satellite (EOX Sentinel-2, JPEG): stili in `composeResources/files/map` generati da `tools/map-styles/build_map_styles.py`. POI e rifugi come bollini colorati per categoria (`Marker*` in `Color.kt`) con il nome sotto da vicino; pallino della posizione blu con anello bianco. Le mappe raster PNG (es. OpenTopoMap) no. Su Android serve il runtime `maplibre-native-ffi-runtime-opengl` (senza, crash all'apertura); su iOS il runtime Metal arriva da solo |
 | Piattaforma | Posizione dal modulo `location` di MapLibre Compose (provider creato nella UI con `rememberLocationState`; `core/location/Location.kt` per `GeoPoint` e `current()`). Ricodifica JPEG delle foto e push (Firebase nativo) in expect/actual o nel codice di piattaforma |
 | Config | `AppConfig(apiBaseUrl, isDebug)` da `BuildConfig` (Android) e `Info.plist` (iOS) |
 | Stringhe | `composeResources/values/strings.xml`, italiano come lingua base |

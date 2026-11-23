@@ -1,3 +1,6 @@
+// GET condizionali con ETag per la cache del catalogo (sentieri e POI).
+// Se i dati sul server non sono cambiati, il backend risponde 304 senza corpo e l'app usa la copia salvata
+// in Room: si risparmiano banda e batteria, che in montagna sono preziose.
 package it.unical.geosentinel_mobile.core.network
 
 import io.ktor.client.HttpClient
@@ -12,17 +15,22 @@ import kotlinx.io.IOException
 import kotlinx.serialization.SerializationException
 import kotlin.coroutines.cancellation.CancellationException
 
-/** Esito di una GET condizionale: corpo nuovo (con il suo ETag) o "non è cambiato niente" (304). */
+/** Esito di una GET condizionale: un corpo nuovo con il suo ETag, oppure "non è cambiato nulla" (304). */
 sealed interface Conditional<out T> {
+    /** Il server ha inviato dati nuovi; [etag] va salvato per la richiesta successiva. */
     data class Modified<T>(val body: T, val etag: String?) : Conditional<T>
+    /** Il server ha risposto 304: la copia in cache è ancora valida. */
     data object NotModified : Conditional<Nothing>
 }
 
 /**
- * GET con `If-None-Match` (M3.3): il client generato non ha l'header, perché lo schema non lo dice (lo dice la guida
- * all'API: ETag debole e `Cache-Control: no-cache` su `/trails` e `/pois`). Stesso client condiviso (bearer, retry,
- * log) e stessi errori di [apiCall]: 304 è un successo, IOException è [ApiError.Network], un 2xx fuori contratto
- * lancia [ContractViolationException].
+ * Esegue una GET su [url] con l'header `If-None-Match` quando si conosce già un [etag].
+ *
+ * Il client generato non permette di aggiungere quell'header, perché lo schema OpenAPI non lo prevede (lo descrive
+ * la guida all'API: ETag debole e `Cache-Control: no-cache` su `/trails` e `/pois`). Per questo la richiesta si
+ * fa a mano, ma con lo stesso client condiviso (bearer, retry, log) e la stessa gestione degli errori di [apiCall]:
+ * il 304 è un successo, una `IOException` diventa [ApiError.Network] e un 2xx con un corpo fuori contratto lancia
+ * [ContractViolationException].
  */
 suspend inline fun <reified T : Any> HttpClient.conditionalGet(url: String, etag: String?): Result<Conditional<T>> = try {
     val response = get(url) { if (etag != null) header(HttpHeaders.IfNoneMatch, etag) }
@@ -32,6 +40,7 @@ suspend inline fun <reified T : Any> HttpClient.conditionalGet(url: String, etag
         else -> Result.failure(ApiException(response.toApiError()))
     }
 } catch (e: CancellationException) {
+    // La cancellazione della coroutine va sempre propagata, mai trasformata in un errore.
     throw e
 } catch (_: IOException) {
     Result.failure(ApiException(ApiError.Network))

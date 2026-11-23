@@ -1,3 +1,6 @@
+// Schermata principale della mappa. Mette insieme la mappa MapLibre con i livelli di sentieri, POI, rifugi, pericoli e
+// allerte, i controlli sopra la mappa, la ricerca, il foglio "Vicino a te", le card degli elementi toccati e il percorso
+// da A a B. Gestisce anche la posizione dell'utente e la richiesta del permesso solo quando serve.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.compose.foundation.verticalScroll
@@ -198,21 +201,34 @@ import org.maplibre.compose.overlay.MapOverlay
 import org.maplibre.compose.style.BaseStyle
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
-// Senza posizione la mappa parte dalla Sila, dove stanno i sentieri del seed. Anche la lista dei rifugi parte da qui
+/**
+ * Punto di partenza della mappa quando la posizione non è disponibile: la Sila, dove si trovano i sentieri del parco.
+ * Anche la lista dei rifugi parte da qui.
+ */
 internal val DefaultArea = GeoPoint(lat = 39.33, lon = 16.55)
+
+/** Zoom iniziale della mappa. */
 private const val DefaultZoom = 9.5
+
+/** Zoom minimo dopo "La mia posizione". */
 private const val MyLocationZoom = 14.0
-// Di quanto si deve spostare l'utente perché il riquadro dei 50 km lo segua
+
+/** Spostamento dell'utente, in metri, oltre il quale il riquadro dei 50 km si ricentra su di lui. */
 private const val ReAnchorMeters = 5_000.0
-// La mappa del form della segnalazione parte almeno da qui: abbastanza vicina per mettere il segnaposto
+
+/** Zoom minimo da cui parte la mappa del form di segnalazione: abbastanza vicino per posizionare il segnaposto. */
 private const val ReportZoom = 13.0
 
-// Stili della mappa in composeResources/files/map, generati da tools/map-styles (tutti gratuiti e senza chiave):
-// Stradale = OpenFreeMap ricolorato con una palette tipo Google Maps (chiaro e scuro), Satellite = Sentinel-2 di EOX
-// con strade ed etichette sopra. Le attribuzioni stanno nelle sorgenti di ogni stile.
-// (Niente mappe raster PNG come OpenTopoMap: il motore di maplibre-compose 0.19 su Android non le disegna in modo
-// affidabile; la Topografica è stata tolta il 03/10.)
-// Fuori dal main thread (centinaia di KB). File mancante o illeggibile: mappa vuota invece di un crash.
+/**
+ * Carica lo stile di mappa per [type] (in versione scura se [dark]) da composeResources/files/map. Gli stili sono
+ * generati dallo script in tools/map-styles e usano solo fonti gratuite e senza chiave: la Stradale è OpenFreeMap
+ * ricolorato (chiaro e scuro), la Satellite usa Sentinel-2 di EOX con strade ed etichette sopra. Le attribuzioni sono
+ * dichiarate nelle sorgenti di ogni stile. Non si usano mappe raster PNG come OpenTopoMap perché il motore di
+ * maplibre-compose su Android non le disegna in modo affidabile.
+ *
+ * Il file (centinaia di KB) si legge fuori dal main thread. Se manca o non si legge si restituisce una mappa vuota
+ * invece di andare in crash.
+ */
 private suspend fun loadStyle(type: MapType, dark: Boolean): BaseStyle = withContext(Dispatchers.Default) {
     val file = when (type) {
         MapType.STREETS -> if (dark) "streets_dark" else "streets_light"
@@ -227,79 +243,98 @@ private suspend fun loadStyle(type: MapType, dark: Boolean): BaseStyle = withCon
     }
 }
 
-/** Il tipo di mappa scelto dall'utente: null finché non si è letta la scelta salvata. */
+/** Restituisce il tipo di mappa scelto dall'utente, oppure null finché la preferenza salvata non è stata letta. */
 @Composable
 internal fun rememberSavedMapType(): MapType? = koinInject<MapSettings>().type.collectAsState(initial = null).value
 
 /**
- * Lo stile della mappa per [mapType] nel tema attuale. Vuoto finché il tipo non è noto: niente stradale caricata e
- * subito sostituita dal satellite. Lo usano la mappa e l'anteprima del dettaglio.
+ * Restituisce lo stile della mappa per [mapType] nel tema attuale (chiaro o scuro). Resta vuoto finché il tipo non è
+ * noto, così non si carica la stradale per poi sostituirla subito con il satellite. È usato dalla mappa principale e
+ * dalle mappe delle altre schermate.
  */
 @Composable
 internal fun rememberMapStyle(mapType: MapType?): BaseStyle {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
-    // lo stile si legge dal file (pochi ms): fino ad allora la mappa è vuota
+    // Lo stile si legge dal file in pochi millisecondi: fino ad allora la mappa resta vuota.
     val style by produceState<BaseStyle>(BaseStyle.Empty, mapType, dark) {
         value = mapType?.let { loadStyle(it, dark) } ?: BaseStyle.Empty
     }
     return style
 }
 
-// Il bordo chiaro (o scuro) sotto le linee dei sentieri: le stacca dalla mappa
+/** Colore del bordo sotto le linee (chiaro sulle mappe chiare, scuro su quelle scure), che le stacca dalla mappa. */
 internal fun trailCasing(mapIsDark: Boolean): Color = if (mapIsDark) Color.Black.copy(alpha = 0.55f) else Color.White
 
-// Quanto si aspetta un fix dopo "La mia posizione" o "Sentieri vicini" (posizione spenta, nessun segnale)
+/** Tempo massimo di attesa di una posizione dopo "La mia posizione" o "Vicino a te" (posizione spenta, nessun segnale). */
 private val FixWait = 15.seconds
-// Un fix più vecchio non vale per "Sentieri vicini": su Android il primo è l'ultima posizione nota, anche di giorni fa
+
+/**
+ * Età massima di una posizione per le ricerche "vicine": su Android la prima posizione disponibile è l'ultima nota, che
+ * può risalire anche a giorni prima.
+ */
 private val MaxFixAge = 2.minutes
 
-// Cosa mostra il dialogo della posizione
+/** Dialogo della posizione da mostrare: nessuno, la spiegazione prima della richiesta, o il permesso negato. */
 private enum class LocationPrompt { None, Rationale, Denied }
 
-// Cosa fare quando arriva il permesso
+/** Azione da eseguire quando arriva il permesso di localizzazione. */
 private enum class LocationGoal { Center, NearMe, Nearby, NearbyHazards, Route }
 
-// Le due schede del foglio "Vicino a te"
+/** Le due schede del foglio "Vicino a te". */
 private enum class NearTab(val label: StringResource) { Trails(Res.string.near_me_trails), Hazards(Res.string.near_me_hazards) }
 
-// Spazio sotto i controlli per il pulsante SOS (72 dp) e il suo margine
+/** Spazio riservato sotto i controlli per il pulsante SOS (72 dp) e il suo margine. */
 private val SosClearance = 104.dp
-// spazio della barra di ricerca in alto e del foglio "Vicino a te" in basso (redesign "Luce di quota")
+
+/** Spazio occupato dalla barra di ricerca in alto. */
 private val TopBarSpace = 64.dp
+
+/** Spazio occupato dal foglio "Vicino a te" aperto. */
 private val PeekSpace = 236.dp
+
+/** Spazio occupato dal foglio "Vicino a te" chiuso (solo la capsula). */
 private val PeekClosedSpace = 76.dp
 
-// Il tocco su "Pericoli vicini" porta almeno a questo zoom: il triangolo si vede in mezzo ai sentieri
+/** Zoom minimo dopo il tocco su un pericolo vicino: il triangolo si distingue in mezzo ai sentieri. */
 private const val HazardZoom = 15.0
 
 /**
- * [showHazards]: pericoli sulla mappa e "Pericoli vicini", solo da loggati (M4.4). Al logout spariscono.
- * [onOpenRefuge]: i rifugi sulla mappa (M5.1), null per l'ospite (le rotte dei rifugi richiedono il login).
- * [onOpenAlert]: le allerte SOS aperte (M7.2), solo per gli operatori; null per tutti gli altri.
- * [bottomBar]: quanto occupa la barra in basso, che galleggia sopra la mappa: la mappa ci passa sotto, i controlli no.
+ * Schermata della mappa principale.
+ *
+ * @param onOpenTrail apre il dettaglio di un sentiero.
+ * @param onReportHazard apre il form di segnalazione dal centro e dallo zoom della mappa; null per l'ospite.
+ * @param showHazards mostra i pericoli e "Pericoli vicini", solo per l'utente loggato; al logout spariscono.
+ * @param onCreatePoi apre il form di un nuovo POI dal punto inquadrato; non null solo per il gestore del parco.
+ * @param onOpenRefuge apre un rifugio; i rifugi compaiono sulla mappa solo se non è null, quindi non per l'ospite
+ * (le rotte dei rifugi richiedono il login).
+ * @param onOpenAlert apre un'allerta SOS; non null solo per gli operatori del soccorso, che vedono le allerte aperte.
+ * @param bottomBar altezza della barra in basso, che galleggia sopra la mappa: la mappa ci passa sotto, i controlli no.
+ * @param onOpenProfile apre il Profilo dal tondo dell'utente in alto a destra.
+ * @param avatarInitial iniziale del nome dell'utente, se presente.
+ * @param avatarMediaId id della foto profilo, se presente.
+ * @param pendingRoute destinazione di "Indicazioni" chieste da un'altra schermata (un rifugio o un sentiero, tramite
+ * LocalDirections in App): la mappa avvia il percorso e lo segnala con [onPendingRouteTaken].
  */
 @Composable
 fun MapScreen(
     onOpenTrail: (String) -> Unit,
     onReportHazard: ((center: GeoPoint, zoom: Double) -> Unit)?,
     showHazards: Boolean,
-    // solo per il gestore del parco (M8.1): nuovo POI dal punto che si sta guardando
     onCreatePoi: ((center: GeoPoint, zoom: Double) -> Unit)?,
     onOpenRefuge: ((String) -> Unit)?,
     onOpenAlert: ((String) -> Unit)?,
     bottomBar: Dp = 0.dp,
-    // il tondo dell'utente in alto a destra (Figma): apre il Profilo; l'iniziale del nome, se c'è
     onOpenProfile: () -> Unit = {},
     avatarInitial: Char? = null,
     avatarMediaId: String? = null,
-    // "Indicazioni" chieste da un rifugio o da un sentiero (LocalDirections in App): si avvia il percorso e si avvisa App
     pendingRoute: Place? = null,
     onPendingRouteTaken: () -> Unit = {},
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
     val colors = MaterialTheme.colorScheme
-    // Provider di default di MapLibre (LocationManager / CLLocationManager). Non chiede il permesso da solo:
-    // se c'è già, il pallino compare subito; se non c'è, la mappa funziona lo stesso dall'area di default.
+    // Provider di posizione predefinito di MapLibre (LocationManager su Android, CLLocationManager su iOS). Non chiede
+    // il permesso da solo: se c'è già il pallino compare subito, altrimenti la mappa funziona lo stesso partendo
+    // dall'area predefinita.
     val location = rememberLocationState()
     val mapSettings = koinInject<MapSettings>()
     val mapType = rememberSavedMapType()
@@ -309,7 +344,7 @@ fun MapScreen(
     val hazardViewModel = koinViewModel<HazardMapViewModel>()
     val hazardUi by hazardViewModel.state.collectAsStateWithLifecycle()
     LaunchedEffect(showHazards) { hazardViewModel.setEnabled(showHazards) }
-    // a ogni ritorno sulla mappa (es. dopo una segnalazione) le proprie in verifica si rileggono subito
+    // A ogni ritorno sulla mappa (per esempio dopo una segnalazione) le proprie segnalazioni in verifica si rileggono.
     LaunchedEffect(Unit) { hazardViewModel.refreshMine() }
     val refugeViewModel = koinViewModel<RefugeMapViewModel>()
     val refuges by refugeViewModel.state.collectAsStateWithLifecycle()
@@ -318,9 +353,10 @@ fun MapScreen(
     val alerts by alertViewModel.state.collectAsStateWithLifecycle()
     val alertsPartial by alertViewModel.partial.collectAsStateWithLifecycle()
     LaunchedEffect(onOpenAlert != null) { alertViewModel.setEnabled(onOpenAlert != null) }
-    // A mappa ferma le allerte si rileggono come nella scheda Allerte: subito a ogni ritorno sulla mappa (dalla schermata
-    // SOS, da un dettaglio, dal background), poi ogni 30 s, e a ogni SOS nuovo (push). Il proprio SOS non arriva come
-    // push: si rilegge quando cambia (lanciato, annullato, chiuso)
+    // Per gli operatori le allerte si rileggono come nella scheda Allerte: subito a ogni ritorno sulla mappa (dalla
+    // schermata SOS, da un dettaglio, dal background), poi a intervalli regolari finché la schermata è visibile, e a ogni
+    // nuovo SOS ricevuto via push. Il proprio SOS non arriva come push, quindi si rilegge quando cambia il suo stato
+    // (lanciato, annullato, chiuso).
     if (onOpenAlert != null) {
         val push = koinInject<PushManager>()
         val sos = koinInject<SosController>()
@@ -343,15 +379,16 @@ fun MapScreen(
     }
     var choosingType by rememberSaveable { mutableStateOf(false) }
     var searching by rememberSaveable { mutableStateOf(false) }
-    // "Vicino a te" aperto o chiuso: come l'ha lasciato l'utente (DataStore)
+    // Foglio "Vicino a te" aperto o chiuso, come l'ha lasciato l'utente (salvato in DataStore).
     val nearMeOpen by mapSettings.nearMeOpen.collectAsState(initial = true)
     val peekSpace = if (nearMeOpen) PeekSpace else PeekClosedSpace
-    // remember, non rememberSaveable: tornando sulla mappa da un'altra pagina o scheda la card del POI è chiusa
+    // POI selezionato. Si usa remember e non rememberSaveable di proposito: tornando sulla mappa da un'altra pagina o
+    // scheda la card del POI deve essere chiusa.
     var selectedPoiId by remember { mutableStateOf<String?>(null) }
-    // lo stesso per la card del pericolo, la cui selezione vive nel ViewModel
+    // Lo stesso vale per la card del pericolo, la cui selezione vive nel ViewModel: si azzera quando si lascia la mappa.
     DisposableEffect(Unit) { onDispose { hazardViewModel.clearSelection() } }
-    // La mappa sta sotto la barra di stato: icone chiare su satellite e stradale scura, scure sulla stradale chiara.
-    // Lasciando la mappa tornano a seguire il tema.
+    // La mappa passa sotto la barra di stato: le icone di sistema sono chiare sul satellite e sulla stradale scura,
+    // scure sulla stradale chiara. Lasciando la mappa tornano a seguire il tema.
     val mapIsDark = mapType == MapType.SATELLITE || dark
     StatusBarOverDark(mapIsDark)
     val casing = trailCasing(mapIsDark)
@@ -360,7 +397,8 @@ fun MapScreen(
         initialCameraPosition = CameraPosition(target = DefaultArea.toPosition(), zoom = DefaultZoom),
     ) {
         TrailLines(ui.trails, unknownColor = if (dark) MapMutedDark else MapMutedLight, onTrailClick = onOpenTrail)
-        // il percorso A→B sopra i sentieri, sotto i simboli
+        // L'ordine di dichiarazione decide l'ordine di disegno. Il percorso da A a B sta sopra i sentieri e sotto i
+        // simboli.
         val plan = ui.route
         (plan?.result as? RouteResult.Found)?.let { found ->
             val positions = remember(found.path) { found.path.toPositions() }
@@ -386,17 +424,17 @@ fun MapScreen(
         if (onOpenRefuge != null) {
             RefugeMarkers(refuges, label = mapLabelInk(mapIsDark), halo = mapLabelHalo(mapIsDark), onRefugeClick = onOpenRefuge)
         }
-        // sopra sentieri, POI e rifugi: un pericolo non deve restare nascosto
+        // I pericoli stanno sopra sentieri, POI e rifugi: un pericolo non deve restare nascosto.
         HazardMarkers(hazardUi.shown, halo = casing, otherColor = if (dark) MapMutedDark else MapMutedLight) { id ->
             selectedPoiId = null
             hazardViewModel.select(id)
         }
-        // le allerte sopra i pericoli: per l'operatore sono la cosa più importante della mappa
+        // Le allerte stanno sopra i pericoli: per l'operatore sono l'informazione più importante della mappa.
         if (onOpenAlert != null) {
             SosAlertMarkers(alerts, light = if (dark) MapMarkerFillDark else MapMarkerFillLight, onAlertClick = onOpenAlert)
         }
-        // il pallino sopra tutto
-        // come su iPhone: pallino blu con l'anello bianco, cerchio della precisione azzurro tenue, cono della direzione
+        // Il pallino della posizione sta sopra tutto. Come su iPhone: pallino blu con l'anello bianco, cerchio della
+        // precisione azzurro tenue e cono della direzione.
         LocationIndicatorLayer(
             id = "posizione",
             locationState = location,
@@ -411,23 +449,23 @@ fun MapScreen(
     val scope = rememberCoroutineScope()
     var prompt by rememberSaveable { mutableStateOf(LocationPrompt.None) }
     var goal by rememberSaveable { mutableStateOf(LocationGoal.Center) }
-    // "La mia posizione" toccato: si centra appena arriva un fix (subito, se c'è già)
+    // true dopo il tocco su "La mia posizione": la mappa si centra appena arriva una posizione (subito, se c'è già).
     var centerOnFix by remember { mutableStateOf(false) }
 
-    // Il centro della mappa ferma, per "Vicino a te": leggere mapState.cameraPosition nella composizione la rifaceva
-    // tutta a ogni fotogramma del trascinamento (lag)
+    // Centro della mappa quando è ferma, usato da "Vicino a te". Si salva qui perché leggere mapState.cameraPosition
+    // durante la composizione la farebbe ripetere a ogni fotogramma del trascinamento, rallentando la mappa.
     var idleCenter by remember { mutableStateOf(DefaultArea) }
-    // Centro dei 50 km: la posizione dell'utente, solo se il permesso c'è già (qui non si chiede). Si sposta solo dopo
-    // ReAnchorMeters: a ogni fix nuovo i ViewModel ricaricherebbero
+    // Centro del riquadro dei 50 km: la posizione dell'utente, solo se il permesso è già stato dato (qui non si
+    // chiede). Si sposta solo dopo ReAnchorMeters, altrimenti a ogni nuova posizione i ViewModel ricaricherebbero.
     var anchor by remember { mutableStateOf<GeoPoint?>(null) }
     LaunchedEffect(location.lastLocation, location.permission) {
         if (location.permission !is LocationPermission.Granted) return@LaunchedEffect
         val fix = location.lastLocation?.position?.toGeoPoint() ?: return@LaunchedEffect
         if (anchor?.let { it.distanceTo(fix) < ReAnchorMeters } != true) anchor = fix
     }
-    // Mappa ferma (o centro dei 50 km spostato): sentieri e POI dell'area visibile (il ViewModel aspetta 400 ms e salta
-    // le aree già caricate). Sentieri, POI, rifugi e pericoli solo entro 50 km dall'utente, o dal centro della mappa
-    // senza posizione; le allerte no, l'operatore le vede in tutto il parco
+    // A mappa ferma (o quando si sposta il centro dei 50 km) si comunica la vista a tutti i ViewModel, che aspettano un
+    // breve debounce e saltano le aree già caricate. Sentieri, POI, rifugi e pericoli si limitano ai 50 km dall'utente
+    // (o dal centro della mappa senza posizione); le allerte no, perché l'operatore deve vederle in tutto il parco.
     LaunchedEffect(mapState) {
         snapshotFlow { (if (mapState.isCameraMoving) null else mapState.viewport)?.let { it to anchor } }.filterNotNull()
             .collect { (viewport, near) ->
@@ -446,14 +484,15 @@ fun MapScreen(
     LaunchedEffect(centerOnFix, location.lastLocation) {
         val fix = location.lastLocation ?: return@LaunchedEffect
         if (!centerOnFix) return@LaunchedEffect
-        // nello scope della schermata: centerOnFix = false cambia la chiave e annullerebbe un'animazione lanciata qui
+        // L'animazione parte nello scope della schermata: centerOnFix = false cambia la chiave di questo effetto, che
+        // altrimenti la annullerebbe.
         scope.launch {
             mapState.animateCamera(CameraUpdate(target = fix.position, zoom = max(mapState.cameraPosition.zoom, MyLocationZoom)))
         }
         centerOnFix = false
     }
-    // Si smette di aspettare il fix dopo FixWait (anche con il permesso negato nel dialogo di sistema)
-    // o appena l'utente sposta la mappa da sé: la camera non deve saltare dopo
+    // Si smette di aspettare la posizione dopo FixWait (anche se il permesso è stato negato nel dialogo di sistema) o
+    // appena l'utente sposta la mappa da sé: la camera non deve saltare altrove dopo.
     LaunchedEffect(centerOnFix) {
         if (!centerOnFix) return@LaunchedEffect
         delay(FixWait)
@@ -463,7 +502,7 @@ fun MapScreen(
         if (mapState.isCameraMoving && mapState.cameraMoveReason == CameraMoveReason.GESTURE) centerOnFix = false
     }
 
-    // "Sentieri vicini": serve un fix recente, non l'ultima posizione nota
+    // "Sentieri vicini" richiede una posizione recente, non l'ultima posizione nota.
     val waitingForNearbyFix = ui.nearby == NearbyTrails.WaitingForFix
     LaunchedEffect(waitingForNearbyFix, location.lastLocation) {
         if (!waitingForNearbyFix) return@LaunchedEffect
@@ -474,7 +513,7 @@ fun MapScreen(
         delay(FixWait)
         viewModel.onNearbyNoFix()
     }
-    // "Pericoli vicini": la stessa attesa
+    // "Pericoli vicini" usa la stessa attesa.
     val waitingForHazardsFix = hazardUi.nearby == NearbyHazards.WaitingForFix
     LaunchedEffect(waitingForHazardsFix, location.lastLocation) {
         if (!waitingForHazardsFix) return@LaunchedEffect
@@ -486,43 +525,48 @@ fun MapScreen(
         hazardViewModel.onNearbyNoFix()
     }
 
-    // Percorso A→B: la partenza è un fix recente (con la stessa attesa di "Sentieri vicini") o il centro della mappa
+    // Percorso da A a B: la partenza è la posizione dell'utente oppure il centro della mappa.
     val route = ui.route
     val waitingForRouteOrigin = route?.result == RouteResult.WaitingForOrigin
     LaunchedEffect(waitingForRouteOrigin, route?.origin, location.lastLocation) {
         if (!waitingForRouteOrigin) return@LaunchedEffect
         when (route?.origin) {
             RouteOrigin.MapCenter -> viewModel.onRouteOrigin(mapState.cameraPosition.target.toGeoPoint())
-            // l'ultima posizione nota basta per partire: aspettare un fix nuovo rallentava il percorso
+            // Qui basta l'ultima posizione nota: aspettarne una nuova rallenterebbe il calcolo del percorso.
             else -> location.lastLocation?.position?.toGeoPoint()?.let(viewModel::onRouteOrigin)
         }
     }
-    // l'attesa del fix parte solo col permesso: mentre l'utente legge i dialoghi scadeva e dava "posizione non disponibile"
+    // L'attesa della posizione parte solo quando il permesso è concesso: altrimenti scadrebbe mentre l'utente legge i
+    // dialoghi, mostrando "posizione non disponibile".
     LaunchedEffect(waitingForRouteOrigin, route?.origin, location.permission) {
         if (!waitingForRouteOrigin || route?.origin != RouteOrigin.MyLocation) return@LaunchedEffect
         if (location.permission !is LocationPermission.Granted) return@LaunchedEffect
         delay(FixWait)
         viewModel.onRouteNoFix()
     }
-    // percorso trovato: si inquadra tutto, lasciando spazio alla ricerca in alto e al pannello in basso
+    // Percorso trovato: la mappa lo inquadra tutto, lasciando spazio alla ricerca in alto e al pannello in basso.
     val foundPath = (route?.result as? RouteResult.Found)?.path
     LaunchedEffect(foundPath) {
         val bounds = foundPath?.let { GeoBounds.around(it.toPositions()) } ?: return@LaunchedEffect
         mapState.fitCameraToBounds(bounds.toBoundingBox(), fitPadding = DpPadding(left = 48.dp, top = 120.dp, right = 48.dp, bottom = bottomBar + 200.dp))
     }
 
-    // "Vicino a te": le due ricerche partono insieme, così cambiare scheda è immediato; resta l'ultima scheda scelta
+    // Scheda scelta nel foglio "Vicino a te"; resta l'ultima scelta.
     var nearTab by rememberSaveable { mutableStateOf(NearTab.Trails) }
+
+    // Apre "Vicino a te": le ricerche di sentieri e pericoli partono insieme, così cambiare scheda è immediato.
     fun openNearMe() {
         viewModel.onNearbyRequested()
         if (showHazards) hazardViewModel.onNearbyRequested()
     }
+    // Chiude il foglio "Vicino a te" in entrambi i ViewModel.
     fun closeNearMe() {
         viewModel.closeNearby()
         hazardViewModel.closeNearby()
     }
 
-    // Prima del dialogo di sistema si spiega perché: il permesso si chiede solo quando serve (§M3.1)
+    // Esegue [action] se il permesso di localizzazione c'è già; altrimenti ricorda l'obiettivo [target] e mostra prima un
+    // dialogo che spiega perché serve, così il permesso si chiede solo quando l'utente ne ha bisogno.
     fun withLocation(target: LocationGoal, action: () -> Unit) {
         goal = target
         prompt = when (val permission = location.permission) {
@@ -530,17 +574,18 @@ fun MapScreen(
                 action()
                 LocationPrompt.None
             }
-            // canRequest false: negato per sempre, il sistema non mostra più il dialogo
+            // Con canRequest false il permesso è negato in modo definitivo: il sistema non mostra più il dialogo.
             is LocationPermission.NotGranted if permission.canRequest == false -> LocationPrompt.Denied
             else -> LocationPrompt.Rationale
         }
     }
 
+    // Avvia il percorso verso [place], chiudendo le card aperte.
     fun directionsTo(place: Place) {
         selectedPoiId = null
         hazardViewModel.clearSelection()
         viewModel.routeTo(place)
-        // senza il permesso si spiega e si chiede; intanto si può scegliere "Centro della mappa"
+        // Senza il permesso si spiega e lo si chiede; nel frattempo si può scegliere come partenza il centro della mappa.
         withLocation(LocationGoal.Route) {}
     }
     LaunchedEffect(pendingRoute) {
@@ -552,7 +597,7 @@ fun MapScreen(
     Box(Modifier.fillMaxSize()) {
         val pinLabel = stringResource(Res.string.route_dropped_pin)
         val onLongPress by rememberUpdatedState { at: GeoPoint -> directionsTo(Place(pinLabel, at)) }
-        // Tenendo premuto un punto qualsiasi, il percorso fin lì (come Google Maps)
+        // Una pressione prolungata su un punto qualsiasi calcola il percorso fin lì, come in Google Maps.
         val interactions = remember {
             MapInteractions {
                 callbacks {
@@ -568,15 +613,16 @@ fun MapScreen(
         MaplibreMap(
             state = mapState,
             interactions = interactions,
-            // la mappa arriva sotto la barra di stato e sotto la barra in basso; scala, bussola e attribuzione restano
-            // visibili sopra la barra e sopra il pulsante SOS
+            // La mappa si estende sotto la barra di stato e sotto la barra in basso; i margini della viewport fanno sì
+            // che scala, bussola e attribuzione restino visibili sopra la barra e sopra il pulsante SOS.
             viewportInsets = PaddingValues(
-                // sotto la barra di ricerca in alto e sopra il foglio "Vicino a te" in basso
+                // Sotto la barra di ricerca in alto e sopra il foglio "Vicino a te" in basso.
                 top = WindowInsets.safeDrawing.only(WindowInsetsSides.Top).asPaddingValues().calculateTopPadding() + TopBarSpace,
                 bottom = bottomBar + peekSpace,
             ),
-            // Overlay di default di MapLibre senza il logo (la licenza BSD non lo richiede), stesso posizionamento.
-            // L'attribuzione (la "i") resta: OpenStreetMap (ODbL) e OpenFreeMap la chiedono visibile sulla mappa.
+            // Riproduce l'overlay predefinito di MapLibre, con lo stesso posizionamento ma senza il logo, che la licenza
+            // BSD non richiede. L'attribuzione (la "i") invece resta, perché OpenStreetMap (ODbL) e OpenFreeMap la
+            // chiedono visibile sulla mappa.
             overlay = {
                 val insets = LocalViewportInsets.current
                 Box(
@@ -592,15 +638,16 @@ fun MapScreen(
                         zoom = { mapState.cameraPosition.zoom },
                         modifier = Modifier.align(Alignment.TopStart),
                     )
-                    // a sinistra sotto la scala: in alto a destra ora ci sono i comandi della vista
+                    // Bussola a sinistra sotto la scala, perché in alto a destra ci sono i comandi della vista.
                     DisappearingCompassButton(modifier = Modifier.align(Alignment.TopStart).padding(top = 40.dp))
-                    // In basso a sinistra, lontano dall'SOS, e nei colori del tema: leggibile su ogni mappa
+                    // Attribuzione in basso a sinistra, lontana dall'SOS, nei colori del tema per essere leggibile su
+                    // ogni mappa.
                     AttributionButton(mapState, Modifier.align(Alignment.BottomStart))
                 }
             },
         )
-        // In alto al centro solo lo stato dei sentieri (carico, errore, zoom): "Vicino a te" è un tondo tra i controlli.
-        // Margini laterali per non coprire scala e bussola.
+        // In alto al centro, sotto la barra di ricerca, una capsula con lo stato del caricamento (in corso, errore, zoom
+        // troppo basso). I margini laterali evitano di coprire scala e bussola.
         Column(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -609,13 +656,14 @@ fun MapScreen(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            // un avviso alla volta: prima quello dei sentieri, che dice già se manca la rete
+            // Si mostra un avviso alla volta, in ordine di priorità: per primo quello dei sentieri, che dice già se
+            // manca la rete.
             val hazardsFailed = showHazards && hazardUi.failed && !ui.zoomTooLow
             val status = when {
                 ui.failed != null -> stringResource(Res.string.trails_load_failed)
                 ui.zoomTooLow -> stringResource(Res.string.trails_zoom_in_hint)
                 hazardsFailed -> stringResource(Res.string.hazards_load_failed)
-                // l'operatore deve sapere che sulla mappa non ci sono tutte le allerte (la scheda Allerte sì)
+                // L'operatore deve sapere che sulla mappa non ci sono tutte le allerte (nella scheda Allerte sì).
                 onOpenAlert != null && alertsPartial -> stringResource(Res.string.rescue_map_partial)
                 ui.truncated -> stringResource(Res.string.trails_too_many)
                 ui.loading -> stringResource(Res.string.trails_loading)
@@ -635,15 +683,10 @@ fun MapScreen(
                 MapPill(status, onClick = onRetry)
             }
         }
-        // Redesign 11/2026 (seconda passata), sullo schema di Apple Maps:
-        // - in alto a destra i comandi della vista in capsule raggruppate: tipo di mappa e posizione, poi lo zoom
-        //   (resta: con i guanti il pizzico non sempre riesce);
-        // - in basso a destra, sopra l'SOS, le azioni (segnala, nuovo punto): nella zona del pollice;
-        // - in basso a sinistra la barra "Vicino a te", larga come la ricerca di Mappe.
-        // In orizzontale (o con il testo grande) i gruppi scorrono invece di finire sotto l'SOS
-        // Terza passata (11/2026), come Apple Maps: un solo gruppo di comandi della vista in alto a destra (tipo di mappa,
-        // posizione e, per il gestore, il punto nuovo). Niente più +/−: si zooma con il pizzico o il doppio tocco, e la
-        // mappa resta libera. In orizzontale (o con il testo grande) il gruppo scorre invece di finire sotto l'SOS
+        // Comandi della vista in un unico gruppo in alto a destra, come in Apple Maps: tipo di mappa, posizione, segnala
+        // un pericolo (da loggati) e nuovo punto (solo per il gestore). Non ci sono pulsanti di zoom: si zooma con il
+        // pizzico o con il doppio tocco, e la mappa resta libera. In orizzontale (o con il testo grande) il gruppo scorre
+        // invece di finire sotto il pulsante SOS.
         Column(
             modifier = Modifier
                 .align(Alignment.TopEnd)
@@ -656,13 +699,13 @@ fun MapScreen(
                 listOfNotNull(
                     MapAction(Res.string.map_type_button, Glyph.Layers) { choosingType = true },
                     MapAction(Res.string.map_my_location, Glyph.Locate) { withLocation(LocationGoal.Center) { centerOnFix = true } },
-                    // segnalare un pericolo nel punto che si sta guardando (da loggati)
+                    // Segnala un pericolo nel punto inquadrato (solo da loggati).
                     onReportHazard?.let { report ->
                         MapAction(Res.string.report_open, Glyph.Hazard) {
                             report(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
                         }
                     },
-                    // solo per il gestore del parco (M8.1): il form parte dal punto che si sta guardando
+                    // Nuovo POI, solo per il gestore del parco: il form parte dal punto inquadrato.
                     onCreatePoi?.let { create ->
                         MapAction(Res.string.poi_create_title, Glyph.AddPoint) {
                             create(mapState.cameraPosition.target.toGeoPoint(), max(mapState.cameraPosition.zoom, ReportZoom))
@@ -671,9 +714,7 @@ fun MapScreen(
                 ),
             )
         }
-        // sentieri e pericoli intorno a te: la barra in basso a sinistra apre il foglio con due schede; dentro, a destra,
-        // "Segnala un pericolo" (solo da loggati). Nascosta quando c'è la card di un punto toccato, che sta nello stesso posto
-        // in alto la ricerca e il tondo del Profilo (Figma)
+        // In alto la capsula della ricerca e il tondo del Profilo.
         MapTopBar(
             onSearch = { searching = true },
             onProfile = onOpenProfile,
@@ -684,7 +725,8 @@ fun MapScreen(
                 .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
                 .padding(horizontal = 16.dp, vertical = 8.dp),
         )
-        // "Vicino a te": i sentieri dell'area in card; nascosto quando c'è la card di un punto toccato, che sta lì
+        // In basso, uno solo tra: il pannello del percorso, se è attivo, oppure il foglio "Vicino a te" con i sentieri
+        // dell'area. Entrambi si nascondono quando c'è la card di un elemento toccato, che occupa lo stesso spazio.
         if (route != null && selectedPoiId == null && hazardUi.selected == null) {
             RoutePanel(
                 plan = route,
@@ -711,7 +753,7 @@ fun MapScreen(
                     .widthIn(max = 560.dp),
             )
         }
-        // POI toccato: nome e tipo in una card in basso a sinistra (l'SOS sta a destra)
+        // POI toccato: card in basso a sinistra (a destra c'è il pulsante SOS).
         ui.pois.firstOrNull { it.id == selectedPoiId }?.let { poi ->
             PoiCard(
                 poi = poi,
@@ -723,7 +765,8 @@ fun MapScreen(
                     .padding(start = 16.dp, end = 136.dp, bottom = bottomBar + 16.dp),
             )
         }
-        // Pericolo toccato (o scelto da "Pericoli vicini"): stessa posizione della card dei POI, mai insieme
+        // Pericolo toccato (o scelto da "Pericoli vicini"): stessa posizione della card dei POI, che non compaiono mai
+        // insieme.
         hazardUi.selected?.let { hazard ->
             HazardCard(
                 hazard = hazard,
@@ -790,7 +833,7 @@ fun MapScreen(
             hazards = {
                 NearbyHazardsList(
                     nearby = hazardUi.nearby,
-                    // si chiude il foglio e la mappa va sul pericolo, con la sua card
+                    // Si chiude il foglio e la mappa si sposta sul pericolo, mostrandone la card.
                     onSelect = { hazard ->
                         closeNearMe()
                         selectedPoiId = null
@@ -813,13 +856,14 @@ fun MapScreen(
             body = Res.string.location_rationale_body,
             confirm = Res.string.location_rationale_allow,
             onConfirm = {
-                // se il permesso viene negato nel dialogo di sistema, l'attesa del fix finisce dopo FixWait
+                // Si prepara l'azione e poi si chiede il permesso: se viene negato nel dialogo di sistema, l'attesa
+                // della posizione finisce comunque dopo FixWait.
                 when (goal) {
                     LocationGoal.Center -> centerOnFix = true
                     LocationGoal.NearMe -> openNearMe()
                     LocationGoal.Nearby -> viewModel.onNearbyRequested()
                     LocationGoal.NearbyHazards -> hazardViewModel.onNearbyRequested()
-                    // ricomincia l'attesa del fix, che nel frattempo può essere scaduta
+                    // Fa ripartire l'attesa della posizione, che nel frattempo potrebbe essere scaduta.
                     LocationGoal.Route -> viewModel.setRouteOrigin(RouteOrigin.MyLocation)
                 }
                 location.requestPermission()
@@ -837,7 +881,10 @@ fun MapScreen(
     }
 }
 
-// L'ultimo fix, solo se è di adesso (MaxFixAge). Lo usa anche il form della segnalazione (M4.1)
+/**
+ * Restituisce l'ultima posizione solo se è recente (non più vecchia di MaxFixAge), altrimenti null. È usata anche dal
+ * form della segnalazione.
+ */
 internal fun LocationState.recentFix(): GeoPoint? {
     val fix = lastLocation ?: return null
     val age = lastLocationMeasurementMark?.elapsedNow() ?: return null
@@ -845,14 +892,17 @@ internal fun LocationState.recentFix(): GeoPoint? {
 }
 
 
-// Capsula sopra la mappa, nei colori delle card: un'azione (emphasized, nel verde del tema) o un avviso
+/**
+ * Capsula sopra la mappa nei colori delle card: un'azione ([emphasized], nel verde del tema) oppure un avviso. Se
+ * [onClick] non è null la capsula è toccabile (per esempio per riprovare dopo un errore).
+ */
 @Composable
 private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> Unit)? = null) {
     val colors = MaterialTheme.colorScheme
     val container = if (emphasized) colors.primary else colors.surfaceContainerLowest
     val content = if (emphasized) colors.onPrimary else colors.onSurface
     val border = if (emphasized) null else BorderStroke(1.dp, colors.outlineVariant)
-    // gli avvisi si annunciano da soli (carico, errore), le azioni no
+    // Gli avvisi (caricamento, errore) sono live region e vengono annunciati da soli; le azioni no.
     val modifier = if (emphasized) Modifier else Modifier.semantics { liveRegion = LiveRegionMode.Polite }
     val label: @Composable () -> Unit = {
         Box(Modifier.heightIn(min = 48.dp).padding(horizontal = 18.dp, vertical = 6.dp), contentAlignment = Alignment.Center) {
@@ -866,11 +916,14 @@ private fun MapPill(text: String, emphasized: Boolean = false, onClick: (() -> U
     }
 }
 
+/**
+ * Card di un POI toccato, come la scheda di un luogo in Apple Maps: bollino della categoria (lo stesso della mappa),
+ * nome grande, tipo, la X grigia in alto a destra e sotto l'azione "Indicazioni" a capsula. È un'isola con angoli
+ * arrotondati e ombra.
+ */
 @Composable
 private fun PoiCard(poi: PoiResponse, onDirections: () -> Unit, onClose: () -> Unit, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
-    // la scheda di un luogo come in Apple Maps (11/2026): bollino della categoria (lo stesso della mappa), nome grande,
-    // tipo, la X grigia in alto a destra e l'azione a capsula sotto. Isola con angoli da 28 e ombra tinta
     Surface(
         shape = MaterialTheme.shapes.large,
         color = colors.surfaceContainerLowest,
@@ -878,7 +931,7 @@ private fun PoiCard(poi: PoiResponse, onDirections: () -> Unit, onClose: () -> U
     ) {
         Column(Modifier.padding(start = 16.dp, top = 12.dp, end = 4.dp, bottom = 16.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                // decorativa: il tipo è scritto accanto
+                // Icona decorativa: il tipo è scritto accanto.
                 Box(Modifier.size(40.dp).background(poi.type.markerColor(), CircleShape), contentAlignment = Alignment.Center) {
                     Icon(poi.type.icon(), contentDescription = null, tint = Color.White, modifier = Modifier.size(22.dp))
                 }
@@ -887,7 +940,7 @@ private fun PoiCard(poi: PoiResponse, onDirections: () -> Unit, onClose: () -> U
                     Text(poi.name, style = MaterialTheme.typography.titleLarge, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     Text(stringResource(poi.type.label()), style = MaterialTheme.typography.bodyMedium, color = colors.onSurfaceVariant)
                 }
-                // la X di iOS: tondo grigio da 30 dentro un bersaglio da 48
+                // Pulsante di chiusura nello stile di iOS: cerchio grigio da 30 dp dentro un'area toccabile da 48 dp.
                 Box(
                     Modifier
                         .size(48.dp)
@@ -901,14 +954,16 @@ private fun PoiCard(poi: PoiResponse, onDirections: () -> Unit, onClose: () -> U
                 }
             }
             Spacer(Modifier.size(12.dp))
-            // solo "Indicazioni": il sentiero si apre toccandolo sulla mappa (23/11)
+            // C'è solo "Indicazioni": il sentiero del POI si apre toccandolo direttamente sulla mappa.
             TonalPillButton(stringResource(Res.string.route_directions), onClick = onDirections)
         }
     }
 }
 
-// Foglio "Vicino a te": il titolo, il selettore Sentieri | Pericoli (solo da loggati: i pericoli richiedono il login) e
-// sotto la scheda scelta. Un foglio solo al posto di due capsule fisse sopra la mappa
+/**
+ * Foglio completo "Vicino a te": il titolo, il selettore Sentieri | Pericoli (solo da loggati, perché i pericoli
+ * richiedono il login) e sotto il contenuto della scheda scelta, fornito da [trails] o [hazards].
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun NearMeSheet(
@@ -932,7 +987,7 @@ private fun NearMeSheet(
                 modifier = Modifier.padding(horizontal = 20.dp).semantics { heading() },
             )
             if (showHazards) {
-                // lo stesso selettore a capsula della scheda Rifugi e di Gestione (redesign 11/2026)
+                // Lo stesso selettore a capsula usato nelle schede Rifugi e Gestione.
                 SegmentedControl(
                     options = NearTab.entries.map { stringResource(it.label) },
                     selected = NearTab.entries.indexOf(tab),
@@ -947,7 +1002,10 @@ private fun NearMeSheet(
     }
 }
 
-// Scheda "Sentieri" di "Vicino a te": mentre cerca la posizione e carica, poi la lista ordinata per distanza (dal server)
+/**
+ * Scheda "Sentieri" di "Vicino a te": un indicatore mentre attende la posizione o carica, un errore con "Riprova", poi
+ * la lista dei sentieri ordinata per distanza dal server.
+ */
 @Composable
 private fun NearbyTrailsList(nearby: NearbyTrails, onOpenTrail: (String) -> Unit, onRetry: () -> Unit) {
     Column {
@@ -989,7 +1047,7 @@ private fun NearbyTrailsList(nearby: NearbyTrails, onOpenTrail: (String) -> Unit
     }
 }
 
-// Riga di un sentiero: nome, difficoltà e lunghezza, stato con il suo simbolo (non solo il colore)
+/** Riga di un sentiero: nome, difficoltà e lunghezza, e lo stato con il suo simbolo (non solo con il colore). */
 @Composable
 internal fun TrailRow(trail: TrailSummaryResponse, onClick: () -> Unit) {
     val difficulty = TrailDifficulty.of(trail.difficulty.value)
@@ -1014,6 +1072,7 @@ internal fun TrailRow(trail: TrailSummaryResponse, onClick: () -> Unit) {
     }
 }
 
+/** Dialogo legato alla posizione (spiegazione prima della richiesta o permesso negato): [onConfirm] esegue l'azione. */
 @Composable
 private fun LocationDialog(title: StringResource, body: StringResource, confirm: StringResource, onConfirm: () -> Unit, onDismiss: () -> Unit) {
     AlertDialog(

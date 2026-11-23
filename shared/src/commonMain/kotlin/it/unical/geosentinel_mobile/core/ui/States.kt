@@ -1,3 +1,6 @@
+// Componenti condivisi per gli stati di una pagina: vuoto, errore e caricamento.
+// Tutte le schermate li usano, così questi casi hanno lo stesso aspetto e lo stesso comportamento in tutta l'app.
+// Al posto di un'illustrazione, gli stati vuoti e di errore mostrano un piccolo cielo dell'ora corrente.
 package it.unical.geosentinel_mobile.core.ui
 
 import androidx.compose.animation.core.RepeatMode
@@ -40,15 +43,19 @@ import geosentinel_mobile.shared.generated.resources.Res
 import geosentinel_mobile.shared.generated.resources.trail_retry
 import org.jetbrains.compose.resources.stringResource
 
-// Stati condivisi delle pagine: vuoto, errore, caricamento (redesign "Luce di quota": il disegno è un piccolo cielo).
-
-/** Il tondo con un piccolo cielo dell'ora e le creste: il "disegno" degli stati vuoti e d'errore. Decorativo. */
+/**
+ * Tondo di diametro [size] con il cielo dell'ora corrente e le creste dei monti: è l'illustrazione degli stati
+ * vuoti e di errore. È solo decorativo, quindi viene nascosto ai lettori di schermo.
+ */
 @Composable
 internal fun SkyBadge(size: Dp = 112.dp) {
     SkyPicture(Modifier.size(size).clip(CircleShape).clearAndSetSemantics { })
 }
 
-/** Stato vuoto: disegno, titolo, una riga di spiegazione e al massimo un'azione. */
+/**
+ * Stato vuoto di una pagina o di una lista: illustrazione, [title] (annunciato come intestazione), una riga di
+ * spiegazione facoltativa ([body]) e al massimo un'azione ([action], per esempio un pulsante).
+ */
 @Composable
 internal fun EmptyState(title: String, body: String? = null, modifier: Modifier = Modifier, action: (@Composable () -> Unit)? = null) {
     Column(
@@ -70,8 +77,11 @@ internal fun EmptyState(title: String, body: String? = null, modifier: Modifier 
 }
 
 /**
- * Errore che lascia la pagina (o una sezione, con [compact]) senza contenuto: il messaggio, annunciato dagli screen
- * reader, e "Riprova".
+ * Errore che lascia una pagina senza contenuto: mostra [message] e il pulsante "Riprova", che chiama [onRetry].
+ * Il messaggio è una live region, quindi i lettori di schermo lo annunciano appena compare.
+ *
+ * @param compact se vero la versione è ridotta, senza illustrazione e con un pulsante tonale, adatta a una sola
+ *   sezione della pagina.
  */
 @Composable
 internal fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier = Modifier, compact: Boolean = false) {
@@ -99,7 +109,7 @@ internal fun ErrorState(message: String, onRetry: () -> Unit, modifier: Modifier
     }
 }
 
-/** Spinner piccolo per "altre pagine" in fondo a una lista e per le sezioni che si caricano a parte. */
+/** Piccolo indicatore di avanzamento, per le pagine successive in fondo a una lista e per le sezioni caricate a parte. */
 @Composable
 internal fun LoadingMore() {
     Box(Modifier.fillMaxWidth().padding(vertical = 16.dp), contentAlignment = Alignment.Center) {
@@ -108,8 +118,10 @@ internal fun LoadingMore() {
 }
 
 /**
- * Sagoma di caricamento: un blocco tonale che "respira" (0,5 ↔ 1 in 900 ms), fermo con "Riduci movimento".
- * Decorativa: chi usa le sagome annuncia il caricamento una volta sola ([SkeletonRows] con loadingLabel).
+ * Trasforma l'elemento in una sagoma di caricamento: un blocco colorato con forma [shape] la cui opacità pulsa tra
+ * 0,5 e 1 ogni 900 ms. Con "Riduci movimento" la sagoma resta ferma all'80%.
+ * È decorativa: il caricamento lo annuncia una sola volta chi usa le sagome (per esempio [SkeletonRows] con
+ * `loadingLabel`).
  */
 @Composable
 internal fun Modifier.skeleton(shape: Shape = MaterialTheme.shapes.extraSmall): Modifier {
@@ -128,7 +140,13 @@ internal fun Modifier.skeleton(shape: Shape = MaterialTheme.shapes.extraSmall): 
     return this.graphicsLayer { this.alpha = alpha }.clip(shape).background(color)
 }
 
-/** Righe finte di una lista raggruppata mentre arriva la prima pagina: miniatura (se [thumb]) e due righe di testo. */
+/**
+ * Righe segnaposto di una lista raggruppata, mostrate mentre arriva la prima pagina di dati.
+ *
+ * @param count numero di righe.
+ * @param thumb se vero ogni riga ha una miniatura a sinistra, oltre alle due righe di testo.
+ * @param loadingLabel testo letto dai lettori di schermo al posto delle sagome (per esempio "Caricamento").
+ */
 @Composable
 internal fun SkeletonRows(count: Int = 5, thumb: Boolean = true, loadingLabel: String? = null) {
     GroupCard(

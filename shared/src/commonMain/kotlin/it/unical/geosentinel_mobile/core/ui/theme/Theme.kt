@@ -1,3 +1,6 @@
+// Tema Material 3 dell'app: schemi di colore chiaro e scuro, tipografia, forme, tema d'emergenza per l'SOS e
+// coordinamento del colore delle icone nella barra di stato. `App` avvolge tutta l'interfaccia in GeoSentinelTheme,
+// così i componenti leggono i colori da `MaterialTheme.colorScheme` e non usano valori esadecimali.
 package it.unical.geosentinel_mobile.core.ui.theme
 
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -25,11 +28,13 @@ import geosentinel_mobile.shared.generated.resources.archivo_bold
 import geosentinel_mobile.shared.generated.resources.archivo_semibold
 import org.jetbrains.compose.resources.Font
 
-// Ruoli di Material 3 nel redesign "Luce di quota":
-// background = fondo salvia / bosco, surfaceContainerLowest..surfaceContainer = card, surfaceContainerHigh = menu e
-// isole, surfaceContainerHighest = rilievo (binari, tessere), primary = accento felce (selezione, link, interruttori),
-// primaryContainer = felce tenue, tertiary = azione piena (pino / menta: PrimaryPillButton), onSurfaceVariant = testo
-// secondario.
+// Come la palette dell'app è assegnata ai ruoli di Material 3:
+// background = fondo (salvia di giorno, bosco di notte); surfaceContainerLowest, Low e surfaceContainer = card;
+// surfaceContainerHigh = menu e superfici flottanti; surfaceContainerHighest = superfici in rilievo (binari,
+// tessere); primary = accento felce (selezione, link, interruttori); primaryContainer = felce tenue; tertiary =
+// azione principale piena (pino o menta, usata da PrimaryPillButton); onSurfaceVariant = testo secondario.
+
+/** Schema dei colori per il tema chiaro. */
 private val LightColorScheme = lightColorScheme(
     primary = FernLight,
     onPrimary = CardLight,
@@ -68,6 +73,7 @@ private val LightColorScheme = lightColorScheme(
     surfaceContainerHighest = RaisedLight,
 )
 
+/** Schema dei colori per il tema scuro, usato anche dalla schermata SOS. */
 private val DarkColorScheme = darkColorScheme(
     primary = FernDark,
     onPrimary = OnPineDark,
@@ -106,10 +112,14 @@ private val DarkColorScheme = darkColorScheme(
     surfaceContainerHighest = RaisedDark,
 )
 
-// Due voci:
-// - Archivo (grottesco robusto, da attrezzatura da montagna) per titoli, numeri e dati: la voce dell'app;
-// - il carattere di sistema (SF Pro su iPhone, Roboto su Android) per tutto il resto: segue le impostazioni del
-//   telefono. Scala di iOS: 17 il testo, 34 il titolo grande.
+/**
+ * La tipografia dell'app, con due caratteri:
+ * - Archivo, un grottesco robusto, per titoli, numeri e dati;
+ * - il carattere di sistema (SF Pro su iPhone, Roboto su Android) per tutto il resto, così il testo segue le
+ *   impostazioni del telefono.
+ * Le dimensioni seguono la scala di iOS: 17 sp il testo normale, 34 sp il titolo grande. È un Composable perché
+ * i font si caricano dalle risorse di Compose.
+ */
 @Composable
 private fun appTypography(): Typography {
     val display = FontFamily(
@@ -132,16 +142,16 @@ private fun appTypography(): Typography {
         bodySmall = TextStyle(fontFamily = text, fontSize = 13.sp, lineHeight = 18.sp),
         labelLarge = TextStyle(fontFamily = text, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.SemiBold),
         labelMedium = TextStyle(fontFamily = text, fontSize = 13.sp, lineHeight = 18.sp, fontWeight = FontWeight.SemiBold),
-        // occhielli (SEZIONE, SENTIERO 401): maiuscolo spaziato
+        // Occhielli sopra i titoli (per esempio "SEZIONE" o "SENTIERO 401"): maiuscolo con spaziatura larga.
         labelSmall = TextStyle(fontFamily = text, fontSize = 12.sp, lineHeight = 16.sp, fontWeight = FontWeight.SemiBold, letterSpacing = 0.8.sp),
     )
 }
 
-/** Numeri e dati (quota, km, posti): Archivo SemiBold, cifre della voce dell'app. */
+/** Stile per numeri e dati in evidenza (quota, chilometri, posti liberi): Archivo SemiBold. */
 val MaterialTheme.numberStyle: TextStyle
     @Composable get() = typography.headlineSmall
 
-// Forme: tondeggianti ma non molli. 16 campi e tessere piccole, 24 card, 32 fogli
+// Raggi degli angoli: 16 dp per campi e tessere piccole, 24 dp per le card, 32 dp per i fogli che salgono dal basso.
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(10.dp),
     small = RoundedCornerShape(16.dp),
@@ -151,26 +161,37 @@ private val AppShapes = Shapes(
 )
 
 /**
- * Chi disegna sotto la barra di stato (mappa, cielo, foto) chiede icone chiare (overDark = true) o scure (false).
- * Vale l'ultima richiesta ancora attiva: ogni schermata toglie solo la sua quando esce, così durante una transizione
- * quella che esce non cancella la richiesta di quella che entra. Nessuna richiesta = le icone seguono il tema.
+ * Raccoglie le richieste sul colore delle icone della barra di stato. Le schermate che disegnano sotto la barra
+ * (mappa, cielo, foto) chiedono icone chiare (`overDark = true`) o scure (`false`), a seconda di cosa c'è dietro.
+ *
+ * Vale l'ultima richiesta ancora attiva. Ogni schermata rimuove solo la propria quando esce, così durante una
+ * transizione la schermata che esce non cancella la richiesta di quella che entra. Senza richieste le icone seguono
+ * il tema. La lista è osservabile da Compose, quindi un cambiamento aggiorna subito la barra.
  */
 @Stable
 class StatusBarRequests {
+    /** Le richieste attive, in ordine di arrivo: proprietario e valore richiesto. */
     private val requests = mutableStateListOf<Pair<Any, Boolean>>()
+    /** Il valore dell'ultima richiesta attiva; null se non ce ne sono. */
     val overDark: Boolean? get() = requests.lastOrNull()?.second
+    /** Registra (o sostituisce) la richiesta di [owner], portandola in cima. */
     fun request(owner: Any, overDark: Boolean) {
         requests.removeAll { it.first === owner }
         requests.add(owner to overDark)
     }
+    /** Rimuove la richiesta di [owner], se c'è. */
     fun release(owner: Any) {
         requests.removeAll { it.first === owner }
     }
 }
 
+/** Le richieste sulla barra di stato, fornite da [GeoSentinelTheme]. */
 val LocalStatusBarOverDark = staticCompositionLocalOf { StatusBarRequests() }
 
-/** Icone della barra di stato chiare ([overDark] = true) o scure finché questo composable resta; null = come il tema. */
+/**
+ * Chiede icone della barra di stato chiare (se [overDark] è vero) o scure, finché questo composable resta nella
+ * composizione. Con null la richiesta viene ritirata e le icone seguono il tema.
+ */
 @Composable
 fun StatusBarOverDark(overDark: Boolean?) {
     val owner = remember { Any() }
@@ -181,7 +202,10 @@ fun StatusBarOverDark(overDark: Boolean?) {
     }
 }
 
-// Niente colori dinamici di Android 12+: il verde e il rosso dell'SOS devono restare questi
+/**
+ * Il tema dell'app. [mode] è la scelta dell'utente (Sistema, Chiaro, Scuro). Non si usano i colori dinamici di
+ * Android 12 e successivi, perché il verde dell'app e il rosso dell'SOS devono restare sempre gli stessi.
+ */
 @Composable
 fun GeoSentinelTheme(
     mode: ThemeMode,
@@ -205,13 +229,15 @@ fun GeoSentinelTheme(
 }
 
 /**
- * Il tema scuro anche con l'app in chiaro: per la schermata SOS, che resta una sola, concentrata, al buio (come
- * l'SOS di sistema). Stessa tipografia e forme; le icone di stato chiare le chiede chi lo usa.
+ * Applica il tema scuro anche quando l'app è in chiaro. Lo usa la schermata SOS, che resta sempre scura e
+ * concentrata, come l'SOS di sistema dei telefoni. Tipografia e forme restano quelle dell'app; le icone chiare
+ * nella barra di stato le deve chiedere chi usa questo tema.
  */
 @Composable
 fun EmergencyTheme(content: @Composable () -> Unit) {
     MaterialTheme(colorScheme = DarkColorScheme, typography = MaterialTheme.typography, shapes = MaterialTheme.shapes) {
-        // il colore del testo lo danno le superfici: qui sopra c'è ancora quello del tema chiaro
+        // Il colore del contenuto di solito lo impostano le superfici; qui, prima di qualunque superficie, sarebbe
+        // ancora quello del tema chiaro, quindi lo si imposta a mano.
         CompositionLocalProvider(LocalContentColor provides DarkColorScheme.onBackground, content = content)
     }
 }

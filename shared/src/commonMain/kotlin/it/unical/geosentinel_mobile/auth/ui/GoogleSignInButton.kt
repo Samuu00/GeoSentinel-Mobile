@@ -1,3 +1,6 @@
+// Blocco "Continua con Google" mostrato nel Profilo da ospite: pulsante con il logo, gestione degli errori,
+// dialogo per il codice della verifica in due passaggi e richiesta della data di nascita al primo accesso.
+// Lo stato vive in LoginViewModel, condiviso con il login con email.
 package it.unical.geosentinel_mobile.auth.ui
 
 import androidx.compose.foundation.BorderStroke
@@ -51,9 +54,12 @@ import org.koin.compose.koinInject
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
- * "Continua con Google" con il suo flusso: selettore di account, data di nascita al primo accesso, errori sotto il
- * pulsante. Non disegna nulla se il login Google non è configurato su questa piattaforma. A login riuscito la sessione
- * cambia e chi mostra questo blocco (il Profilo da ospite) passa da solo alla vista dell'utente.
+ * Flusso completo del login con Google: apre il selettore di account, chiede la data di nascita se il server la
+ * richiede al primo accesso e mostra gli errori sotto il pulsante.
+ *
+ * Se il login con Google non è configurato su questa piattaforma ([rememberGoogleSignIn] restituisce null) non
+ * disegna nulla. A login riuscito cambia la sessione e la schermata che contiene il blocco (il Profilo da ospite)
+ * passa da sola alla vista dell'utente: qui non serve alcuna navigazione.
  */
 @Composable
 fun ContinueWithGoogle(modifier: Modifier = Modifier) {
@@ -73,7 +79,7 @@ fun ContinueWithGoogle(modifier: Modifier = Modifier) {
         FormErrorBanner(state.error?.resolve())
     }
 
-    // Account con la verifica in due passaggi: il codice in un dialogo, il Profilo resta sotto
+    // Account con la verifica in due passaggi attiva: il codice si chiede in un dialogo, sopra il Profilo.
     if (state.mfaStep) {
         AlertDialog(
             onDismissRequest = viewModel::onMfaCancelled,
@@ -92,6 +98,7 @@ fun ContinueWithGoogle(modifier: Modifier = Modifier) {
         )
     }
 
+    // Primo accesso con Google: il server vuole la data di nascita per creare l'account.
     if (state.askBirthDate) {
         BirthDatePickerDialog(
             title = Res.string.auth_google_birth_date_title,
@@ -101,9 +108,14 @@ fun ContinueWithGoogle(modifier: Modifier = Modifier) {
     }
 }
 
-// Pulsante secondo le linee guida di Google (Sign in with Google, forma a pillola): logo "G" a colori a sinistra del
-// testo, fondo bianco con bordo grigio in chiaro, quasi nero con bordo grigio in scuro. Colori del brand, non del tema:
-// sono un'eccezione alla regola dei colori solo da MaterialTheme, come le anteprime della mappa.
+/**
+ * Pulsante "Continua con Google" disegnato secondo le linee guida del marchio Google (forma a pillola, logo "G" a
+ * colori a sinistra del testo). In tema chiaro ha fondo bianco e bordo grigio, in tema scuro fondo quasi nero.
+ *
+ * I colori sono quelli del marchio e non del tema dell'app: è una delle poche eccezioni alla regola che vuole i colori
+ * presi solo da `MaterialTheme`. Il tema scuro si riconosce dalla luminanza dello sfondo. Mentre [loading] è vero
+ * il pulsante è disabilitato e mostra una rotella al posto del logo e del testo.
+ */
 @Composable
 private fun GoogleSignInButton(onClick: () -> Unit, loading: Boolean) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -126,10 +138,10 @@ private fun GoogleSignInButton(onClick: () -> Unit, loading: Boolean) {
         if (loading) {
             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = content)
         } else {
-            // il logo è decorativo: il testo dice già "Google"
+            // Il logo è decorativo: il testo dice già "Google", quindi niente contentDescription.
             Image(GoogleLogo, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.width(12.dp))
-            // Roboto Medium come chiedono le linee guida: il font di sistema (Roboto su Android)
+            // Le linee guida chiedono Roboto Medium: si usa il font di sistema, che su Android è Roboto.
             Text(
                 stringResource(Res.string.auth_google_button),
                 style = TextStyle(fontFamily = FontFamily.Default, fontWeight = FontWeight.Medium, fontSize = 16.sp, letterSpacing = 0.1.sp),
@@ -138,7 +150,10 @@ private fun GoogleSignInButton(onClick: () -> Unit, loading: Boolean) {
     }
 }
 
-// La "G" ufficiale, dal kit di Google (viewBox 48×48)
+/**
+ * Logo "G" ufficiale di Google, ricostruito come vettore dai tracciati del kit del marchio (area di disegno 48 x 48).
+ * Si crea una sola volta, alla prima lettura. La funzione locale `part` aggiunge un tracciato pieno di un colore.
+ */
 private val GoogleLogo: ImageVector by lazy {
     fun ImageVector.Builder.part(color: Long, d: String) =
         addPath(pathData = addPathNodes(d), fill = SolidColor(Color(color)))

@@ -1,3 +1,5 @@
+// Test di TrailDetailViewModel, il ViewModel della pagina di dettaglio di un sentiero: dati del sentiero e POI dalla
+// cache o dalla rete, pericoli e foto solo per gli utenti autenticati, URL firmati delle foto e funzionamento offline.
 package it.unical.geosentinel_mobile.trail.ui
 
 import io.ktor.http.HttpStatusCode
@@ -30,14 +32,21 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Verifica il dettaglio del sentiero da ospite e da autenticato, con e senza rete, contro il catalogo finto. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class TrailDetailViewModelTest {
 
     private val backend = FakeBackend()
+    /** Rotte del catalogo installate sul backend finto. */
     private val catalog = FakeCatalog(backend).also { it.install() }
+    /** Cache del catalogo in memoria, condivisa tra i ViewModel creati nello stesso test. */
     private val dao = FakeCatalogDao()
     private lateinit var session: SessionManager
 
+    /**
+     * Imposta il dispatcher principale di test, crea la sessione (autenticata se [loggedIn]) e restituisce un ViewModel
+     * per il sentiero di prova, con repository veri collegati al backend finto.
+     */
     private suspend fun TestScope.viewModel(loggedIn: Boolean): TrailDetailViewModel {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         val (manager, client) = sessionWith(backend)
@@ -54,9 +63,11 @@ class TrailDetailViewModelTest {
         )
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
+    /** Da ospite si vedono il sentiero e i POI, mentre le sezioni pericoli e foto sono nascoste e le loro rotte non vengono chiamate. */
     @Test
     fun `da ospite si vedono sentiero e POI ma pericoli e foto non si chiedono`() = runTest {
         val viewModel = viewModel(loggedIn = false)
@@ -72,6 +83,7 @@ class TrailDetailViewModelTest {
         assertEquals(0, catalog.count("hazards") + catalog.count("media"), "le rotte con login non partono da ospite")
     }
 
+    /** Da utente autenticato arrivano i pericoli e solo le foto pronte: quella in quarantena non si mostra. */
     @Test
     fun `da loggati arrivano i pericoli e solo le foto pronte`() = runTest {
         val viewModel = viewModel(loggedIn = true)
@@ -84,18 +96,22 @@ class TrailDetailViewModelTest {
         assertEquals(listOf("m1", "m3"), photos.map { it.id }, "quella in quarantena non si mostra")
     }
 
+    /**
+     * L'URL firmato di una foto si chiede quando la foto compare, una volta sola anche se la composizione si ripete.
+     * Quando l'URL scade (il caricamento fallisce) se ne chiede uno nuovo, ma al massimo due volte per foto.
+     */
     @Test
     fun `l'URL della foto si chiede quando compare e di nuovo quando scade ma non all'infinito`() = runTest {
         val viewModel = viewModel(loggedIn = true)
         advanceUntilIdle()
 
         viewModel.onPhotoShown("m1")
-        viewModel.onPhotoShown("m1") // una seconda composizione non chiede un altro URL
+        viewModel.onPhotoShown("m1")
         advanceUntilIdle()
         assertEquals(1, catalog.count("download-url"))
         val first = viewModel.state.value.photoUrls.getValue("m1")
 
-        viewModel.onPhotoFailed("m1") // URL scaduto (5 minuti)
+        viewModel.onPhotoFailed("m1")
         advanceUntilIdle()
         assertNotEquals(first, viewModel.state.value.photoUrls.getValue("m1"), "un URL nuovo")
 
@@ -106,6 +122,7 @@ class TrailDetailViewModelTest {
         assertEquals(3, catalog.count("download-url"), "il primo URL più due rinnovi")
     }
 
+    /** Dopo il logout le sezioni riservate tornano nascoste e gli URL firmati delle foto vengono dimenticati. */
     @Test
     fun `all'uscita pericoli e foto spariscono`() = runTest {
         val viewModel = viewModel(loggedIn = true)
@@ -122,6 +139,7 @@ class TrailDetailViewModelTest {
         assertTrue(ui.photoUrls.isEmpty(), "niente URL firmati dopo l'uscita")
     }
 
+    /** Un 404 sul dettaglio mostra l'errore; quando il sentiero torna disponibile "Riprova" lo carica. */
     @Test
     fun `sentiero non trovato e riprova`() = runTest {
         catalog.detailStatus = HttpStatusCode.NotFound
@@ -137,6 +155,7 @@ class TrailDetailViewModelTest {
         assertNotNull(viewModel.state.value.trail)
     }
 
+    /** Se i pericoli non arrivano per un errore di rete la sezione è in errore, e si può ricaricare quando la rete torna. */
     @Test
     fun `pericoli senza rete si possono ricaricare`() = runTest {
         val viewModel = viewModel(loggedIn = true)
@@ -150,9 +169,14 @@ class TrailDetailViewModelTest {
         assertIs<Section.Loaded<*>>(viewModel.state.value.hazards)
     }
 
+    /**
+     * Senza rete, se il sentiero era già stato aperto, si mostra la copia salvata con la data di aggiornamento e
+     * l'avviso che i dati potrebbero non essere attuali; anche i POI salvati restano. Quando la rete torna, "Riprova"
+     * toglie l'avviso.
+     */
     @Test
     fun `senza rete con la copia salvata si mostra quella con la data e l'invito a riprovare`() = runTest {
-        // prima apertura con la rete: il sentiero finisce in cache
+        // Prima apertura con la rete: il sentiero viene salvato nella cache.
         viewModel(loggedIn = false)
         advanceUntilIdle()
 
@@ -173,6 +197,7 @@ class TrailDetailViewModelTest {
         assertNull(offline.state.value.stale)
     }
 
+    /** Senza rete e senza una copia salvata la pagina mostra l'errore. */
     @Test
     fun `senza rete e senza copia salvata c'è l'errore`() = runTest {
         catalog.offline = true
@@ -183,6 +208,7 @@ class TrailDetailViewModelTest {
         assertNotNull(viewModel.state.value.error)
     }
 
+    /** Se l'URL firmato non arriva la foto mostra l'errore invece di un caricamento infinito, e si può riprovare. */
     @Test
     fun `se l'URL firmato non arriva la foto mostra l'errore e si riprova`() = runTest {
         val viewModel = viewModel(loggedIn = true)
@@ -200,6 +226,7 @@ class TrailDetailViewModelTest {
         assertTrue("m1" in viewModel.state.value.photoUrls)
     }
 
+    /** Se il server risponde 404 il sentiero non esiste più: si mostra l'errore anche se c'è una copia salvata, che non va usata. */
     @Test
     fun `un sentiero cancellato sul server mostra l'errore anche con la copia salvata`() = runTest {
         viewModel(loggedIn = false)

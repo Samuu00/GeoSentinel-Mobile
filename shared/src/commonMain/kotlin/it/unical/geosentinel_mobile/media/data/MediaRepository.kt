@@ -1,3 +1,5 @@
+// Accesso alle foto allegate a sentieri, segnalazioni e rifugi tramite le API del backend. Legge le liste delle foto,
+// chiede gli URL firmati per scaricarle e cancella le foto; il caricamento invece sta in MediaUploader.
 package it.unical.geosentinel_mobile.media.data
 
 import io.ktor.client.HttpClient
@@ -12,28 +14,34 @@ import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 /**
- * Foto allegate. Tutte le rotte richiedono il login. Le immagini non passano dall'API: `getMediaDownloadUrl` dà un
- * URL firmato dello storage, valido 5 minuti, da scaricare senza bearer (Coil usa un client suo, senza `Auth`).
+ * Repository delle foto allegate. Tutte le rotte richiedono il login. I byte delle immagini non passano dall'API:
+ * `getMediaDownloadUrl` restituisce un URL firmato dello storage, valido 5 minuti, che si scarica senza il token
+ * (Coil usa un proprio client HTTP senza il plugin `Auth`, così il bearer non esce verso lo storage).
+ *
+ * Il client HTTP arriva come funzione e viene creato solo al primo uso.
  */
 class MediaRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
 
     private val client by lazy(httpClient)
     private val mediaApi by lazy { MediaApi(apiBaseUrl, client) }
 
-    /** Le foto pronte di un sentiero: quelle in quarantena o non ancora caricate non si mostrano. */
+    /** Restituisce le foto pronte (`READY`) di un sentiero; quelle in quarantena o non ancora caricate si scartano. */
     suspend fun photosOfTrail(trailId: String): Result<List<MediaResponse>> =
         apiCall { mediaApi.findAttachedMedia(MediaApi.EntityTypeFindAttachedMedia.TRAIL, trailId) }
             .map { media -> media.filter { it.status == MediaResponse.Status.READY } }
 
-    // Le foto delle segnalazioni nelle liste (coda del gestore, le mie segnalazioni, card della mappa): una riga che
-    // esce e rientra scorrendo non richiede di nuovo la lista. Solo la lista (id e metadati), mai gli URL firmati;
-    // dura poco perché una foto si può aggiungere (MediaUploader) o togliere.
+    // Cache in memoria delle liste di foto delle segnalazioni, usate in liste che scorrono (coda del gestore, "Le mie
+    // segnalazioni", card della mappa): una riga che esce e rientra nello schermo non rifà la richiesta. Si conservano
+    // solo gli id e i metadati, mai gli URL firmati (che scadono). La durata è breve (HazardPhotosFresh) perché nel
+    // frattempo una foto può essere aggiunta con MediaUploader o cancellata. La mappa è protetta da un Mutex perché
+    // più righe la leggono e scrivono in parallelo.
     private val hazardPhotos = mutableMapOf<String, Pair<TimeMark, List<MediaResponse>>>()
     private val hazardPhotosLock = Mutex()
 
     /**
-     * Le foto pronte di una segnalazione: le vede chi può vedere la segnalazione (le regole sono del server). Una
-     * risposta fuori contratto diventa un errore: le foto sono un di più, non fanno cadere la schermata.
+     * Restituisce le foto pronte di una segnalazione, dalla cache se ancora fresca. Può vederle chi può vedere la
+     * segnalazione, secondo le regole del server. La chiamata è avvolta in `safely`: una risposta fuori contratto
+     * diventa un errore e non un crash, perché le foto sono un elemento accessorio e non devono far cadere la schermata.
      */
     suspend fun photosOfHazard(hazardId: String): Result<List<MediaResponse>> {
         hazardPhotosLock.withLock { hazardPhotos[hazardId] }
@@ -45,18 +53,25 @@ class MediaRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
         return result
     }
 
-    /** Le foto pronte di un rifugio (le carica il suo gestore), da mostrare in testata al dettaglio. */
+    /** Restituisce le foto pronte di un rifugio (caricate dal suo gestore), mostrate in testata nel dettaglio. */
     suspend fun photosOfRefuge(refugeId: String): Result<List<MediaResponse>> =
         apiCall { mediaApi.findAttachedMedia(MediaApi.EntityTypeFindAttachedMedia.REFUGE, refugeId) }
             .map { media -> media.filter { it.status == MediaResponse.Status.READY } }
 
-    /** Un URL nuovo a ogni chiamata: si chiede quando la foto si mostra, e di nuovo quando quello vecchio è scaduto. */
+    /**
+     * Chiede al server un URL firmato per scaricare la foto. Ogni chiamata ne produce uno nuovo: si chiede quando la
+     * foto viene mostrata e di nuovo quando il precedente è scaduto.
+     */
     suspend fun downloadUrl(mediaId: String): Result<String> =
         safely { apiCall { mediaApi.getMediaDownloadUrl(mediaId) } }.map { it.downloadUrl }
 
-    /** Toglie una foto caricata (solo chi l'ha caricata, o un admin): il server la cancella anche dallo storage. */
+    /**
+     * Cancella una foto; il server lo permette solo a chi l'ha caricata o a un admin e la rimuove anche dallo storage.
+     * In caso di successo svuota la cache delle foto delle segnalazioni, che altrimenti la mostrerebbe ancora.
+     */
     suspend fun delete(mediaId: String): Result<Unit> =
         apiCall { mediaApi.deleteMedia(mediaId) }.onSuccess { hazardPhotosLock.withLock { hazardPhotos.clear() } }
 }
 
+/** Per quanto tempo una lista di foto di una segnalazione resta valida nella cache. */
 private val HazardPhotosFresh = 2.minutes

@@ -1,3 +1,5 @@
+// Stato e logica della password dimenticata: l'utente chiede un codice via email, poi lo inserisce insieme alla
+// nuova password. Le chiamate al server passano da SessionManager; qui si validano i campi e si traducono gli errori.
 package it.unical.geosentinel_mobile.auth.ui
 
 import androidx.lifecycle.ViewModel
@@ -23,14 +25,20 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// Password dimenticata (M7.2.2 del backend): email -> codice ricevuto e password nuova -> fatto, si torna al login
+/**
+ * Passi del flusso di reset: EMAIL (richiesta del codice), CODE (codice ricevuto e nuova password), DONE (password
+ * cambiata, si torna al login).
+ */
 enum class ResetStep { EMAIL, CODE, DONE }
 
+/** Campi del form di reset a cui si può attaccare un errore. */
 enum class ResetField { EMAIL, CODE, PASSWORD }
 
-// Il codice è di 16 caratteri (XXXXXXXX-XXXXXXXX); il server ne accetta al massimo 32 con trattini e spazi
+// Il codice ha 16 caratteri (nel formato XXXXXXXX-XXXXXXXX), ma il server accetta fino a 32 caratteri contando
+// trattini e spazi: il campo si tronca allo stesso limite.
 private const val RESET_CODE_MAX_CHARS = 32
 
+/** Stato immutabile del flusso di reset, con il passo corrente e gli errori per campo. */
 data class PasswordResetUiState(
     val step: ResetStep = ResetStep.EMAIL,
     val email: String = "",
@@ -40,23 +48,34 @@ data class PasswordResetUiState(
     val fieldErrors: Map<ResetField, UiMessage> = emptyMap(),
     val error: UiMessage? = null,
 ) {
-    // niente email, codice e password nei log
+    // toString scritto a mano: email, codice e password non devono finire nei log.
     override fun toString() = "PasswordResetUiState(step=$step, submitting=$submitting, fieldErrors=${fieldErrors.keys}, error=$error)"
 }
 
+/**
+ * ViewModel della password dimenticata. [email] arriva dalla schermata di login, così il primo passo parte compilato.
+ */
 class PasswordResetViewModel(private val session: SessionManager, email: String) : ViewModel() {
 
     private val _state = MutableStateFlow(PasswordResetUiState(email = email))
     val state: StateFlow<PasswordResetUiState> = _state.asStateFlow()
 
+    /** Aggiorna l'email. */
     fun onEmailChange(value: String) = edit(ResetField.EMAIL) { copy(email = value) }
+    /** Aggiorna il codice, troncato a [RESET_CODE_MAX_CHARS]. */
     fun onCodeChange(value: String) = edit(ResetField.CODE) { copy(code = value.take(RESET_CODE_MAX_CHARS)) }
+    /** Aggiorna la nuova password. */
     fun onPasswordChange(value: String) = edit(ResetField.PASSWORD) { copy(newPassword = value) }
 
+    /** Applica [change] allo stato e toglie l'errore del campo modificato e quello generale. */
     private fun edit(field: ResetField, change: PasswordResetUiState.() -> PasswordResetUiState) =
         _state.update { it.change().copy(fieldErrors = it.fieldErrors - field, error = null) }
 
-    // Anche "Invia di nuovo il codice": un codice nuovo invalida il precedente (3 richieste all'ora per email)
+    /**
+     * Chiede al server di inviare un codice all'email e passa al passo del codice. Serve anche per "Invia di nuovo il
+     * codice": un codice nuovo rende non valido il precedente. Il server limita le richieste per email (poche
+     * all'ora), quindi un 429 arriva come errore generale con il tempo d'attesa.
+     */
     fun requestCode() {
         val current = _state.value
         if (current.submitting) return
@@ -82,8 +101,13 @@ class PasswordResetViewModel(private val session: SessionManager, email: String)
         }
     }
 
+    /** Torna al primo passo per correggere l'email, scartando codice e password già scritti. */
     fun changeEmail() = _state.update { it.copy(step = ResetStep.EMAIL, code = "", newPassword = "", fieldErrors = emptyMap(), error = null) }
 
+    /**
+     * Controlla localmente codice e nuova password e, se vanno bene, invia la conferma del reset. A buon fine passa
+     * al passo finale; altrimenti mostra l'errore sul campo giusto con [withConfirmError].
+     */
     fun confirm() {
         val current = _state.value
         if (current.submitting) return
@@ -104,7 +128,7 @@ class PasswordResetViewModel(private val session: SessionManager, email: String)
             val result = session.confirmPasswordReset(current.email, current.code, current.newPassword)
             _state.update { state ->
                 result.fold(
-                    // codice e password non restano in memoria
+                    // Codice e password si cancellano dallo stato appena il reset è riuscito.
                     onSuccess = { state.copy(submitting = false, step = ResetStep.DONE, code = "", newPassword = "") },
                     onFailure = { state.withConfirmError(it).copy(submitting = false) },
                 )
@@ -113,11 +137,18 @@ class PasswordResetViewModel(private val session: SessionManager, email: String)
     }
 }
 
+/** Messaggio comune per un errore del server, o quello generico se l'errore non viene dal server. */
 private fun Throwable.toMessage(): UiMessage = (this as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic)
 
+/**
+ * Restituisce lo stato con l'errore della conferma attaccato al campo giusto: il codice se non è valido, la password
+ * se il server la rifiuta (scegliendo il messaggio tra troppo corta e troppo lunga), un errore generale negli altri
+ * casi.
+ */
 private fun PasswordResetUiState.withConfirmError(failure: Throwable): PasswordResetUiState =
     when (val error = (failure as? ApiException)?.error) {
-        // sbagliato, scaduto, già usato o tentativi finiti: il server non dice quale
+        // Codice sbagliato, scaduto, già usato o con i tentativi finiti: il server non dice quale dei casi, di
+        // proposito, e il messaggio resta unico.
         is ApiError.BusinessRule if error.slug == "invalid-reset-code" ->
             copy(fieldErrors = mapOf(ResetField.CODE to UiMessage(Res.string.error_invalid_reset_code)))
         is ApiError.Validation -> {

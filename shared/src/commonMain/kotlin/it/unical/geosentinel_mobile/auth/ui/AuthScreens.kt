@@ -1,3 +1,6 @@
+// Schermate di accesso dell'app: login (con il passo del codice della verifica in due passaggi), registrazione e
+// password dimenticata. Sono tutte costruite con FormScaffold, lo scheletro comune dei form, e prendono lo stato dai
+// rispettivi ViewModel tramite Koin. Contiene anche i componenti condivisi del codice e della data di nascita.
 package it.unical.geosentinel_mobile.auth.ui
 
 import androidx.compose.ui.backhandler.BackHandler
@@ -115,6 +118,13 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
+/**
+ * Schermata di login con email e password.
+ *
+ * Quando il server chiede il codice della verifica in due passaggi la stessa schermata mostra il form del codice.
+ * [onLoggedIn] viene chiamata una volta a login riuscito; [onForgotPassword] riceve l'email già scritta, così il
+ * form di reset parte compilato.
+ */
 @Composable
 fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (email: String) -> Unit, onLoggedIn: () -> Unit) {
     val viewModel = koinViewModel<LoginViewModel>()
@@ -122,7 +132,8 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (e
     LaunchedEffect(state.loggedIn) { if (state.loggedIn) onLoggedIn() }
 
     if (state.mfaStep) {
-        // Indietro (anche quello di sistema) torna alla password, non al Profilo
+        // Nel passo del codice, Indietro (anche quello di sistema) torna al form della password invece di chiudere
+        // il login.
         @Suppress("DEPRECATION")
         @OptIn(ExperimentalComposeUiApi::class)
         BackHandler(onBack = viewModel::onMfaCancelled)
@@ -176,8 +187,11 @@ fun LoginScreen(onBack: () -> Unit, onRegister: () -> Unit, onForgotPassword: (e
 }
 
 /**
- * Il campo del codice (M10.1), per il login con email e per quello con Google: 6 cifre dall'app di autenticazione, o un
- * codice di recupero. Il numero di tentativi rimasti non si mostra; chi ha perso tutto lo chiede all'amministratore.
+ * Campo del codice della verifica in due passaggi, usato sia nel login con email sia nel dialogo del login con Google.
+ *
+ * Accetta il codice a 6 cifre dell'app di autenticazione oppure, con il pulsante sotto, un codice di recupero (con
+ * una tastiera diversa). Il numero di tentativi rimasti non si mostra; il testo finale spiega che chi ha perso sia
+ * l'app sia i codici deve rivolgersi a un amministratore.
  */
 @Composable
 internal fun MfaCodeFields(state: LoginUiState, viewModel: LoginViewModel) {
@@ -199,7 +213,10 @@ internal fun MfaCodeFields(state: LoginUiState, viewModel: LoginViewModel) {
     Text(stringResource(Res.string.mfa_lost_access), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
 }
 
-// Password dimenticata: un form per passo, con lo stesso scheletro degli altri
+/**
+ * Flusso della password dimenticata, un form per ogni passo di [ResetStep]: richiesta del codice via email, codice
+ * ricevuto più nuova password, conferma finale. [email] precompila il primo passo; [onDone] riporta al login.
+ */
 @Composable
 fun PasswordResetScreen(email: String, onBack: () -> Unit, onDone: () -> Unit) {
     val viewModel = koinViewModel<PasswordResetViewModel> { parametersOf(email) }
@@ -276,6 +293,10 @@ fun PasswordResetScreen(email: String, onBack: () -> Unit, onDone: () -> Unit) {
     }
 }
 
+/**
+ * Schermata di registrazione: nome, email, password e data di nascita (scelta da calendario). Gli errori di
+ * validazione si mostrano sotto il campo a cui si riferiscono. [onRegistered] viene chiamata a registrazione riuscita.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> Unit) {
@@ -339,7 +360,10 @@ fun RegisterScreen(onBack: () -> Unit, onLogin: () -> Unit, onRegistered: () -> 
     }
 }
 
-// Calendario della data di nascita, per la registrazione e per il primo accesso con Google
+/**
+ * Dialogo con il calendario per scegliere la data di nascita, usato nella registrazione e al primo accesso con
+ * Google. [onPicked] riceve la data scelta; se non è selezionata alcuna data, Conferma si comporta come Annulla.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun BirthDatePickerDialog(title: StringResource, onPicked: (LocalDate) -> Unit, onDismiss: () -> Unit) {
@@ -348,7 +372,8 @@ internal fun BirthDatePickerDialog(title: StringResource, onPicked: (LocalDate) 
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                // il DatePicker lavora in millisecondi UTC a mezzanotte; senza una data è come annullare
+                // Il DatePicker restituisce la mezzanotte UTC del giorno scelto, in millisecondi: si converte in UTC
+                // per non spostare la data di un giorno con il fuso orario del telefono.
                 val picked = pickerState.selectedDateMillis
                 if (picked == null) onDismiss() else onPicked(Instant.fromEpochMilliseconds(picked).toLocalDateTime(TimeZone.UTC).date)
             }) { Text(stringResource(Res.string.auth_confirm)) }
@@ -359,7 +384,10 @@ internal fun BirthDatePickerDialog(title: StringResource, onPicked: (LocalDate) 
     }
 }
 
-// Tutto il campo apre il calendario: niente formati di data da indovinare
+/**
+ * Campo della data di nascita in sola lettura. Un riquadro trasparente sopra il campo lo rende tutto cliccabile e apre
+ * il calendario: così l'utente non deve scrivere la data in un formato da indovinare.
+ */
 @Composable
 private fun BirthDateField(date: LocalDate?, error: String?, onClick: () -> Unit) {
     val openLabel = stringResource(Res.string.auth_birth_date_pick)
@@ -381,5 +409,6 @@ private fun BirthDateField(date: LocalDate?, error: String?, onClick: () -> Unit
     }
 }
 
+/** Formatta la data come gg/mm/aaaa, il formato abituale in italiano. */
 private fun formatDate(date: LocalDate): String =
     "${date.day.toString().padStart(2, '0')}/${date.month.number.toString().padStart(2, '0')}/${date.year}"

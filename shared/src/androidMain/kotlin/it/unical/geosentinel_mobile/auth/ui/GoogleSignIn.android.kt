@@ -1,3 +1,5 @@
+// Implementazione Android del login con Google (vedi rememberGoogleSignIn in commonMain). Usa Credential Manager per
+// ottenere un ID token di Google, che poi il codice comune invia al backend.
 package it.unical.geosentinel_mobile.auth.ui
 
 import androidx.compose.runtime.Composable
@@ -12,8 +14,12 @@ import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
 import com.google.android.libraries.identity.googleid.GoogleIdTokenParsingException
 
-// Credential Manager con il flusso del pulsante "Accedi con Google": mostra sempre il selettore degli account.
-// Il contesto deve essere l'Activity (il selettore è un suo foglio), ed è quello di LocalContext.
+/**
+ * Prepara il login con Google tramite Credential Manager, nel flusso del pulsante "Accedi con Google" che mostra sempre
+ * il selettore degli account. Il contesto usato è quello di LocalContext, cioè l'Activity: il selettore viene mostrato
+ * come un suo foglio. Restituisce null se [webClientId] non è configurato (in quel caso il pulsante non compare);
+ * altrimenti una funzione sospesa che restituisce il token, l'annullamento da parte dell'utente o l'indisponibilità.
+ */
 @Composable
 actual fun rememberGoogleSignIn(webClientId: String?): (suspend () -> GoogleSignInResult)? {
     val context = LocalContext.current

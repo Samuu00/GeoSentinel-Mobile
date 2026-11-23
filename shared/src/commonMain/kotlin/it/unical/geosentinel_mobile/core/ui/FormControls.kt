@@ -1,3 +1,6 @@
+// Controlli condivisi dei form: campo di testo, campo password, pulsanti a capsula, riquadro d'errore, link
+// alternativo e la struttura comune delle schermate con un form. Tutti i form dell'app li usano, così hanno lo
+// stesso aspetto e lo stesso comportamento (accessibilità, tastiera, safe area).
 package it.unical.geosentinel_mobile.core.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -77,11 +80,16 @@ import it.unical.geosentinel_mobile.core.ui.theme.StatusBarOverDark
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
-// Controlli dei form (redesign "Luce di quota"): il campo è una card bianca da 56 dp con angoli da 16 e un bordo che
-// diventa felce (2 dp) col focus e prugna con un errore; l'etichetta resta sempre visibile (sale sopra il testo).
-// L'azione piena è una capsula color pino. Solo colori del tema.
-
-/** Campo di testo; il messaggio sotto il campo spiega cosa correggere. */
+/**
+ * Campo di testo dei form: una card alta almeno 56 dp con angoli da 16 dp e un bordo che diventa verde felce (2 dp)
+ * quando il campo ha il focus e prugna quando c'è un errore. L'etichetta resta sempre visibile e sale sopra il testo.
+ * I colori vengono tutti dal tema.
+ *
+ * @param error messaggio d'errore mostrato sotto il campo, che spiega cosa correggere; colora anche il bordo.
+ * @param supporting testo di aiuto mostrato sotto il campo quando non c'è un errore.
+ * @param trailing elemento facoltativo a destra dentro il campo (per esempio "Mostra" nel campo password).
+ * @param interactionSource sorgente delle interazioni, da cui si legge il focus; si può passare dall'esterno.
+ */
 @Composable
 fun FormTextField(
     value: String,
@@ -91,7 +99,7 @@ fun FormTextField(
     error: String? = null,
     supporting: String? = null,
     readOnly: Boolean = false,
-    // la descrizione di una segnalazione va su più righe; gli altri campi restano su una
+    // Falso per i testi lunghi, come la descrizione di una segnalazione; gli altri campi restano su una riga.
     singleLine: Boolean = true,
     minLines: Int = 1,
     keyboardOptions: KeyboardOptions = KeyboardOptions.Default,
@@ -132,7 +140,7 @@ fun FormTextField(
                 unfocusedContainerColor = colors.surfaceContainerLowest,
                 errorContainerColor = colors.surfaceContainerLowest,
                 disabledContainerColor = colors.surfaceContainerHighest,
-                // niente linea sotto: il bordo intero fa da indicatore
+                // Nessuna linea sotto il campo: a indicare focus ed errore è il bordo intero.
                 focusedIndicatorColor = Color.Transparent,
                 unfocusedIndicatorColor = Color.Transparent,
                 errorIndicatorColor = Color.Transparent,
@@ -159,8 +167,13 @@ fun FormTextField(
 }
 
 /**
- * Azione principale della schermata: capsula color pino (menta di notte), 56 dp, piena larghezza (o, con fill = false,
- * larga quanto il testo: accanto a un'altra informazione, come "Prenota" nella barra del rifugio). Cede sotto il dito.
+ * Pulsante dell'azione principale della schermata: una capsula color pino (menta nel tema scuro) alta almeno 56 dp,
+ * che si rimpicciolisce leggermente sotto il dito.
+ *
+ * @param loading se vero il pulsante è disabilitato e mostra un indicatore di avanzamento al posto del testo.
+ * @param fill se vero (predefinito) occupa tutta la larghezza; se falso è largo quanto il testo, per stare accanto
+ *   a un'altra informazione (come "Prenota" nella barra della pagina del rifugio).
+ * @param icon icona facoltativa prima del testo.
  */
 @Composable
 fun PrimaryPillButton(
@@ -195,7 +208,7 @@ fun PrimaryPillButton(
             CircularProgressIndicator(modifier = Modifier.size(22.dp), strokeWidth = 2.dp, color = colors.onSurfaceVariant)
         } else {
             if (icon != null) {
-                // decorativa: l'azione è scritta accanto
+                // Icona decorativa: l'azione è già scritta accanto, quindi i lettori di schermo la ignorano.
                 Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
                 Spacer(Modifier.width(10.dp))
             }
@@ -204,10 +217,14 @@ fun PrimaryPillButton(
     }
 }
 
-// Errore del form: riquadro prugna (mai rosso) con l'icona, annunciato da TalkBack e VoiceOver
+/**
+ * Riquadro con l'errore del form, mostrato sopra il pulsante d'invio: color prugna (mai rosso, riservato
+ * all'emergenza) e con un'icona. Il testo è una live region, quindi TalkBack e VoiceOver lo annunciano.
+ * Compare e scompare con una breve animazione; con [message] null il riquadro si chiude.
+ */
 @Composable
 fun FormErrorBanner(message: String?) {
-    // durante la dissolvenza d'uscita resta il testo di prima, invece di un riquadro vuoto
+    // Durante la dissolvenza d'uscita resta visibile l'ultimo testo, invece di un riquadro vuoto.
     var shown by remember { mutableStateOf(message) }
     if (message != null) shown = message
     AnimatedVisibility(
@@ -234,8 +251,10 @@ fun FormErrorBanner(message: String?) {
     }
 }
 
-// Azione secondaria a capsula (Chiama, Indicazioni, Riprova in una sezione): felce tenue, 48 dp. Si vede come
-// pulsante, ma l'unica azione piena della schermata resta PrimaryPillButton.
+/**
+ * Pulsante a capsula per le azioni secondarie (Chiama, Indicazioni, Riprova in una sezione): fondo felce tenue,
+ * alto almeno 48 dp. Si riconosce come pulsante, ma l'unica azione piena della schermata resta [PrimaryPillButton].
+ */
 @Composable
 internal fun TonalPillButton(
     text: String,
@@ -256,7 +275,7 @@ internal fun TonalPillButton(
         modifier = modifier.heightIn(min = 48.dp).pressScale(interaction),
     ) {
         if (icon != null) {
-            // decorativa: l'azione è scritta accanto
+            // Icona decorativa: l'azione è già scritta accanto.
             Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
             Spacer(Modifier.size(8.dp))
         }
@@ -264,14 +283,21 @@ internal fun TonalPillButton(
     }
 }
 
-// Struttura dei form:
-// - [brand] (accesso, registrazione, password): il cielo dell'ora in alto con il titolo grande sopra, e il foglio con i
-//   campi che sale sopra le creste: l'unico momento di marca dei form;
-// - altrimenti: il tondo Indietro, il titolo in Archivo e una riga di testo, sul fondo pieno;
-// - in fondo, fissa, l'azione principale con il link alternativo sotto: sempre visibile e a portata di pollice.
-//   [error] (la risposta del server all'invio) sta lì, sopra il pulsante. Con la tastiera aperta sale sopra la
-//   tastiera: lo Scaffold di App applica safeDrawing, che comprende WindowInsets.ime.
-// Contenuto largo al massimo 480 dp.
+/**
+ * La struttura comune delle schermate con un form, con il contenuto largo al massimo 480 dp.
+ *
+ * - Con [brand] (accesso, registrazione, password) in alto c'è il cielo dell'ora con il titolo grande, e il foglio
+ *   con i campi sale sopra le creste.
+ * - Altrimenti ci sono il pulsante Indietro, il titolo in Archivo e una riga di testo, su fondo pieno.
+ * - In fondo, fissa, c'è l'area delle azioni ([actions]): l'azione principale con l'eventuale link alternativo
+ *   sotto, sempre visibile e a portata di pollice. [error], la risposta del server all'invio, compare lì sopra il
+ *   pulsante. Con la tastiera aperta l'area sale sopra la tastiera, perché lo Scaffold di App applica safeDrawing,
+ *   che comprende WindowInsets.ime.
+ *
+ * @param title titolo della schermata.
+ * @param body riga di spiegazione sotto il titolo.
+ * @param content i campi del form, distanziati di 18 dp; scorrono se non entrano nello schermo.
+ */
 @Composable
 internal fun FormScaffold(
     onBack: () -> Unit,
@@ -313,7 +339,7 @@ internal fun FormScaffold(
                     }
                 } else {
                     Spacer(Modifier.windowInsetsTopHeight(WindowInsets.safeDrawing))
-                    // posto per il tondo Indietro
+                    // Spazio per il pulsante Indietro.
                     Spacer(Modifier.height(60.dp))
                 }
                 Column(Modifier.widthIn(max = 480.dp).fillMaxWidth().padding(horizontal = 24.dp)) {
@@ -335,15 +361,17 @@ internal fun FormScaffold(
                 }
             }
         }
-        // la barra di stato su fondo pieno: i campi e il titolo che scorrono non le passano sotto (con il cielo nel colore
-        // della cima del cielo, così da fermi non si vede)
+        // Fondo pieno sotto la barra di stato, così titolo e campi che scorrono non passano sotto l'ora. Con il cielo
+        // ha il colore della cima del cielo, quindi a pagina ferma non si nota.
         Spacer(Modifier.fillMaxWidth().windowInsetsTopHeight(WindowInsets.safeDrawing).background(if (brand) palette.top else background))
         BackButton(onBack, Modifier.align(Alignment.TopStart))
     }
 }
 
-// "Non hai un account? Registrati": la domanda in grigio, il link in felce. Va a capo con il testo grande.
-// È l'azione alternativa sotto quella principale, qui e nel Profilo da ospite.
+/**
+ * Link alternativo sotto l'azione principale, del tipo "Non hai un account? Registrati": la domanda in grigio e il
+ * link in felce. Se il testo è ingrandito va a capo. Si usa nei form e nel Profilo da ospite.
+ */
 @Composable
 internal fun FooterLink(question: StringResource, link: StringResource, onClick: () -> Unit) {
     FlowRow(
@@ -359,7 +387,14 @@ internal fun FooterLink(question: StringResource, link: StringResource, onClick:
     }
 }
 
-// Password con "Mostra"/"Nascondi" (testo e non l'occhio: dice anche cosa fa)
+/**
+ * Campo password con il pulsante "Mostra"/"Nascondi" a destra. Si usa un testo e non l'icona dell'occhio perché
+ * dice esplicitamente cosa fa. La scelta sopravvive alla rotazione dello schermo.
+ *
+ * @param onDone chiamata quando l'utente preme il tasto di invio della tastiera (Fatto o Avanti).
+ * @param hint testo di aiuto sotto il campo, per esempio i requisiti della password.
+ * @param imeAction il tasto d'azione della tastiera.
+ */
 @Composable
 internal fun PasswordField(
     value: String,

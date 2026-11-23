@@ -1,3 +1,5 @@
+// Test dei ViewModel delle funzioni per il personale (gestori del parco e amministratori): coda delle segnalazioni
+// da verificare, stato del sentiero, nuovo POI, posti letto di un rifugio e nuova squadra di soccorso.
 package it.unical.geosentinel_mobile.staff
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -51,33 +53,40 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
-/**
- * M8.1: coda delle segnalazioni, stato del sentiero e nuovo POI; M8.3: posti del rifugio e nuova squadra. Contro un
- * backend finto con le regole del dominio.
- */
+/** Verifica i ViewModel della sezione Gestione contro un backend finto che applica le regole del dominio. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class StaffViewModelsTest {
 
     private val backend = FakeBackend()
+    /** Cache del catalogo in memoria, per controllare che le risposte del server vengano salvate. */
     private val dao = FakeCatalogDao()
+    /** Istante fisso usato come data di aggiornamento nella cache. */
     private val clock = Instant.fromEpochSeconds(1_790_000_000)
 
-    // ---- stato del server finto ----
+    /** Stato di ogni segnalazione sul server finto. */
     private val hazardStatus = mutableMapOf("h1" to "SUBMITTED", "h2" to "VERIFIED")
+    /** Stato del sentiero di prova sul server finto. */
     private var trailStatus = "CLOSED"
-    // un collega gestisce h1 un attimo prima di noi
+    /** Se vero, un collega respinge la segnalazione un attimo prima che il test provi a cambiarne lo stato. */
     private var colleagueRejectsFirst = false
+    /** Se vero, tutte le rotte del personale rispondono 403. */
     private var forbidden = false
+    /** Corpi delle richieste di creazione dei POI ricevute. */
     private val poiBodies = mutableListOf<String>()
-    // rifugio con 10 ospiti confermati in una delle prossime notti: sotto, 409 capacity-exceeded
+    /** Posti letto del rifugio sul server finto. */
     private var refugeCapacity = 24
+    /** Ospiti confermati in una delle prossime notti: una capienza inferiore riceve 409 capacity-exceeded. */
     private val confirmedGuests = 10
+    /** Nomi delle squadre già esistenti, unici senza distinguere maiuscole e minuscole. */
     private val teamNames = mutableSetOf("Soccorso Sila")
+    /** Corpi delle richieste di creazione delle squadre accettate. */
     private val teamBodies = mutableListOf<String>()
 
+    /** JSON della segnalazione con lo stato corrente del server finto. */
     private fun hazardJson(id: String) =
         """{"id":"$id","trailId":"$SEED_TRAIL_ID","type":"FALLEN_TREE","severity":"HIGH","status":"${hazardStatus[id]}","location":{"lat":39.3,"lon":16.5},"createdAt":"2026-10-05T10:00:00Z"}"""
 
+    /** Installa le rotte finte del personale, fa l'accesso e restituisce i repository di pericoli, personale e sentieri. */
     private suspend fun TestScope.repositories(): Triple<HazardRepository, StaffRepository, TrailRepository> {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         backend.extraRoutes = { request, _ ->
@@ -88,12 +97,12 @@ class StaffViewModelsTest {
                 when {
                     forbidden -> problem(HttpStatusCode.Forbidden, "forbidden")
                     request.method == HttpMethod.Get && path == "/hazards/trail/$SEED_TRAIL_ID" -> {
-                        // come il server per il gestore: SUBMITTED e VERIFIED, mai REJECTED o RESOLVED
+                        // Come il server per il gestore del sentiero: solo SUBMITTED e VERIFIED, mai REJECTED o RESOLVED.
                         val queue = hazardStatus.filterValues { it == "SUBMITTED" || it == "VERIFIED" }.keys.map { hazardJson(it) }
                         respond("[${queue.joinToString(",")}]", HttpStatusCode.OK, ok)
                     }
                     request.method == HttpMethod.Get && path == "/hazards/pending" -> {
-                        // come il server: le SUBMITTED di tutti, ovunque siano
+                        // Come il server: le segnalazioni SUBMITTED di tutti gli utenti, in qualsiasi zona del parco.
                         val pending = hazardStatus.filterValues { it == "SUBMITTED" }.keys.map { hazardJson(it) }
                         respond(
                             """{"content":[${pending.joinToString(",")}],"page":{"size":50,"number":0,"totalElements":${pending.size},"totalPages":1}}""",
@@ -106,6 +115,7 @@ class StaffViewModelsTest {
                         if (colleagueRejectsFirst) hazardStatus[id] = "REJECTED"
                         val target = Regex("\"status\"\\s*:\\s*\"([A-Z]+)\"").find(body())!!.groupValues[1]
                         val current = hazardStatus.getValue(id)
+                        // Transizioni ammesse: da SUBMITTED a VERIFIED o REJECTED, da VERIFIED a RESOLVED.
                         val allowed = (current == "SUBMITTED" && target in setOf("VERIFIED", "REJECTED")) || (current == "VERIFIED" && target == "RESOLVED")
                         if (!allowed) {
                             problem(HttpStatusCode.UnprocessableEntity, "business-rule")
@@ -116,7 +126,7 @@ class StaffViewModelsTest {
                     }
                     request.method == HttpMethod.Patch && path == "/trails/$SEED_TRAIL_ID/status" -> {
                         val target = Regex("\"status\"\\s*:\\s*\"([A-Z]+)\"").find(body())!!.groupValues[1]
-                        // la regola del dominio: da CLOSED non si passa a WARNING
+                        // Regola del dominio: un sentiero chiuso non può passare direttamente ad "attenzione".
                         if (trailStatus == "CLOSED" && target == "WARNING") {
                             problem(HttpStatusCode.UnprocessableEntity, "business-rule")
                         } else {
@@ -148,7 +158,7 @@ class StaffViewModelsTest {
                     request.method == HttpMethod.Post && path == "/rescue-teams" -> {
                         val sent = body()
                         val name = Regex("\"name\"\\s*:\\s*\"([^\"]*)\"").find(sent)!!.groupValues[1]
-                        // come il server: il nome è unico, senza distinguere le maiuscole (422 business-rule)
+                        // Come il server: il nome della squadra è unico senza distinguere le maiuscole (altrimenti 422 business-rule).
                         if (teamNames.any { it.equals(name, ignoreCase = true) }) {
                             problem(HttpStatusCode.UnprocessableEntity, "business-rule")
                         } else {
@@ -175,13 +185,15 @@ class StaffViewModelsTest {
         )
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
+    /** Stato della segnalazione [id] nella coda mostrata, o null se non c'è. */
     private fun HazardQueueViewModel.statusOf(id: String) = state.value.hazards.firstOrNull { it.id == id }?.status
 
-    // ---- coda delle segnalazioni ----
 
+    /** Verificare una segnalazione la porta a VERIFIED, la coda viene riletta e non restano azioni in corso o errori. */
     @Test
     fun `verificare una segnalazione la porta a VERIFIED e la lista si rilegge`() = runTest {
         val (hazards, staff, _) = repositories()
@@ -197,6 +209,7 @@ class StaffViewModelsTest {
         assertNull(viewModel.state.value.actionError)
     }
 
+    /** Risolvere una segnalazione verificata la toglie dalla coda del sentiero. */
     @Test
     fun `risolvere una segnalazione la toglie dalla coda`() = runTest {
         val (hazards, staff, _) = repositories()
@@ -209,6 +222,7 @@ class StaffViewModelsTest {
         assertEquals(listOf("h1"), viewModel.state.value.hazards.map { it.id })
     }
 
+    /** Se un collega ha già gestito la segnalazione, il 422 diventa un messaggio chiaro e la riga sparisce dalla coda. */
     @Test
     fun `se un collega l'ha gia gestita il 422 diventa un messaggio chiaro e la riga sparisce`() = runTest {
         val (hazards, staff, _) = repositories()
@@ -224,6 +238,7 @@ class StaffViewModelsTest {
         assertNull(viewModel.state.value.busyHazardId)
     }
 
+    /** La coda dell'intero parco mostra solo le segnalazioni da verificare; una volta verificata, una segnalazione ne esce. */
     @Test
     fun `la coda del parco mostra solo le segnalazioni da verificare e una verificata ne esce`() = runTest {
         val (hazards, staff, _) = repositories()
@@ -238,8 +253,8 @@ class StaffViewModelsTest {
         assertEquals("VERIFIED", hazardStatus["h1"])
     }
 
-    // ---- stato del sentiero ----
 
+    /** Passare da CLOSED a WARNING viene rifiutato con 422: compare il messaggio e la cache non viene toccata. */
     @Test
     fun `da CLOSED a WARNING il server risponde 422 e la cache resta com'era`() = runTest {
         val (_, staff, trails) = repositories()
@@ -254,6 +269,7 @@ class StaffViewModelsTest {
         assertNull(trails.observeDetail(SEED_TRAIL_ID).first())
     }
 
+    /** Riaprire il sentiero aggiorna subito, dalla risposta del server, sia il dettaglio sia il riassunto usato dalla mappa. */
     @Test
     fun `riaprire il sentiero aggiorna subito dettaglio e mappa dalla risposta`() = runTest {
         val (_, staff, trails) = repositories()
@@ -268,8 +284,11 @@ class StaffViewModelsTest {
         assertEquals("OPEN", dao.summaries.value.getValue(SEED_TRAIL_ID).status)
     }
 
-    // ---- nuovo POI ----
 
+    /**
+     * Il POI si salva solo con un nome di almeno 2 caratteri (il minimo del server) e una posizione; il nome si invia
+     * senza spazi ai lati e il POI creato finisce nella cache del sentiero.
+     */
     @Test
     fun `il POI si salva solo con un nome valido e una posizione e finisce in cache`() = runTest {
         val (_, staff, trails) = repositories()
@@ -295,6 +314,7 @@ class StaffViewModelsTest {
         assertEquals(listOf("p1"), trails.observePoisOf(SEED_TRAIL_ID).first().map { it.id })
     }
 
+    /** Un 403 alla creazione del POI lascia l'utente nel form con il messaggio di permesso negato. */
     @Test
     fun `un 403 sul POI resta nel form senza crearlo`() = runTest {
         val (_, staff, trails) = repositories()
@@ -311,8 +331,8 @@ class StaffViewModelsTest {
         assertEquals(Res.string.error_forbidden, viewModel.state.value.error?.text)
     }
 
-    // ---- posti del rifugio (M8.3) ----
 
+    /** Una capienza inferiore agli ospiti già confermati riceve 409: il messaggio spiega il motivo e la capienza resta quella di prima. */
     @Test
     fun `sotto gli ospiti confermati il 409 dice perche e la capacita resta`() = runTest {
         val (_, staff, _) = repositories()
@@ -328,6 +348,10 @@ class StaffViewModelsTest {
         assertEquals(24, refugeCapacity)
     }
 
+    /**
+     * Il campo della capienza accetta solo cifre, richiede almeno un posto e un valore diverso da quello attuale;
+     * dopo il salvataggio la capienza mostrata è quella confermata dal server.
+     */
     @Test
     fun `la capacita salvata e quella del server e il campo accetta solo cifre`() = runTest {
         val (_, staff, _) = repositories()
@@ -349,8 +373,11 @@ class StaffViewModelsTest {
         assertEquals(30, refugeCapacity)
     }
 
-    // ---- nuova squadra (M8.3) ----
 
+    /**
+     * La nuova squadra si salva solo con tutti i campi validi (il telefono deve avere almeno 5 caratteri) e una base;
+     * il nome si invia senza spazi ai lati, insieme alle coordinate della base.
+     */
     @Test
     fun `la squadra parte solo con i campi validi e una base e il nome va senza spazi`() = runTest {
         val (_, staff, _) = repositories()
@@ -372,6 +399,7 @@ class StaffViewModelsTest {
         assertTrue("\"lat\":39.3" in sent && "\"lon\":16.5" in sent, sent)
     }
 
+    /** Un nome di squadra già usato, anche con maiuscole diverse, diventa un messaggio chiaro e il form resta compilato. */
     @Test
     fun `un nome gia usato diventa un messaggio chiaro e il form resta`() = runTest {
         val (_, staff, _) = repositories()
@@ -390,6 +418,7 @@ class StaffViewModelsTest {
         assertEquals("soccorso sila", viewModel.state.value.name)
     }
 
+    /** Oltre i 1000 posti accettati dal backend la capienza non si può salvare. */
     @Test
     fun `oltre il tetto del server la capacita non si salva`() = runTest {
         val (_, staff, _) = repositories()
@@ -401,6 +430,7 @@ class StaffViewModelsTest {
         assertTrue(viewModel.state.value.canSave)
     }
 
+    /** Dopo la creazione della squadra un secondo tocco su "Salva" non invia un doppione. */
     @Test
     fun `dopo la squadra creata un secondo tocco non manda un doppione`() = runTest {
         val (_, staff, _) = repositories()
@@ -420,6 +450,7 @@ class StaffViewModelsTest {
         assertFalse(viewModel.state.value.canSave)
     }
 
+    /** Riassunto del sentiero di prova con lo stato indicato, da mettere in cache prima del test. */
     private fun summary(status: String) = TrailSummaryEntity(
         id = SEED_TRAIL_ID, name = "Sentiero", difficulty = "EASY", lengthMeters = 1000.0, status = status,
         simplifiedGeoJson = SEED_TRAIL_PATH, minLon = 16.48, minLat = 39.29, maxLon = 16.52, maxLat = 39.31, updatedAt = clock,

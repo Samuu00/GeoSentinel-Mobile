@@ -1,3 +1,6 @@
+// Stato e logica del login: con email e password, con Google e, per gli account che l'hanno attivata, con il
+// codice della verifica in due passaggi. Lo stesso ViewModel serve la schermata di login e il blocco
+// "Continua con Google" del Profilo. La sessione vera e propria la gestisce SessionManager.
 package it.unical.geosentinel_mobile.auth.ui
 
 import androidx.lifecycle.ViewModel
@@ -22,43 +25,61 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
+/**
+ * Stato immutabile della schermata di login, osservato dalla UI.
+ *
+ * Il flag [loggedIn] dice alla schermata di chiudersi; [mfaStep] la fa passare al passo del codice.
+ */
 data class LoginUiState(
     val email: String = "",
     val password: String = "",
     val submitting: Boolean = false,
     val error: UiMessage? = null,
     val loggedIn: Boolean = false,
-    // primo accesso con Google: il server vuole la data di nascita prima di creare l'account
+    /** Primo accesso con Google: il server vuole la data di nascita prima di creare l'account. */
     val askBirthDate: Boolean = false,
-    // verifica in due passaggi (M10.1): password (o account Google) giusta, il server vuole il codice
+    /** Credenziali (o account Google) accettate, ma l'account ha la verifica in due passaggi: serve il codice. */
     val mfaStep: Boolean = false,
     val mfaCode: String = "",
-    // codice di recupero al posto del TOTP: stesso campo, testo libero
+    /** Vero se l'utente inserisce un codice di recupero invece del codice a 6 cifre (TOTP): stesso campo, testo libero. */
     val recoveryCode: Boolean = false,
     val mfaCodeError: UiMessage? = null,
 ) {
+    /** Il pulsante "Accedi" è attivo solo con email e password compilate e nessun invio in corso. */
     val canSubmit: Boolean get() = email.isNotBlank() && password.isNotEmpty() && !submitting
+    /** Il codice si può inviare se ha 6 cifre (TOTP) o, per un codice di recupero, se non è vuoto. */
     val canSubmitCode: Boolean get() = (if (recoveryCode) mfaCode.isNotBlank() else mfaCode.length == 6) && !submitting
 
-    // niente email, password e codice nei log
+    // toString scritto a mano: email, password e codice non devono finire nei log.
     override fun toString() =
         "LoginUiState(submitting=$submitting, error=$error, loggedIn=$loggedIn, askBirthDate=$askBirthDate, mfaStep=$mfaStep)"
 }
 
+/**
+ * ViewModel del login. Riceve gli eventi della UI, chiama [SessionManager] e traduce gli errori del server in
+ * messaggi per l'utente. Tiene in memoria le credenziali solo per il tempo del passo del codice.
+ */
 class LoginViewModel(private val session: SessionManager) : ViewModel() {
 
     private val _state = MutableStateFlow(LoginUiState())
     val state: StateFlow<LoginUiState> = _state.asStateFlow()
 
-    // L'ID token di un primo accesso in attesa della data di nascita, o di un accesso in attesa del codice. Fuori dallo
-    // stato della UI: non si salva né si stampa. Lo stesso per email e password in attesa del codice.
+    // ID token di Google in attesa della data di nascita o del codice, ed email e password in attesa del codice.
+    // Stanno fuori dallo stato della UI di proposito: così non vengono salvati né stampati nei log, e si
+    // dimenticano appena il passo successivo finisce o viene annullato.
     private var pendingGoogleToken: String? = null
     private var pendingCredentials: Pair<String, String>? = null
 
+    /** Aggiorna l'email e toglie l'errore mostrato. */
     fun onEmailChange(value: String) = _state.update { it.copy(email = value, error = null) }
 
+    /** Aggiorna la password e toglie l'errore mostrato. */
     fun onPasswordChange(value: String) = _state.update { it.copy(password = value, error = null) }
 
+    /**
+     * Invia email e password. Se il server risponde che serve il codice della verifica in due passaggi, le credenziali
+     * restano in memoria e si passa al passo del codice; altrimenti si mostra l'esito.
+     */
     fun submit() {
         val current = _state.value
         if (!current.canSubmit) return
@@ -72,7 +93,7 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
             }
             _state.update { state ->
                 result.fold(
-                    // la password non resta in memoria più del necessario
+                    // La password si cancella dallo stato appena non serve più.
                     onSuccess = { state.copy(submitting = false, password = "", loggedIn = true) },
                     onFailure = { state.copy(submitting = false, error = it.toLoginMessage()) },
                 )
@@ -80,9 +101,13 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
         }
     }
 
-    // Il selettore di account lo apre la schermata (serve l'Activity): qui arriva il risultato
+    /**
+     * Segna l'inizio del login con Google. Il selettore di account lo apre la UI, perché su Android serve
+     * l'Activity; il ViewModel riceve poi il risultato in [onGoogleResult].
+     */
     fun onGoogleStarted() = _state.update { it.copy(submitting = true, error = null) }
 
+    /** Gestisce l'esito del selettore di account: con un token prosegue col login, altrimenti chiude l'attesa. */
     fun onGoogleResult(result: GoogleSignInResult) {
         when (result) {
             is GoogleSignInResult.Token -> loginWithGoogle(result.idToken, birthDate = null)
@@ -91,18 +116,24 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
         }
     }
 
-    // Data scelta: stessa richiesta con lo stesso token, che vale circa un'ora
+    /** Data di nascita scelta: ripete la stessa richiesta con lo stesso ID token, che resta valido per circa un'ora. */
     fun onGoogleBirthDate(date: LocalDate) {
         val token = pendingGoogleToken ?: return
         _state.update { it.copy(askBirthDate = false) }
         loginWithGoogle(token, date)
     }
 
+    /** L'utente ha chiuso il calendario senza scegliere: il token in attesa si scarta. */
     fun onBirthDateDismissed() {
         pendingGoogleToken = null
         _state.update { it.copy(askBirthDate = false, submitting = false) }
     }
 
+    /**
+     * Invia l'ID token di Google al server, con la data di nascita se già nota. Due risposte non sono errori ma
+     * richieste di un passo in più: `birth-date-required` (primo accesso, serve la data) e `mfa-required` (serve il
+     * codice). In entrambi i casi il token si tiene in memoria per ripetere la richiesta.
+     */
     private fun loginWithGoogle(idToken: String, birthDate: LocalDate?) {
         _state.update { it.copy(submitting = true, error = null) }
         viewModelScope.launch {
@@ -128,24 +159,33 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
         }
     }
 
-    // ---- codice della verifica in due passaggi ----
+    // Passo del codice della verifica in due passaggi.
 
-    // TOTP: solo 6 cifre. Recupero: il formato lo riconosce il server (max 32 caratteri, come LoginRequest)
+    /**
+     * Aggiorna il codice. Per il TOTP tiene solo le cifre, al massimo 6. Per un codice di recupero accetta testo
+     * libero fino a 32 caratteri (lo stesso limite della richiesta di login): il formato lo controlla il server.
+     */
     fun onMfaCodeChange(value: String) = _state.update {
         it.copy(mfaCode = if (it.recoveryCode) value.take(32) else value.filter(Char::isDigit).take(6), mfaCodeError = null, error = null)
     }
 
+    /** Passa dal codice a 6 cifre al codice di recupero e viceversa, svuotando il campo. */
     fun onToggleRecoveryCode() = _state.update { it.copy(recoveryCode = !it.recoveryCode, mfaCode = "", mfaCodeError = null, error = null) }
 
-    // Indietro: si torna alla password (o al pulsante di Google), e quella tenuta in memoria si dimentica
+    /** Esce dal passo del codice: si torna alla password (o al pulsante di Google) e le credenziali in memoria si cancellano. */
     fun onMfaCancelled() {
         pendingCredentials = null
         pendingGoogleToken = null
         _state.update { it.copy(mfaStep = false, mfaCode = "", recoveryCode = false, mfaCodeError = null, error = null, submitting = false) }
     }
 
-    // Stessa richiesta di prima con il codice in più. Codice sbagliato: errore sul campo. 401 senza slug: password
-    // cambiata nel frattempo o ID token di Google scaduto (dura circa un'ora), si riparte dall'inizio.
+    /**
+     * Ripete il login di prima (con email e password o con l'ID token di Google) aggiungendo il codice.
+     *
+     * Un codice sbagliato (`invalid-mfa-code`) diventa un errore sul campo. Un altro 401 vuol dire che le credenziali
+     * non valgono più (password cambiata nel frattempo o ID token di Google scaduto): si annulla il passo e si
+     * riparte dall'inizio con un messaggio.
+     */
     fun submitCode() {
         val current = _state.value
         if (!current.canSubmitCode) return
@@ -173,25 +213,34 @@ class LoginViewModel(private val session: SessionManager) : ViewModel() {
                     onMfaCancelled()
                     _state.update { it.copy(error = message) }
                 }
-                // 429: i 5 codici sbagliati all'ora del backend, con l'attesa. Il numero di tentativi rimasti non si dice
+                // Qui arriva anche il 429 del server dopo troppi codici sbagliati, con il tempo d'attesa. Il numero di
+                // tentativi rimasti non si mostra, per non aiutare chi prova a indovinare.
                 else -> _state.update { it.copy(submitting = false, error = error?.uiMessage() ?: UiMessage(Res.string.error_generic)) }
             }
         }
     }
 }
 
+/** Vero se il server ha risposto 401 con lo slug `mfa-required`, cioè credenziali giuste ma manca il codice. */
 private fun Result<Unit>.isMfaRequired(): Boolean =
     ((exceptionOrNull() as? ApiException)?.error as? ApiError.Unauthorized)?.slug == "mfa-required"
 
-// 401 sul login = credenziali sbagliate (non "sessione scaduta"); 429 con i secondi d'attesa
+/**
+ * Messaggio per un errore del login con email. Qui un 401 vuol dire credenziali sbagliate e non sessione scaduta,
+ * quindi ha un testo suo; gli altri errori (per esempio il 429 con i secondi d'attesa) usano i messaggi comuni.
+ */
 private fun Throwable.toLoginMessage(): UiMessage = when (val error = (this as? ApiException)?.error) {
     is ApiError.Unauthorized -> UiMessage(Res.string.error_login_failed)
     null -> UiMessage(Res.string.error_generic)
     else -> error.uiMessage()
 }
 
-// 401 token rifiutato; 409 personale; 422 business-rule: email Google non verificata o account già collegato a un
-// altro Google (il server non distingue). Età sotto la soglia e il resto con i messaggi comuni.
+/**
+ * Messaggio per un errore del login con Google: 401 se il token è rifiutato, 409 `account-managed` se l'email
+ * appartiene a un account del personale (che non può entrare con Google), 422 `business-rule` se l'email Google non è
+ * verificata o l'account è già collegato a un altro profilo Google (il server non distingue i due casi). Il resto,
+ * compresa l'età sotto la soglia, usa i messaggi comuni.
+ */
 private fun Throwable.toGoogleMessage(): UiMessage = when (val error = (this as? ApiException)?.error) {
     is ApiError.Unauthorized -> UiMessage(Res.string.error_google_failed)
     is ApiError.Conflict if error.slug == "account-managed" -> UiMessage(Res.string.error_google_staff)

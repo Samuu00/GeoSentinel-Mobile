@@ -1,3 +1,4 @@
+// Schermata per creare un nuovo punto di interesse, scegliendo tipo, nome e posizione sulla mappa.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.compose.foundation.text.KeyboardOptions
@@ -37,8 +38,9 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 /**
- * Nuovo POI (M8.1) dalla mappa: tipo, nome e posizione (il centro della mappa, come per la segnalazione). Con [trailId]
- * il POI si lega al sentiero, senza è un punto libero. Quando il server lo salva si torna alla mappa con [onCreated].
+ * Form del nuovo POI: tipo, nome e posizione, che è il centro della mappa come per le segnalazioni. La mappa parte da
+ * [start] allo zoom [zoom]. Con [trailId] il POI si lega a quel sentiero, senza è un punto libero. Quando il server lo
+ * ha salvato si chiama [onCreated].
  */
 @Composable
 fun PoiCreateScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: () -> Unit, onCreated: () -> Unit) {
@@ -55,7 +57,7 @@ fun PoiCreateScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: () 
         body = Res.string.poi_create_body,
         error = state.error?.resolve(),
         actions = {
-            // senza un nome valido il pulsante è spento: il contatore sotto il campo dice perché
+            // Senza un nome valido il pulsante è disattivato: il contatore sotto il campo spiega il perché.
             PrimaryPillButton(
                 text = stringResource(Res.string.poi_create_save),
                 onClick = viewModel::save,
@@ -85,10 +87,11 @@ fun PoiCreateScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: () 
     }
 }
 
-// Le voci del form: quelle del contratto, senza il caso dei valori futuri (che l'app non manda).
-// Il rosso non si usa per nessun tipo di POI: DANGER_ZONE è una zona, non un'emergenza
+// Tipi di POI proposti nel form: quelli del contratto, tranne il caso riservato ai valori sconosciuti, che l'app non
+// invia mai. Nessun tipo usa il rosso: anche la zona pericolosa è un luogo, non un'emergenza.
 private val PoiTypes = CreatePoiRequest.Type.entries - CreatePoiRequest.Type.unknown_default_open_api
 
+/** Etichetta del tipo di POI da mostrare nel form. */
 private fun CreatePoiRequest.Type.label(): StringResource = when (this) {
     CreatePoiRequest.Type.SHELTER -> Res.string.poi_shelter
     CreatePoiRequest.Type.WATER_SOURCE -> Res.string.poi_water_source

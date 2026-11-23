@@ -1,3 +1,5 @@
+// Controlli disegnati sopra la mappa: il pulsante dell'attribuzione, il gruppo di pulsanti della vista con le loro
+// icone e il foglio per scegliere il tipo di mappa. Sono usati da MapScreen e dalle altre schermate con una mappa.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.compose.animation.AnimatedVisibility
@@ -146,15 +148,19 @@ import org.maplibre.compose.overlay.LocalViewportInsets
 import org.maplibre.compose.overlay.MapOverlay
 import org.maplibre.compose.style.BaseStyle
 
-// Controlli disegnati sopra la mappa (attribuzione, pulsanti tondi, tipo di mappa): staccati da MapScreen.kt
+// Controlli della mappa.
 
-// ---- Controlli della mappa ----
-
-// Attribuzione delle mappe (obbligatoria: OpenStreetMap ODbL, OpenFreeMap, EOX CC BY), nei colori del tema. Come
-// chiedono le linee guida di OSM parte aperta e si chiude al primo gesto o dopo qualche secondo; poi resta la "i" per
-// riaprirla. Quella di MapLibre si chiude solo al primo gesto: sull'anteprima ferma del dettaglio restava aperta.
+/**
+ * Pulsante e pannello dell'attribuzione delle mappe, obbligatoria per le licenze (OpenStreetMap ODbL, OpenFreeMap,
+ * EOX CC BY), disegnati nei colori del tema. Come chiedono le linee guida di OpenStreetMap il pannello parte aperto e si
+ * chiude al primo gesto sulla mappa o dopo qualche secondo; poi resta la "i" per riaprirlo. Il componente di MapLibre
+ * si chiude solo al primo gesto, quindi sulle mappe ferme resterebbe sempre aperto.
+ *
+ * @param alignEnd true per mettere la "i" a destra e il pannello alla sua sinistra.
+ * @param startExpanded se il pannello parte aperto; false sulle mappe ferme (come la testata del rifugio), dove basta la
+ * "i" e il pannello aperto coprirebbe la foto.
+ */
 @Composable
-// [startExpanded] false sulle mappe ferme (testata del rifugio): la "i" basta, il pannello aperto copriva la foto
 internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd: Boolean = false, startExpanded: Boolean = false) {
     val colors = MaterialTheme.colorScheme
     var expanded by rememberSaveable { mutableStateOf(startExpanded) }
@@ -163,7 +169,8 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
         expanded = false
     }
     val attributions = mapState.style.attributions()
-    // i secondi contano da quando c'è qualcosa da leggere: finché lo stile non è caricato le attribuzioni sono vuote
+    // Il tempo di chiusura parte solo quando c'è qualcosa da leggere: finché lo stile non è caricato le attribuzioni
+    // sono vuote e non si mostra nulla.
     val shown = attributions.isNotEmpty()
     LaunchedEffect(shown) {
         if (!shown) return@LaunchedEffect
@@ -172,7 +179,7 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
     }
     if (!shown) return
     val toggle: @Composable () -> Unit = {
-        // bersaglio da 48 dp, disegno da 28: si nota senza ingombrare
+        // Area toccabile da 48 dp con un cerchio disegnato da 28 dp: si nota senza ingombrare.
         Box(
             Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button) { expanded = !expanded },
             contentAlignment = Alignment.Center,
@@ -199,7 +206,7 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
                 shape = CircleShape,
                 color = colors.surfaceContainerLowest.copy(alpha = 0.94f),
                 border = BorderStroke(1.dp, colors.outlineVariant),
-                // un trascinamento sul pannello non sposta la mappa sotto
+                // Il pannello intercetta i gesti, così un trascinamento sopra di esso non sposta la mappa.
                 modifier = Modifier.pointerInput(Unit) {},
             ) {
                 Box(Modifier.padding(horizontal = 14.dp, vertical = 8.dp)) {
@@ -219,30 +226,38 @@ internal fun AttributionButton(mapState: MapState, modifier: Modifier, alignEnd:
     }
 }
 
-// Quanto resta aperta l'attribuzione se nessuno tocca la mappa
+/** Per quanto tempo resta aperta l'attribuzione se nessuno tocca la mappa. */
 private val AttributionOpenFor = 5.seconds
 
+/**
+ * Simboli dei pulsanti della mappa: tipo di mappa (Layers), posizione (Locate), segnalazione di un pericolo (Hazard),
+ * nuovo punto (AddPoint) e "Vicino a te" (NearMe).
+ */
 internal enum class Glyph { Layers, Locate, Hazard, AddPoint, NearMe }
 
-// Controlli sulla mappa: un livello che galleggia sopra il contenuto (§2). Tono dei menu, anello chiaro e ombra: si
-// staccano anche dal bosco scuro della mappa notturna, dove il tono delle card spariva
+/**
+ * Colore di fondo dei controlli della mappa, che galleggiano sopra il contenuto. Si usa il tono dei menu, con bordo
+ * chiaro e ombra, perché si stacchi anche dal bosco scuro della mappa notturna, dove il tono delle card si confondeva.
+ */
 @Composable
 internal fun mapControlColor() = MaterialTheme.colorScheme.surfaceContainerHigh
 
+/** Bordo sottile dei controlli della mappa. */
 @Composable
 internal fun mapControlBorder() = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
 
+/** Elevazione dell'ombra dei controlli della mappa. */
 internal val MapControlElevation = 12.dp
 
-// Angoli dei comandi della mappa (redesign "Luce di quota"): tessere morbide, non capsule
+/** Forma dei gruppi di comandi della mappa: tessere con gli angoli morbidi, non capsule. */
 private val MapControlShape = RoundedCornerShape(18.dp)
 
-/** Un comando di [MapButtonGroup]. */
+/** Un comando di [MapButtonGroup]: descrizione per l'accessibilità, simbolo e azione. */
 internal class MapAction(val description: StringResource, val glyph: Glyph, val onClick: () -> Unit)
 
 /**
- * Comandi della vista raccolti in una capsula sola, separati da un filo (come i controlli di Apple Maps in alto a
- * destra): un oggetto solo per l'occhio invece di tanti tondi.
+ * Raccoglie i comandi della vista in un'unica tessera verticale, separati da una linea sottile (come i controlli in
+ * alto a destra di Apple Maps): all'occhio risulta un solo oggetto invece di tanti pulsanti tondi.
  */
 @Composable
 internal fun MapButtonGroup(actions: List<MapAction>) {
@@ -264,10 +279,13 @@ internal fun MapButtonGroup(actions: List<MapAction>) {
     }
 }
 
-// Simboli disegnati con lo stesso tratto: material-icons-core non ha né il "meno" né il mirino della posizione
+/**
+ * Disegna il simbolo [glyph] nel colore [tint]. I simboli presenti nel set di icone dell'app (AppIcons) usano quelli,
+ * per avere lo stesso tratto delle altre icone; gli altri sono disegnati a mano su un Canvas con un tratto simile.
+ */
 @Composable
 internal fun GlyphIcon(glyph: Glyph, tint: Color) {
-    // i simboli che il set dell'app ha già: stesso tratto delle altre icone
+    // Simboli già presenti in AppIcons: si usano direttamente e la funzione termina qui.
     when (glyph) {
         Glyph.Layers -> return Icon(AppIcons.Layers, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
         Glyph.Hazard -> return Icon(AppIcons.Alert, contentDescription = null, tint = tint, modifier = Modifier.size(24.dp))
@@ -279,7 +297,7 @@ internal fun GlyphIcon(glyph: Glyph, tint: Color) {
         val c = center
         when (glyph) {
             Glyph.Layers -> {
-                // livelli: un rombo pieno di contorno e, sotto, il bordo di quello successivo
+                // Livelli: un rombo disegnato di contorno e, sotto, il bordo di quello successivo.
                 val w = size.width * 0.42f
                 val h = size.height * 0.22f
                 val top = c.y - h * 0.8f
@@ -299,7 +317,7 @@ internal fun GlyphIcon(glyph: Glyph, tint: Color) {
                 drawPath(below, tint, style = Stroke(stroke, cap = StrokeCap.Round, join = StrokeJoin.Round))
             }
             Glyph.Hazard -> {
-                // triangolo di pericolo con il punto esclamativo, come sui cartelli
+                // Triangolo di pericolo con il punto esclamativo, come sui cartelli stradali.
                 val half = size.width * 0.42f
                 val top = c.y - size.height * 0.38f
                 val bottom = c.y + size.height * 0.34f
@@ -314,7 +332,7 @@ internal fun GlyphIcon(glyph: Glyph, tint: Color) {
                 drawCircle(tint, stroke * 0.65f, c.copy(y = c.y + size.height * 0.22f))
             }
             Glyph.AddPoint -> {
-                // segnaposto con il "+" dentro: un punto nuovo sulla mappa (M8.1)
+                // Segnaposto con un "+" dentro: un nuovo punto sulla mappa.
                 val r = size.minDimension * 0.30f
                 val head = c.copy(y = c.y - size.height * 0.10f)
                 val tip = c.copy(y = c.y + size.height * 0.46f)
@@ -330,13 +348,13 @@ internal fun GlyphIcon(glyph: Glyph, tint: Color) {
                 drawLine(tint, head.copy(y = head.y - plus), head.copy(y = head.y + plus), stroke, StrokeCap.Round)
             }
             Glyph.NearMe -> {
-                // radar: il punto (tu) e due onde intorno, la più lontana più tenue
+                // Radar: il punto (l'utente) e due onde intorno, la più lontana più tenue.
                 drawCircle(tint, size.minDimension * 0.09f, c)
                 drawCircle(tint, size.minDimension * 0.24f, c, style = Stroke(stroke))
                 drawCircle(tint.copy(alpha = 0.5f), size.minDimension * 0.42f, c, style = Stroke(stroke))
             }
             Glyph.Locate -> {
-                // mirino: cerchio, quattro tacche e il punto al centro
+                // Mirino: cerchio, quattro tacche e il punto al centro.
                 val r = size.minDimension * 0.30f
                 drawCircle(tint, r, c, style = Stroke(stroke))
                 drawCircle(tint, r * 0.35f, c)
@@ -350,9 +368,12 @@ internal fun GlyphIcon(glyph: Glyph, tint: Color) {
     }
 }
 
-// ---- Tipo di mappa ----
+// Scelta del tipo di mappa.
 
-// Foglio dal basso con le mappe, come in Google Maps: riquadri d'anteprima con il nome sotto, la scelta evidenziata
+/**
+ * Foglio che sale dal basso per scegliere il tipo di mappa, come in Google Maps: un riquadro d'anteprima per tipo con il
+ * nome sotto e la scelta attuale [current] evidenziata. [onSelect] riceve il tipo scelto.
+ */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MapTypeSheet(current: MapType, onSelect: (MapType) -> Unit, onDismiss: () -> Unit) {
@@ -376,6 +397,7 @@ internal fun MapTypeSheet(current: MapType, onSelect: (MapType) -> Unit, onDismi
     }
 }
 
+/** Riquadro di un tipo di mappa: anteprima, bordo evidenziato se selezionato e nome. Si comporta come un radio button. */
 @Composable
 private fun MapTypeTile(type: MapType, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val shape = MaterialTheme.shapes.medium
@@ -404,13 +426,16 @@ private fun MapTypeTile(type: MapType, selected: Boolean, onClick: () -> Unit, m
     }
 }
 
+/** Nome del tipo di mappa. */
 private fun MapType.label(): StringResource = when (this) {
     MapType.STREETS -> Res.string.map_type_streets
     MapType.SATELLITE -> Res.string.map_type_satellite
 }
 
-// Anteprime disegnate: riprendono i colori degli stili (sono campioni della mappa, non colori dell'interfaccia,
-// per questo non vengono dal tema). Decorative: il nome è scritto sotto.
+/**
+ * Anteprima disegnata di un tipo di mappa. Riprende i colori degli stili: sono campioni della mappa e non colori
+ * dell'interfaccia, per questo non vengono dal tema. È decorativa (nessuna semantica), perché il nome è scritto sotto.
+ */
 @Composable
 private fun MapPreview(type: MapType, modifier: Modifier) {
     Canvas(modifier.clearAndSetSemantics { }) {
@@ -418,7 +443,7 @@ private fun MapPreview(type: MapType, modifier: Modifier) {
         val h = size.height
         when (type) {
             MapType.STREETS -> {
-                // i colori di build_map_styles.py (LIGHT)
+                // Gli stessi colori dello stile chiaro generato da build_map_styles.py.
                 drawRect(Color(0xFFF6F3EC))
                 drawOval(Color(0xFFC8E0B2), topLeft = Offset(w * 0.05f, h * 0.08f), size = Size(w * 0.5f, h * 0.38f))
                 drawCircle(Color(0xFFA2D1F2), radius = w * 0.32f, center = Offset(w * 1.02f, h * 1.02f))

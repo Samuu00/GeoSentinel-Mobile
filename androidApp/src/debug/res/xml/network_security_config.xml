@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- HTTP in chiaro solo verso il backend locale; tutto il resto resta HTTPS -->
+<!-- Configurazione di sicurezza della rete per le build di debug e staging: l'HTTP in chiaro è permesso solo verso
+     il backend locale, tutto il resto deve usare HTTPS. -->
 <network-security-config>
     <domain-config cleartextTrafficPermitted="true">
-        <!-- il PC visto dall'emulatore -->
+        <!-- Il PC su cui gira il backend, visto dall'emulatore Android. -->
         <domain includeSubdomains="false">10.0.2.2</domain>
-        <!-- il PC sulla rete locale: MinIO firma gli URL delle foto con MINIO_PUBLIC_ENDPOINT, che punta qui perché
-             le foto si vedano anche dall'iPhone. Se l'IP del PC cambia, va cambiato anche qui -->
+        <!-- Il PC sulla rete locale. MinIO firma gli URL delle foto con l'indirizzo pubblico configurato nel backend
+             (MINIO_PUBLIC_ENDPOINT), che punta a questo IP perché le foto si vedano anche dall'iPhone. Se l'IP del PC
+             cambia, va cambiato anche qui. -->
         <domain includeSubdomains="false">192.168.1.188</domain>
     </domain-config>
 </network-security-config>

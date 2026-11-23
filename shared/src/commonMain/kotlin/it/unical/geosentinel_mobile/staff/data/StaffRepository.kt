@@ -1,3 +1,5 @@
+// Accesso alle API riservate al personale: stato di pericoli e sentieri, creazione di POI, posti letto dei rifugi,
+// nuove squadre di soccorso e azzeramento della verifica in due passaggi di un utente.
 package it.unical.geosentinel_mobile.staff.data
 
 import io.ktor.client.HttpClient
@@ -23,8 +25,9 @@ import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.network.apiCall
 
 /**
- * Azioni del gestore del parco (M8.1). Le regole (transizioni, permessi) le decide il server: qui niente controlli.
- * Nessuna di queste richieste ha una `Idempotency-Key`: su un errore di rete non si ritenta da soli, decide l'utente.
+ * Repository delle azioni del personale (gestori del parco e amministratori). Le regole, come le transizioni di stato
+ * ammesse e i permessi, le decide il server: qui non ci sono controlli. Nessuna di queste richieste ha una
+ * `Idempotency-Key`, quindi su un errore di rete non si ritenta in automatico: decide l'utente se riprovare.
  */
 class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
 
@@ -36,12 +39,15 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
     private val teamsApi by lazy { RescueTeamsApi(apiBaseUrl, client) }
     private val adminApi by lazy { AdministrationApi(apiBaseUrl, client) }
 
+    /** Cambia lo stato della segnalazione di pericolo [hazardId] (per esempio la verifica o il rifiuto). */
     suspend fun changeHazardStatus(hazardId: String, status: UpdateHazardStatusRequest.Status): Result<HazardResponse> =
         apiCall { hazardsApi.changeHazardStatus(hazardId, UpdateHazardStatusRequest(status = status)) }
 
+    /** Cambia lo stato del sentiero [trailId] e restituisce il dettaglio aggiornato. */
     suspend fun changeTrailStatus(trailId: String, status: UpdateTrailStatusRequest.Status): Result<TrailDetailResponse> =
         apiCall { trailsApi.changeTrailStatus(trailId, UpdateTrailStatusRequest(status = status)) }
 
+    /** Crea un punto di interesse in [location], facoltativamente legato al sentiero [trailId]. Il nome si invia senza spazi ai bordi. */
     suspend fun createPoi(name: String, type: CreatePoiRequest.Type, location: GeoPoint, trailId: String?): Result<PoiResponse> =
         apiCall {
             poisApi.createPoi(
@@ -54,9 +60,11 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
             )
         }
 
+    /** Imposta i posti letto del rifugio [refugeId]. */
     suspend fun updateRefugeCapacity(refugeId: String, capacity: Int): Result<RefugeResponse> =
         apiCall { refugesApi.updateRefugeCapacity(refugeId, UpdateCapacityRequest(capacity = capacity)) }
 
+    /** Crea una nuova squadra di soccorso con nome, nominativo radio, numero di contatto e posizione della base. */
     suspend fun createRescueTeam(
         name: String,
         callSign: String,
@@ -73,7 +81,11 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
         )
     }
 
-    // Solo ADMIN, dopo aver verificato l'identità fuori dall'app (M10.3). Il server chiude tutte le sessioni
-    // dell'utente e gli manda un'email. 404: email sconosciuta o senza 2FA; 422 business-rule: la propria.
+    /**
+     * Azzera la verifica in due passaggi dell'utente con [email]. È riservata agli amministratori, da usare dopo aver
+     * verificato l'identità della persona fuori dall'app. Il server chiude tutte le sessioni dell'utente e gli invia
+     * un'email. Risponde 404 se l'email è sconosciuta o l'utente non ha la verifica attiva, 422 `business-rule` se
+     * l'amministratore prova ad azzerare la propria.
+     */
     suspend fun resetUserMfa(email: String): Result<Unit> = apiCall { adminApi.resetUserMfa(AdminMfaResetRequest(email.trim())) }
 }

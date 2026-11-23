@@ -1,3 +1,5 @@
+// Test dei ViewModel del soccorso, usati dagli operatori: lista paginata delle allerte SOS aperte con rilettura
+// periodica, dettaglio con invio di una squadra e chiusura dell'allerta, allerte sulla mappa.
 package it.unical.geosentinel_mobile.rescue
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -35,32 +37,42 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-/** M7.2: lista, dettaglio e mappa delle allerte contro un backend finto con le regole del dominio (dispatch e resolve). */
+/**
+ * Verifica lista, dettaglio e mappa delle allerte contro un backend finto che applica le stesse regole del dominio
+ * per l'invio della squadra e la chiusura.
+ */
 @OptIn(ExperimentalCoroutinesApi::class)
 class RescueViewModelsTest {
 
     private val backend = FakeBackend()
 
-    // ---- stato del server finto ----
+    /** Id delle allerte aperte sul server finto, restituite a pagine. */
     private var openAlerts = (1..25).map { "a$it" }
+    /** Stato dell'allerta "a1" sul server finto. */
     private var status = "ACTIVE"
+    /** Squadra assegnata all'allerta "a1", null se nessuna. */
     private var team: String? = null
-    // un altro operatore manda la sua squadra un attimo prima di noi
+    /** Se vero, un altro operatore invia la sua squadra un attimo prima del test, e l'invio riceve 409. */
     private var takenByColleague = false
+    /** Se vero, tutte le rotte del soccorso rispondono 403. */
     private var forbidden = false
-    // la rete cade su tutte le rotte del soccorso
+    /** Se vero, tutte le rotte del soccorso falliscono con un errore di rete. */
     private var offline = false
+    /** Registro delle richieste ricevute, nella forma "METODO percorso" con i parametri rilevanti. */
     private val calls = mutableListOf<String>()
 
+    /** JSON di una squadra di soccorso disponibile con l'id indicato. */
     private fun teamJson(id: String) =
         """{"id":"$id","name":"Squadra $id","callSign":"AQUILA-$id","contactNumber":"+39 000","status":"AVAILABLE","baseLocation":{"lat":39.3,"lon":16.5}}"""
 
+    /** JSON di un'allerta con stato e squadra indicati (di default quelli correnti del server finto). */
     private fun alertJson(id: String, status: String = this.status, team: String? = this.team): String {
         val assigned = team?.let { ""","assignedTeam":${teamJson(it)}""" }.orEmpty()
         return """{"id":"$id","hikerId":"h1","status":"$status","location":{"lat":39.31,"lon":16.52},""" +
             """"createdAt":"2026-10-08T10:00:00Z","locationUpdatedAt":"2026-10-08T10:05:00Z","medicalNotes":"diabete"$assigned}"""
     }
 
+    /** Installa le rotte finte del soccorso, fa l'accesso, svuota il registro e restituisce il repository. */
     private suspend fun TestScope.repository(): RescueRepository {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         backend.extraRoutes = { request, _ ->
@@ -89,7 +101,7 @@ class RescueViewModelsTest {
                     }
                     request.method == HttpMethod.Get && path == "/sos/a1" -> respond(alertJson("a1"), HttpStatusCode.OK, ok)
                     request.method == HttpMethod.Get && path == "/rescue-teams/available-nearby" -> {
-                        // le squadre si cercano attorno all'allerta
+                        // Le squadre disponibili si cercano attorno alla posizione dell'allerta.
                         calls[calls.lastIndex] += "?lat=${request.url.parameters["lat"]}&lon=${request.url.parameters["lon"]}"
                         respond("[${teamJson("t1")},${teamJson("t2")}]", HttpStatusCode.OK, ok)
                     }
@@ -125,11 +137,15 @@ class RescueViewModelsTest {
         return RescueRepository({ client }, TEST_BASE_URL)
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    // ---- lista ----
 
+    /**
+     * La lista carica le allerte una pagina da 20 alla volta fino in fondo; arrivati in fondo un ulteriore
+     * caricamento non fa richieste.
+     */
     @Test
     fun `la lista carica le allerte una pagina alla volta fino in fondo`() = runTest {
         val viewModel = RescueAlertsListViewModel(repository())
@@ -139,7 +155,7 @@ class RescueViewModelsTest {
 
         viewModel.loadMore()
         advanceUntilIdle()
-        viewModel.loadMore() // già in fondo: nessuna richiesta
+        viewModel.loadMore()
         advanceUntilIdle()
 
         assertEquals((1..25).map { "a$it" }, viewModel.state.value.items.map { it.id })
@@ -147,6 +163,10 @@ class RescueViewModelsTest {
         assertEquals(listOf("GET /sos?page=0&size=20", "GET /sos?page=1&size=20"), calls)
     }
 
+    /**
+     * La rilettura periodica riparte dalla prima pagina senza mostrare indicatori di caricamento e toglie le allerte
+     * nel frattempo chiuse.
+     */
     @Test
     fun `poll rilegge da capo senza indicatori e toglie le allerte chiuse`() = runTest {
         val viewModel = RescueAlertsListViewModel(repository())
@@ -162,6 +182,10 @@ class RescueViewModelsTest {
         assertTrue(viewModel.state.value.endReached)
     }
 
+    /**
+     * La rilettura periodica chiede in una sola richiesta tutte le allerte già a schermo (una pagina grande quanto la
+     * lista), così la lista non si accorcia alla prima pagina.
+     */
     @Test
     fun `poll rilegge tutte le allerte gia a schermo in una richiesta e la lista non si accorcia`() = runTest {
         val viewModel = RescueAlertsListViewModel(repository())
@@ -178,6 +202,7 @@ class RescueViewModelsTest {
         assertEquals(listOf("GET /sos?page=0&size=40"), calls)
     }
 
+    /** Una rilettura periodica fallita per la rete non mostra errori e non impedisce di caricare la pagina successiva. */
     @Test
     fun `poll senza rete non mostra errori e non blocca la pagina dopo`() = runTest {
         val viewModel = RescueAlertsListViewModel(repository())
@@ -195,13 +220,17 @@ class RescueViewModelsTest {
         assertEquals(25, viewModel.state.value.items.size)
     }
 
+    /**
+     * Chiedere la pagina successiva durante una rilettura annulla la rilettura in corso: si applica una sola
+     * risposta e la lista non ha buchi.
+     */
     @Test
     fun `una pagina chiesta durante un poll non lascia buchi nella lista`() = runTest {
         val viewModel = RescueAlertsListViewModel(repository())
         advanceUntilIdle()
 
         viewModel.poll()
-        viewModel.loadMore() // annulla il poll in volo: una risposta sola si applica
+        viewModel.loadMore()
         advanceUntilIdle()
 
         assertEquals((1..25).map { "a$it" }, viewModel.state.value.items.map { it.id })
@@ -210,6 +239,7 @@ class RescueViewModelsTest {
         assertEquals((1..25).map { "a$it" }, viewModel.state.value.items.map { it.id })
     }
 
+    /** Un 403 sulla lista (utente senza il ruolo di operatore) diventa il messaggio di permesso negato. */
     @Test
     fun `un 403 della lista diventa il messaggio del ruolo`() = runTest {
         forbidden = true
@@ -220,8 +250,11 @@ class RescueViewModelsTest {
         assertTrue(viewModel.state.value.items.isEmpty())
     }
 
-    // ---- dettaglio ----
 
+    /**
+     * Il dettaglio carica l'allerta, comprese le note mediche, e poi le squadre libere cercate attorno alla posizione
+     * dell'allerta.
+     */
     @Test
     fun `il dettaglio carica l'allerta e le squadre libere attorno alla sua posizione`() = runTest {
         val viewModel = RescueAlertDetailViewModel("a1", repository())
@@ -234,6 +267,7 @@ class RescueViewModelsTest {
         assertEquals(listOf("GET /sos/a1", "GET /rescue-teams/available-nearby?lat=39.31&lon=16.52"), calls)
     }
 
+    /** Se il primo caricamento fallisce, la rilettura porta sia l'allerta sia le squadre. */
     @Test
     fun `se il primo caricamento fallisce la rilettura porta anche le squadre`() = runTest {
         offline = true
@@ -249,6 +283,7 @@ class RescueViewModelsTest {
         assertEquals(listOf("t1", "t2"), viewModel.state.value.teams.map { it.id })
     }
 
+    /** Senza una squadra scelta l'invio non produce nessuna richiesta. */
     @Test
     fun `senza una squadra scelta l'invio non parte`() = runTest {
         val viewModel = RescueAlertDetailViewModel("a1", repository())
@@ -261,6 +296,10 @@ class RescueViewModelsTest {
         assertTrue(calls.isEmpty())
     }
 
+    /**
+     * L'invio della squadra scelta porta l'allerta a DISPATCHED con quella squadra; un doppio tocco produce una sola
+     * richiesta e alla fine non restano squadre da scegliere.
+     */
     @Test
     fun `l'invio della squadra scelta porta l'allerta a DISPATCHED`() = runTest {
         val viewModel = RescueAlertDetailViewModel("a1", repository())
@@ -268,7 +307,7 @@ class RescueViewModelsTest {
 
         viewModel.selectTeam("t2")
         viewModel.dispatch()
-        viewModel.dispatch() // doppio tocco: una richiesta sola
+        viewModel.dispatch()
         advanceUntilIdle()
 
         val ui = viewModel.state.value
@@ -280,6 +319,10 @@ class RescueViewModelsTest {
         assertEquals(1, calls.count { it == "PATCH /sos/a1/dispatch" })
     }
 
+    /**
+     * Se un collega ha già inviato la sua squadra, il server risponde 409: compare il messaggio, il dettaglio viene
+     * riletto e mostra la squadra del collega, senza più squadre da scegliere.
+     */
     @Test
     fun `se un collega arriva prima si vede il messaggio e la sua squadra`() = runTest {
         val viewModel = RescueAlertDetailViewModel("a1", repository())
@@ -292,7 +335,6 @@ class RescueViewModelsTest {
 
         val ui = viewModel.state.value
         assertEquals(UiMessage(Res.string.error_alert_already_taken), ui.actionError)
-        // il dettaglio si rilegge: l'allerta è del collega, niente più squadre da scegliere
         assertEquals(SosAlertResponse.Status.DISPATCHED, ui.alert?.status)
         assertEquals("t9", ui.alert?.assignedTeam?.id)
         assertTrue(ui.teams.isEmpty())
@@ -300,6 +342,7 @@ class RescueViewModelsTest {
         assertFalse(ui.busy)
     }
 
+    /** La chiusura porta l'allerta a RESOLVED e segnala alla schermata di tornare indietro. */
     @Test
     fun `la chiusura porta a RESOLVED e la schermata torna indietro`() = runTest {
         status = "DISPATCHED"
@@ -316,13 +359,16 @@ class RescueViewModelsTest {
         assertTrue("PATCH /sos/a1/resolve" in calls)
     }
 
+    /**
+     * Se una rilettura parte prima dell'invio (con l'allerta ancora ACTIVE sul server), la sua risposta non deve
+     * riportare indietro lo stato: vince l'invio.
+     */
     @Test
     fun `una rilettura partita prima dell'invio non riporta indietro lo stato`() = runTest {
         val viewModel = RescueAlertDetailViewModel("a1", repository())
         advanceUntilIdle()
 
         viewModel.selectTeam("t1")
-        // la rilettura parte (ACTIVE sul server), poi l'invio: vince l'invio
         viewModel.refresh()
         viewModel.dispatch()
         advanceUntilIdle()
@@ -330,12 +376,15 @@ class RescueViewModelsTest {
         assertEquals(SosAlertResponse.Status.DISPATCHED, viewModel.state.value.alert?.status)
     }
 
-    // ---- mappa ----
 
+    /**
+     * Le allerte compaiono sulla mappa solo quando il livello è abilitato, e il raggio della richiesta non supera il
+     * limite di 100 km del server anche se la vista è più ampia. A mappa ferma l'aggiornamento rilegge la stessa
+     * vista anche dentro l'area già caricata; disabilitando il livello le allerte spariscono.
+     */
     @Test
     fun `le allerte sulla mappa solo se abilitate e con il raggio entro il limite del server`() = runTest {
         val viewModel = RescueMapViewModel(repository())
-        // mezza Calabria: il raggio supera i 100 km del server
         val wide = GeoBounds.of(15.5, 38.5, 17.5, 40.0)
 
         viewModel.onCameraIdle(wide, 9.0)
@@ -348,7 +397,6 @@ class RescueViewModelsTest {
         assertEquals(listOf("a1"), viewModel.state.value.map { it.id })
         assertEquals(listOf("GET /sos/nearby?radius=100000.0"), calls)
 
-        // a mappa ferma refresh rilegge la stessa vista, anche dentro l'area già caricata
         viewModel.refresh()
         advanceUntilIdle()
         assertEquals(2, calls.size)

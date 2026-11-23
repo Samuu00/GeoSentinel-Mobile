@@ -1,3 +1,4 @@
+// Livelli della mappa che disegnano le allerte SOS aperte, visibili solo agli operatori del soccorso.
 package it.unical.geosentinel_mobile.rescue.ui
 
 import androidx.compose.material.icons.Icons
@@ -30,9 +31,10 @@ import org.maplibre.spatialk.geojson.FeatureCollection
 import org.maplibre.spatialk.geojson.Point
 
 /**
- * Le allerte aperte sulla mappa dell'operatore (M7.2): tondo rosso (il rosso è dell'SOS, §2) con la campanella della
- * scheda Allerte. Un'allerta `ACTIVE` (nessuna squadra) è piena e più grande, una `DISPATCHED` ha il tondo chiaro e il
- * bordo rosso. Il tocco apre il dettaglio, che dice lo stato a parole.
+ * Disegna le allerte aperte sulla mappa dell'operatore: un tondo nel rosso dell'emergenza (l'unico uso ammesso del
+ * rosso) con la campanella della scheda Allerte. Un'allerta `ACTIVE`, ancora senza squadra, è un tondo rosso pieno e
+ * più grande; una `DISPATCHED` ha il tondo nel colore chiaro [light] e il bordo rosso. Il tocco chiama [onAlertClick]
+ * con l'id: il dettaglio spiega poi lo stato a parole.
  */
 @Composable
 @MaplibreComposable

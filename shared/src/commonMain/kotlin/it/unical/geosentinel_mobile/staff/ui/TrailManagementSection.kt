@@ -1,3 +1,4 @@
+// Sezione "Gestione" del dettaglio di un sentiero, visibile al personale: stato del sentiero e azioni del gestore.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.compose.foundation.layout.Column
@@ -47,8 +48,9 @@ import org.koin.compose.viewmodel.koinViewModel
 import org.koin.core.parameter.parametersOf
 
 /**
- * Azioni del gestore nel dettaglio del sentiero (M8.1): stato del sentiero, coda delle segnalazioni, nuovo POI legato
- * al sentiero e (M8.2) nuovo ticket. Il ruolo decide solo se mostrarla: un 403 del server arriva come messaggio.
+ * Azioni del gestore nel dettaglio del sentiero: cambio dello stato, coda delle segnalazioni, nuovo POI legato al
+ * sentiero e nuovo ticket. Il ruolo decide solo se mostrare la sezione: un eventuale 403 del server arriva comunque
+ * come messaggio.
  */
 @Composable
 fun TrailManagementSection(
@@ -59,7 +61,7 @@ fun TrailManagementSection(
 ) {
     val viewModel = koinViewModel<TrailStatusViewModel>(key = "trail-status-${trail.id}") { parametersOf(trail.id) }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // lo stato chiesto si vede subito; con la risposta lo sostituisce quello della cache
+    // Lo stato richiesto si mostra subito; quando arriva la risposta lo sostituisce quello salvato in cache.
     val selected = state.pending ?: TrailStatuses.firstOrNull { it.value == trail.status.value }
 
     Column(Modifier.padding(top = 28.dp)) {
@@ -85,7 +87,7 @@ fun TrailManagementSection(
             selected = selected,
             label = { TrailState.of(it.value).label },
             onSelect = { if (it != selected) viewModel.change(it) },
-            // il rosso solo per i sentieri chiusi (§2)
+            // Il rosso si usa solo per i sentieri chiusi.
             emergency = { it == UpdateTrailStatusRequest.Status.CLOSED },
         )
         state.error?.let {
@@ -97,10 +99,10 @@ fun TrailManagementSection(
             )
         }
         Spacer(Modifier.size(16.dp))
-        // le azioni del gestore come righe di un gruppo, con la loro icona (redesign "Luce di quota")
+        // Le azioni del gestore sono righe di un gruppo, ognuna con la sua icona.
         GroupCard {
             GroupRow(stringResource(Res.string.staff_open_queue), onClick = onOpenQueue, icon = AppIcons.Alert)
-            // il form parte dall'inizio del sentiero, come la segnalazione
+            // Il form del POI parte con la mappa sull'inizio del sentiero, come quello della segnalazione.
             trail.path.toPositions().firstOrNull()?.let { start ->
                 GroupDivider(GroupIconIndent)
                 GroupRow(stringResource(Res.string.staff_add_poi), onClick = { onCreatePoi(start.toGeoPoint()) }, icon = AppIcons.MapPin)
@@ -111,7 +113,7 @@ fun TrailManagementSection(
     }
 }
 
-// Azione del gestore come link verde: anche nel dettaglio del rifugio (M8.3) e nella scheda Allerte
+/** Azione del personale mostrata come link nel colore primario, per esempio sotto il titolo della scheda Gestione. */
 @Composable
 internal fun ManageLink(text: String, onClick: () -> Unit) {
     TextButton(onClick = onClick, contentPadding = PaddingValues(horizontal = 0.dp), modifier = Modifier.heightIn(min = 48.dp)) {
@@ -119,5 +121,5 @@ internal fun ManageLink(text: String, onClick: () -> Unit) {
     }
 }
 
-// Quelli del contratto, senza il caso dei valori futuri (che l'app non manda)
+/** Stati del sentiero proposti al gestore: quelli del contratto, tranne il caso dei valori sconosciuti, che l'app non invia. */
 private val TrailStatuses = UpdateTrailStatusRequest.Status.entries - UpdateTrailStatusRequest.Status.unknown_default_open_api

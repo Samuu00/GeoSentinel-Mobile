@@ -1,3 +1,5 @@
+// ViewModel di "Le mie prenotazioni": lista paginata delle prenotazioni dal server, prenotazioni ancora in coda o
+// rifiutate lette dall'outbox, nomi dei rifugi e annullamento.
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.lifecycle.ViewModel
@@ -21,32 +23,35 @@ import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
 import kotlin.time.Clock
 
+/** Stato della lista delle prenotazioni dell'utente. */
 data class MyBookingsUiState(
     val items: List<BookingResponse> = emptyList(),
-    // in coda nell'outbox, senza ancora una risposta: in cima come "in invio"
+    /** Prenotazioni in coda nell'outbox, senza ancora una risposta: si mostrano in cima come "in invio". */
     val pending: List<PendingBooking> = emptyList(),
-    // in coda e poi rifiutate dal server (o scadute): si mostrano finché l'utente non le chiude
+    /** Prenotazioni passate dalla coda e poi rifiutate dal server, o scadute: restano visibili finché l'utente non le chiude. */
     val rejected: List<RejectedBooking> = emptyList(),
-    // i rifugi delle prenotazioni (la prenotazione ha solo l'id): nome, telefono e posizione; uno per rifugio
+    /** Rifugi delle prenotazioni per id, con nome, telefono e posizione: la prenotazione contiene solo l'id del rifugio. */
     val refuges: Map<String, RefugeResponse> = emptyMap(),
     val loading: Boolean = false,
     val loadingMore: Boolean = false,
     val refreshing: Boolean = false,
     val endReached: Boolean = false,
     val error: UiMessage? = null,
-    // la prenotazione che si sta annullando, e l'errore dell'ultimo annullamento
+    /** Id della prenotazione che si sta annullando. */
     val cancelling: String? = null,
+    /** Errore dell'ultimo annullamento. */
     val cancelError: UiMessage? = null,
 ) {
+    /** Nomi dei rifugi già noti, per id. */
     val refugeNames: Map<String, String> get() = refuges.mapValues { it.value.name }
 
-    // niente date né nomi nei log
+    // toString scritto a mano: date e nomi non devono finire nei log.
     override fun toString() = "MyBookingsUiState(items=${items.size}, pending=${pending.size}, rejected=${rejected.size}, loading=$loading, error=${error != null})"
 }
 
 /**
- * Le prenotazioni divise per chi parte (redesign 11/2026): il prossimo soggiorno (in corso o il primo in arrivo), gli
- * altri in arrivo dal più vicino, poi le passate e le annullate dalla più recente.
+ * Prenotazioni divise in gruppi per la schermata: [next] è il prossimo soggiorno (in corso o il primo in arrivo),
+ * [upcoming] gli altri in arrivo dal più vicino, [past] le passate e le annullate dalla più recente.
  */
 data class BookingSections(
     val next: BookingResponse?,
@@ -54,6 +59,10 @@ data class BookingSections(
     val past: List<BookingResponse>,
 )
 
+/**
+ * Divide le prenotazioni nei gruppi di [BookingSections] rispetto a [today]. Un soggiorno confermato è attivo finché
+ * il giorno di partenza è successivo a oggi; tutto il resto finisce tra le passate.
+ */
 internal fun List<BookingResponse>.sections(today: LocalDate): BookingSections {
     val active = filter { it.status == BookingResponse.Status.CONFIRMED && it.checkOut > today }.sortedBy { it.checkIn }
     val ids = active.map { it.id }.toSet()
@@ -62,14 +71,20 @@ internal fun List<BookingResponse>.sections(today: LocalDate): BookingSections {
 }
 
 /**
- * "Le mie prenotazioni" (M5.2), nella scheda Rifugi. All'apertura la prima pagina e, insieme, il reinvio di quelle
- * rimaste in coda (che con poca rete può durare a lungo: la lista non lo aspetta); se ne parte qualcuna la prima pagina
- * si rilegge. Le altre pagine in fondo alla lista ([loadMore]). Solo rete per la lista; le "in invio" dall'outbox.
+ * ViewModel di "Le mie prenotazioni", un segmento della scheda Rifugi.
+ *
+ * All'apertura carica la prima pagina e, in parallelo, rimanda le prenotazioni rimaste in coda. Il reinvio con poca
+ * rete può durare a lungo, quindi la lista non lo aspetta; se qualche prenotazione parte, la prima pagina si rilegge.
+ * Le pagine successive si caricano arrivando in fondo alla lista ([loadMore]). La lista viene solo dalla rete; le
+ * prenotazioni "in invio" e quelle rifiutate vengono dall'outbox.
+ *
+ * @param ownerId restituisce l'id dell'utente loggato (anche dal token, senza profilo). Si chiede ogni volta che
+ * serve, non una volta sola.
+ * @param today giorno corrente del telefono, sostituibile nei test.
  */
 class MyBookingsViewModel(
     private val bookings: BookingRepository,
     private val refuges: RefugeRepository,
-    // l'utente loggato (anche senza profilo letto, dal token): si chiede quando serve, non una volta sola
     private val ownerId: suspend () -> String?,
     private val today: () -> LocalDate = { Clock.System.todayIn(TimeZone.currentSystemDefault()) },
 ) : ViewModel() {
@@ -77,10 +92,12 @@ class MyBookingsViewModel(
     private val _state = MutableStateFlow(MyBookingsUiState(loading = true))
     val state: StateFlow<MyBookingsUiState> = _state.asStateFlow()
 
+    // Prossima pagina da chiedere, job del caricamento in corso e rifugi di cui si è già chiesto il nome.
     private var nextPage = 0
     private var loadJob: Job? = null
     private val namesRequested = mutableSetOf<String>()
 
+    // Osserva le prenotazioni in coda e rifiutate dell'utente, rimanda quelle in coda e carica la prima pagina.
     init {
         viewModelScope.launch {
             val owner = ownerId() ?: return@launch
@@ -101,19 +118,21 @@ class MyBookingsViewModel(
         loadJob = viewModelScope.launch { loadPage(reset = true) }
     }
 
+    /** Chiude l'avviso di una prenotazione rifiutata. */
     fun dismissRejected(key: String) {
         viewModelScope.launch { bookings.dismissRejected(key) }
     }
 
-    // In parallelo alla lista. Se una prenotazione in coda è partita, la prima pagina si rilegge per mostrarla
+    /** Rimanda le prenotazioni in coda di [owner]; se almeno una è stata creata, rilegge la prima pagina per mostrarla. */
     private suspend fun resend(owner: String) {
         val booked = bookings.resendPending(owner).any { it is BookingOutcome.Booked }
         if (!booked) return
-        // dopo il caricamento in corso, che può essere partito prima della risposta
+        // Si aspetta il caricamento in corso, che potrebbe essere partito prima che la prenotazione esistesse.
         loadJob?.join()
         loadJob = viewModelScope.launch { loadPage(reset = true) }
     }
 
+    /** Carica la pagina successiva, se non c'è già un caricamento, un errore o la fine della lista. */
     fun loadMore() {
         val current = _state.value
         if (current.loading || current.loadingMore || current.refreshing || current.endReached || current.error != null) return
@@ -121,6 +140,7 @@ class MyBookingsViewModel(
         loadJob = viewModelScope.launch { loadPage(reset = false) }
     }
 
+    /** "Tira per aggiornare": rilegge la prima pagina e riprova a inviare le prenotazioni in coda. */
     fun refresh() {
         if (_state.value.refreshing) return
         _state.update { it.copy(refreshing = true, error = null) }
@@ -130,9 +150,9 @@ class MyBookingsViewModel(
     }
 
     /**
-     * Rilegge la prima pagina senza l'indicatore del "tira per aggiornare" (redesign 11/2026): le prenotazioni sono un
-     * segmento della scheda Rifugi, il cui ViewModel vive a lungo; a ogni apertura del segmento la lista va riletta
-     * (es. dopo una prenotazione dal foglio "Prenota").
+     * Rilegge la prima pagina senza mostrare l'indicatore del "tira per aggiornare". Le prenotazioni sono un segmento
+     * della scheda Rifugi, il cui ViewModel resta vivo a lungo: a ogni apertura del segmento la lista va riletta, per
+     * esempio dopo una prenotazione fatta dal foglio "Prenota".
      */
     fun reload() {
         if (_state.value.refreshing) return
@@ -140,6 +160,7 @@ class MyBookingsViewModel(
         loadJob = viewModelScope.launch { loadPage(reset = true) }
     }
 
+    /** Riprova dopo un errore: la prima pagina se la lista è vuota, altrimenti la successiva. */
     fun retry() {
         val current = _state.value
         if (current.loading || current.loadingMore || current.refreshing) return
@@ -151,13 +172,14 @@ class MyBookingsViewModel(
     /** Le prenotazioni caricate, divise per gruppi rispetto a oggi. */
     fun sections(items: List<BookingResponse>): BookingSections = items.sections(today())
 
-    /** Oggi per il telefono: la UI ci calcola "Tra 3 giorni". */
+    /** Giorno corrente del telefono, usato dalla UI per testi come "Tra 3 giorni". */
     fun today(): LocalDate = today.invoke()
 
-    /** Si può annullare fino al giorno d'arrivo compreso (regola del server, che resta l'ultima parola). */
+    /** Vero se la prenotazione si può annullare: confermata e fino al giorno d'arrivo compreso. È la regola del server, che decide comunque. */
     fun canCancel(booking: BookingResponse): Boolean =
         booking.status == BookingResponse.Status.CONFIRMED && booking.checkIn >= today()
 
+    /** Annulla la prenotazione [bookingId]; se riesce, la segna come annullata nella lista senza ricaricarla. */
     fun cancel(bookingId: String) {
         if (_state.value.cancelling != null) return
         _state.update { it.copy(cancelling = bookingId, cancelError = null) }
@@ -175,6 +197,7 @@ class MyBookingsViewModel(
         }
     }
 
+    /** Carica una pagina: la prima se [reset] è vero (sostituendo la lista), altrimenti la successiva. */
     private suspend fun loadPage(reset: Boolean) {
         val page = if (reset) 0 else nextPage
         val result = bookings.mine(page)
@@ -182,7 +205,8 @@ class MyBookingsViewModel(
         _state.update { state ->
             result.fold(
                 onSuccess = { paged ->
-                    // pagine a offset: una prenotazione nuova in cima sposta l'ultima nella pagina dopo
+                    // Le pagine sono a offset: una prenotazione nuova in cima sposta l'ultima della pagina in quella
+                    // successiva, che quindi può contenere un duplicato da scartare.
                     val items = if (reset) paged.content else (state.items + paged.content).distinctBy { it.id }
                     state.copy(
                         items = items,
@@ -197,13 +221,16 @@ class MyBookingsViewModel(
             )
         }
         result.onSuccess { paged -> loadNames(paged.content.map { it.refugeId }) }
-        // il server le dà dalla più lontana nel futuro: per trovare il prossimo soggiorno si va avanti finché non si
-        // arriva al passato (di solito una o due pagine)
+        // Il server ordina dalla prenotazione più lontana nel futuro: per trovare il prossimo soggiorno si caricano
+        // altre pagine finché non si arriva a una prenotazione passata (di solito bastano una o due pagine).
         val current = _state.value
         if (result.isSuccess && !current.endReached && current.items.lastOrNull()?.let { it.checkIn >= today() } == true) loadMore()
     }
 
-    // un errore lascia il posto vuoto: la riga mostra "Rifugio" senza nome, non è un motivo per bloccare la lista
+    /**
+     * Chiede i dati dei rifugi [ids] non ancora richiesti. Un errore non blocca la lista: la riga mostra "Rifugio"
+     * senza nome, e il rifugio si potrà richiedere di nuovo.
+     */
     private fun loadNames(ids: List<String>) {
         ids.distinct().filter { namesRequested.add(it) }.forEach { id ->
             viewModelScope.launch {

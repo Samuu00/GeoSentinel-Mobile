@@ -1,3 +1,4 @@
+// Livello della mappa che disegna i rifugi come bollini toccabili, con il nome sotto quando si è abbastanza vicini.
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.compose.material.icons.Icons
@@ -37,13 +38,14 @@ import org.maplibre.spatialk.geojson.Feature
 import org.maplibre.spatialk.geojson.FeatureCollection
 import org.maplibre.spatialk.geojson.Point
 
-// Da qui in su il nome del rifugio sotto il bollino
+/** Zoom da cui compare il nome del rifugio sotto il bollino. */
 private const val LabelZoom = 11.0
 
 /**
- * I rifugi sulla mappa (M5.1, rifatti a 11/2026 come i luoghi di Apple Maps): bollino verde abete più grande dei POI,
- * con la casa bianca, anello bianco e ombra; da vicino il nome sotto, in grassetto. Non si confonde con il POI
- * "bivacco" (casa sul legno). Il tocco apre il dettaglio. [label] e [halo] come in PoiMarkers.
+ * Disegna i rifugi sulla mappa nello stile dei luoghi di Apple Maps: un bollino verde abete, più grande di quelli
+ * dei POI, con una casa bianca, anello bianco e ombra; da vicino compare il nome in grassetto sotto. L'icona è
+ * diversa da quella del POI "bivacco", così i due non si confondono. Toccare un rifugio chiama [onRefugeClick] con il
+ * suo id. [label] e [halo] sono i colori del testo e del suo alone, come per i POI.
  */
 @Composable
 @MaplibreComposable
@@ -70,12 +72,13 @@ fun RefugeMarkers(refuges: List<RefugeResponse>, label: Color, halo: Color, onRe
         iconImage = image(badge, DpSize(38.dp, 38.dp)),
         iconSize = interpolate(linear(), zoom(), from to const(0.65f), 13 to const(1f)),
         iconOpacity = fadeInFrom(from),
-        // Collisioni come per i POI; disegnati dopo, i rifugi hanno la precedenza e nascondono i POI sotto
+        // Collisioni attive come per i POI: i rifugi sono disegnati dopo, quindi hanno la precedenza e nascondono i
+        // POI che finirebbero sotto.
         iconAllowOverlap = const(false),
         iconIgnorePlacement = const(false),
         onClick = onClick,
         hitPadding = 6.dp,
-        // il grassetto dello stesso server di glifi dello stile (OpenFreeMap)
+        // Il font grassetto deve esistere sul server di glifi dello stile della mappa (OpenFreeMap).
         textField = format(span(feature["name"].asString())),
         textFont = const(listOf("Noto Sans Bold")),
         textSize = const(12.sp),

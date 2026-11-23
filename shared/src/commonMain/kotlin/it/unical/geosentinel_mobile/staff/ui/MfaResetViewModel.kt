@@ -1,3 +1,4 @@
+// ViewModel della schermata con cui un amministratore azzera la verifica in due passaggi di un utente.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
@@ -16,27 +17,33 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
+/** Stato del form di azzeramento; [done] diventa vero quando l'azzeramento è riuscito. */
 data class MfaResetUiState(
     val email: String = "",
     val busy: Boolean = false,
     val error: UiMessage? = null,
     val done: Boolean = false,
 ) {
+    /** Vero se l'email contiene la chiocciola e non c'è un invio in corso o già concluso. */
     val canSubmit: Boolean get() = '@' in email && !busy && !done
 
-    // l'email non va nei log
+    // toString scritto a mano: l'email non deve finire nei log.
     override fun toString() = "MfaResetUiState(busy=$busy, error=$error, done=$done)"
 }
 
-/** Azzeramento della verifica in due passaggi di un utente che ha perso telefono e codici (M10.3), solo `ADMIN`. */
+/** ViewModel dell'azzeramento della verifica in due passaggi di un utente che ha perso telefono e codici; solo per `ADMIN`. */
 class MfaResetViewModel(private val staff: StaffRepository) : ViewModel() {
 
     private val _state = MutableStateFlow(MfaResetUiState())
     val state: StateFlow<MfaResetUiState> = _state.asStateFlow()
 
+    /** Aggiorna l'email, troncata a 254 caratteri (la lunghezza massima di un indirizzo email). */
     fun onEmailChange(value: String) = _state.update { it.copy(email = value.take(254), error = null) }
 
-    // Dopo la conferma della schermata ("hai verificato la sua identità?")
+    /**
+     * Invia l'azzeramento. La schermata lo chiama solo dopo che l'amministratore ha confermato di aver verificato
+     * l'identità della persona.
+     */
     fun submit() {
         val current = _state.value
         if (!current.canSubmit) return

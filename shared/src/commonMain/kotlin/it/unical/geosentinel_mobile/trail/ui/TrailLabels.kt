@@ -1,3 +1,7 @@
+// Etichette e colori condivisi per sentieri, POI e pericoli: traducono i valori del server in testi italiani di
+// montagna e in colori. Il client generato ha enum diversi per lo stesso campo nel riassunto e nel dettaglio di un
+// sentiero, quindi la conversione passa dal valore testuale; un valore nuovo del server (unknown_default_open_api)
+// diventa UNKNOWN invece di far andare in crash l'app.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.compose.material3.MaterialTheme
@@ -44,10 +48,10 @@ import kotlinx.datetime.toLocalDateTime
 import kotlin.math.roundToLong
 import kotlin.time.Instant
 
-// Etichette di montagna in italiano (§2). Riepilogo e dettaglio del client generato hanno enum diversi per lo stesso
-// campo: si passa dal valore testuale, e un valore nuovo del server (unknown_default_open_api) diventa UNKNOWN.
-
-/** Stato del sentiero. Si riconosce anche senza il colore: etichetta nel dettaglio, linea tratteggiata se chiuso. */
+/**
+ * Stato di un sentiero con la relativa etichetta. Lo stato si riconosce anche senza il colore: c'è l'etichetta nel
+ * dettaglio e la linea è tratteggiata quando il sentiero è chiuso.
+ */
 enum class TrailState(val label: StringResource) {
     OPEN(Res.string.trail_status_open),
     WARNING(Res.string.trail_status_warning),
@@ -55,12 +59,15 @@ enum class TrailState(val label: StringResource) {
     UNKNOWN(Res.string.trail_status_unknown);
 
     companion object {
+        /** Converte il valore testuale del server nello stato; un valore sconosciuto diventa UNKNOWN. */
         fun of(value: String): TrailState = entries.firstOrNull { it != UNKNOWN && it.name == value } ?: UNKNOWN
     }
 }
 
-// Colori fissi dello stato (Color.kt): verde, ambra, rosso (il rosso dei sentieri chiusi, §2).
-// Senza uno stato noto, il colore del testo secondario.
+/**
+ * Colore dello stato, preso dai colori fissi in Color.kt: verde per aperto, ambra per attenzione e rosso per chiuso
+ * (il rosso è riservato ai sentieri chiusi). Per uno stato sconosciuto si usa il colore del testo secondario.
+ */
 @Composable
 fun TrailState.color(): Color = when (this) {
     TrailState.OPEN -> TrailOpen
@@ -70,8 +77,8 @@ fun TrailState.color(): Color = when (this) {
 }
 
 /**
- * Difficoltà con le quattro parole del backend (Facile, Media, Difficile, Per esperti). Niente scala CAI: la sigla
- * (T, E, EE, EEA) la assegna chi gestisce il sentiero e non si ricava da queste quattro.
+ * Difficoltà di un sentiero con i quattro livelli del backend (Facile, Media, Difficile, Per esperti). Non si usa la
+ * scala CAI: la sigla (T, E, EE, EEA) la assegna chi gestisce il sentiero e non si può ricavare da questi quattro livelli.
  */
 enum class TrailDifficulty(val label: StringResource) {
     EASY(Res.string.trail_difficulty_easy),
@@ -81,26 +88,33 @@ enum class TrailDifficulty(val label: StringResource) {
     UNKNOWN(Res.string.trail_difficulty_unknown);
 
     companion object {
+        /** Converte il valore testuale del server nella difficoltà; un valore sconosciuto diventa UNKNOWN. */
         fun of(value: String): TrailDifficulty = entries.firstOrNull { it != UNKNOWN && it.name == value } ?: UNKNOWN
     }
 }
 
-/** "Aggiornato alle 14:05" (oggi) o "Aggiornato il 03/10 alle 14:05": data e ora già nel formato italiano. */
+/**
+ * Dati per il testo "aggiornato": "Aggiornato alle hh:mm" se [today] è true, altrimenti "Aggiornato il gg/mm alle hh:mm".
+ * [date] e [time] sono già nel formato italiano.
+ */
 data class UpdatedAt(val today: Boolean, val date: String, val time: String)
 
+/** Calcola data e ora di [at] nel fuso [zone] e se cade nello stesso giorno di [now]. */
 fun updatedAt(at: Instant, now: Instant, zone: TimeZone = TimeZone.currentSystemDefault()): UpdatedAt {
     val local = at.toLocalDateTime(zone)
     val today = now.toLocalDateTime(zone).date == local.date
+    // Formatta un numero su due cifre, con lo zero davanti.
     fun two(n: Int) = n.toString().padStart(2, '0')
     return UpdatedAt(today, date = "${two(local.day)}/${two(local.month.ordinal + 1)}", time = "${two(local.hour)}:${two(local.minute)}")
 }
 
-/** Lunghezza in km con un decimale e la virgola italiana ("4,2"). */
+/** Formatta una lunghezza in metri come chilometri con un decimale e la virgola italiana (per esempio "4,2"). */
 fun formatKm(meters: Double): String {
     val tenths = (meters / 100).roundToLong().coerceAtLeast(0)
     return "${tenths / 10},${tenths % 10}"
 }
 
+/** Etichetta del tipo di un punto di interesse. */
 fun PoiResponse.Type.label(): StringResource = when (this) {
     PoiResponse.Type.SHELTER -> Res.string.poi_shelter
     PoiResponse.Type.WATER_SOURCE -> Res.string.poi_water_source
@@ -111,6 +125,7 @@ fun PoiResponse.Type.label(): StringResource = when (this) {
     PoiResponse.Type.unknown_default_open_api -> Res.string.poi_unknown
 }
 
+/** Etichetta del tipo di un pericolo. */
 fun HazardResponse.Type.label(): StringResource = when (this) {
     HazardResponse.Type.LANDSLIDE -> Res.string.hazard_landslide
     HazardResponse.Type.FALLEN_TREE -> Res.string.hazard_fallen_tree
@@ -121,6 +136,7 @@ fun HazardResponse.Type.label(): StringResource = when (this) {
     HazardResponse.Type.OTHER, HazardResponse.Type.unknown_default_open_api -> Res.string.hazard_other
 }
 
+/** Etichetta della gravità di un pericolo. */
 fun HazardResponse.Severity.label(): StringResource = when (this) {
     HazardResponse.Severity.LOW -> Res.string.hazard_severity_low
     HazardResponse.Severity.MEDIUM -> Res.string.hazard_severity_medium
@@ -129,7 +145,7 @@ fun HazardResponse.Severity.label(): StringResource = when (this) {
     HazardResponse.Severity.unknown_default_open_api -> Res.string.hazard_severity_unknown
 }
 
-// Il rosso solo per CRITICAL (§2); HIGH in ambra, il resto nel colore del testo secondario
+/** Colore della gravità: rosso solo per CRITICAL, ambra per HIGH, il colore del testo secondario per le altre. */
 @Composable
 fun HazardResponse.Severity.color(): Color = when (this) {
     HazardResponse.Severity.CRITICAL -> EmergencyRed

@@ -1,3 +1,6 @@
+// Schermata "Segnala un pericolo": il form con tipo, gravità, posizione sulla mappa e descrizione e, dopo l'invio, la
+// schermata "Segnalazione inviata" da cui allegare le foto. Contiene anche componenti di form riusati altrove
+// (Field, Choices, LocationPicker), per esempio nella creazione di un POI.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import geosentinel_mobile.shared.generated.resources.report_leave_uploading_title
@@ -120,18 +123,27 @@ import kotlin.math.max
 import kotlin.time.Duration.Companion.seconds
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
-// Zoom minimo dopo "Usa la mia posizione": abbastanza vicino da spostare il segnaposto sul punto giusto
+/** Zoom minimo dopo "Usa la mia posizione": abbastanza vicino da poter spostare il segnaposto sul punto esatto. */
 private const val PickZoom = 16.0
-// Zoom del pizzico: da tutta la regione al singolo tornante
+
+/** Zoom minimo raggiungibile con il pizzico nella mappa del form (tutta la regione). */
 private const val MinZoom = 5.0
+
+/** Zoom massimo raggiungibile con il pizzico (il singolo tornante). */
 private const val MaxZoom = 19.0
-// Quanto si aspetta un fix (come per "La mia posizione" sulla mappa)
+
+/** Tempo massimo di attesa di una posizione dopo "Usa la mia posizione", come per "La mia posizione" sulla mappa. */
 private val FixWait = 15.seconds
 
 /**
- * Segnalazione di un pericolo (M4.1): tipo, gravità, posizione (il centro della mappa, che si sposta a mano o con
- * "Usa la mia posizione") e descrizione facoltativa. Form "spinto", con il suo Indietro. [start] e [zoom] sono il punto
- * da cui parte la mappa: il centro della mappa principale o l'inizio del sentiero.
+ * Schermata di segnalazione di un pericolo: tipo, gravità, posizione (il centro della mappa, che si sposta con le dita
+ * o con "Usa la mia posizione") e descrizione facoltativa. È una schermata "spinta", con il proprio pulsante Indietro.
+ * Dopo l'invio riuscito la stessa schermata mostra "Segnalazione inviata" con la sezione delle foto.
+ *
+ * @param trailId sentiero da cui si è partiti, oppure null.
+ * @param start punto iniziale della mappa: il centro della mappa principale o l'inizio del sentiero.
+ * @param zoom zoom iniziale della mappa.
+ * @param onBack chiude la schermata.
  */
 @Composable
 fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: () -> Unit) {
@@ -142,13 +154,15 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
         val encoder = koinInject<ImageEncoder>()
         val pickPhoto = rememberPhotoPicker { picked -> viewModel.addPhoto { encoder.toJpeg(picked) } }
         val takePhoto = rememberCameraCapture { captured -> viewModel.addPhoto { encoder.toJpeg(captured) } }
-        // Con foto in caricamento si chiede prima di uscire (Fatto, Indietro, gesto di sistema): l'upload continua da solo
-        // (scope dell'app), ma da fuori l'utente non vede se arriva
+        // Se ci sono foto in caricamento si chiede conferma prima di uscire (con "Fatto", con Indietro o con il gesto
+        // di sistema): l'upload continua comunque nello scope dell'app, ma fuori da qui l'utente non vedrebbe se va a
+        // buon fine.
         val uploading = state.photos.any { it.status == PhotoStatus.UPLOADING }
         var confirmLeave by rememberSaveable { mutableStateOf(false) }
         val leave = { if (uploading) confirmLeave = true else onBack() }
-        // ponytail: BackHandler è deprecato a favore di NavigationEventHandler (navigationevent-compose), che in CMP 1.12
-        // ci si appoggia sotto. Passare a quello quando la sua API è stabile su Android e iOS
+        // BackHandler è deprecato a favore di NavigationEventHandler (libreria navigationevent-compose), su cui in
+        // Compose Multiplatform 1.12 si appoggia internamente. Si potrà passare a quello quando la sua API sarà
+        // stabile sia su Android sia su iOS.
         @Suppress("DEPRECATION")
         @OptIn(ExperimentalComposeUiApi::class)
         BackHandler(enabled = uploading) { confirmLeave = true }
@@ -207,7 +221,7 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
                 selected = state.severity,
                 label = { it.label() },
                 onSelect = viewModel::onSeverityChange,
-                // il rosso solo per CRITICAL (§2)
+                // Il rosso è riservato alla gravità CRITICAL, come nel resto dell'app.
                 emergency = { it == CreateHazardRequest.Severity.CRITICAL },
             )
         }
@@ -227,7 +241,10 @@ fun ReportHazardScreen(trailId: String?, start: GeoPoint, zoom: Double, onBack: 
     }
 }
 
-// Titolo della sezione, contenuto e, sotto, l'errore del campo (prugna, annunciato)
+/**
+ * Sezione di un form: titolo (marcato come intestazione per l'accessibilità), contenuto e, sotto, l'eventuale errore del
+ * campo, nel colore `error` del tema e annunciato dai lettori di schermo.
+ */
 @Composable
 internal fun Field(title: StringResource, error: UiMessage?, content: @Composable () -> Unit) {
     Column {
@@ -248,7 +265,11 @@ internal fun Field(title: StringResource, error: UiMessage?, content: @Composabl
     }
 }
 
-// Una scelta sola tra poche voci: capsule che vanno a capo (bersaglio di 48 dp garantito da Material)
+/**
+ * Scelta singola tra poche voci, mostrata come capsule (FilterChip) che vanno a capo. Il bersaglio toccabile di 48 dp
+ * è garantito da Material anche se la capsula è alta 40 dp. Le voci per cui [emergency] restituisce true, quando
+ * selezionate, sono colorate di rosso.
+ */
 @Composable
 internal fun <T> Choices(
     options: List<T>,
@@ -279,9 +300,11 @@ internal fun <T> Choices(
 }
 
 /**
- * Mappa con il segnaposto fisso al centro: la posizione scelta è il centro della mappa quando si ferma (pericolo, POI).
- * "Usa la mia posizione" chiede il permesso solo adesso (l'utente ha appena chiesto la sua posizione: il tocco fa da
- * spiegazione) e sposta la mappa sul fix, se è recente.
+ * Mappa con un segnaposto fisso al centro, usata per scegliere un punto (posizione di un pericolo o di un POI). La
+ * posizione scelta è il centro della mappa quando si ferma e viene comunicata con [onLocationChange]. "Usa la mia
+ * posizione" chiede il permesso di localizzazione solo in quel momento (l'utente ha appena chiesto la propria
+ * posizione, quindi il tocco stesso fa da spiegazione) e sposta la mappa sulla posizione, se è recente. [hint] è il
+ * testo di aiuto sotto la mappa.
  */
 @Composable
 internal fun LocationPicker(
@@ -302,7 +325,8 @@ internal fun LocationPicker(
     var locating by remember { mutableStateOf(false) }
     var note by remember { mutableStateOf<StringResource?>(null) }
 
-    // Mappa ferma: il suo centro è la posizione del pericolo (anche all'apertura, prima di ogni gesto)
+    // Ogni volta che la mappa si ferma il suo centro diventa la posizione scelta, anche all'apertura prima di qualsiasi
+    // gesto.
     LaunchedEffect(mapState) {
         snapshotFlow { if (mapState.isCameraMoving) null else mapState.cameraPosition.target }
             .filterNotNull()
@@ -311,7 +335,8 @@ internal fun LocationPicker(
     LaunchedEffect(locating, location.lastLocation) {
         if (!locating) return@LaunchedEffect
         val fix = location.recentFix() ?: return@LaunchedEffect
-        // nello scope della schermata: locating = false cambia la chiave e annullerebbe l'animazione lanciata qui
+        // L'animazione parte nello scope della schermata e non in quello dell'effetto: locating = false cambia la
+        // chiave dell'effetto, che verrebbe annullato insieme all'animazione.
         scope.launch { mapState.animateCamera(CameraUpdate(target = fix.toPosition(), zoom = max(mapState.cameraPosition.zoom, PickZoom))) }
         locating = false
     }
@@ -330,8 +355,8 @@ internal fun LocationPicker(
     ) {
         MaplibreMap(
             state = mapState,
-            // I gesti li gestisce la Box sotto, in Compose: quelli nativi della mappa dentro una pagina che scorre
-            // (verificato sull'emulatore) li prendeva lo scroll, che spostava la pagina invece della mappa
+            // I gesti nativi della mappa sono disattivati e li gestisce la Box qui sotto, in Compose: dentro una pagina
+            // che scorre i gesti nativi venivano catturati dallo scroll, che spostava la pagina invece della mappa.
             interactions = MapInteractions.None,
             overlay = {
                 Box(
@@ -348,11 +373,12 @@ internal fun LocationPicker(
                         }
                     },
                 )
-                // solo l'attribuzione (obbligatoria): lo zoom si fa con le dita
+                // Solo il pulsante dell'attribuzione, obbligatoria per le licenze delle mappe; lo zoom si fa con le dita.
                 AttributionButton(mapState, Modifier.align(Alignment.BottomStart).padding(8.dp))
             },
         )
-        // la punta del segnaposto sul centro della mappa; decorativo, il testo sotto spiega cosa fare
+        // Segnaposto con la punta sul centro della mappa (da qui lo spostamento verso l'alto di metà altezza). È
+        // decorativo: il testo sotto spiega cosa fare.
         Icon(
             AppIcons.MapPin,
             contentDescription = null,
@@ -371,7 +397,8 @@ internal fun LocationPicker(
             note = null
             when (val permission = location.permission) {
                 is LocationPermission.Granted -> locating = true
-                // negato per sempre: il sistema non mostra più il dialogo
+                // Permesso negato in modo definitivo: il sistema non mostrerebbe più il dialogo, quindi si spiega
+                // all'utente con un messaggio.
                 is LocationPermission.NotGranted if permission.canRequest == false -> note = Res.string.report_location_denied
                 else -> {
                     locating = true
@@ -398,10 +425,12 @@ internal fun LocationPicker(
     }
 }
 
-// Le voci del form: tutte quelle del contratto, senza il caso dei valori futuri (che l'app non manda)
+/** Tipi selezionabili: tutti quelli del contratto, tranne il caso dei valori sconosciuti, che l'app non invia mai. */
 private val HazardTypes = CreateHazardRequest.Type.entries - CreateHazardRequest.Type.unknown_default_open_api
+/** Gravità selezionabili, con lo stesso criterio dei tipi. */
 private val HazardSeverities = CreateHazardRequest.Severity.entries - CreateHazardRequest.Severity.unknown_default_open_api
 
+/** Testo di un tipo di pericolo nel form. */
 private fun CreateHazardRequest.Type.label(): StringResource = when (this) {
     CreateHazardRequest.Type.LANDSLIDE -> Res.string.hazard_landslide
     CreateHazardRequest.Type.FALLEN_TREE -> Res.string.hazard_fallen_tree
@@ -412,6 +441,7 @@ private fun CreateHazardRequest.Type.label(): StringResource = when (this) {
     CreateHazardRequest.Type.OTHER, CreateHazardRequest.Type.unknown_default_open_api -> Res.string.hazard_other
 }
 
+/** Testo di una gravità nel form. */
 private fun CreateHazardRequest.Severity.label(): StringResource = when (this) {
     CreateHazardRequest.Severity.LOW -> Res.string.report_severity_low
     CreateHazardRequest.Severity.MEDIUM, CreateHazardRequest.Severity.unknown_default_open_api -> Res.string.report_severity_medium

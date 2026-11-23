@@ -1,3 +1,6 @@
+// Pagina di dettaglio di un sentiero: anteprima del percorso, dati principali, profilo altimetrico, descrizione, POI e,
+// per l'utente loggato, pericoli attivi e foto. Contiene anche funzioni di supporto per interpretare il nome e la
+// descrizione dei sentieri importati da OpenStreetMap.
 package it.unical.geosentinel_mobile.trail.ui
 
 import it.unical.geosentinel_mobile.core.ui.PageMaxWidth
@@ -145,8 +148,13 @@ import it.unical.geosentinel_mobile.core.ui.theme.warningTextColor
 
 
 /**
- * Dettaglio di un sentiero (§M3.2): anteprima del percorso, difficoltà, lunghezza, stato, descrizione, POI e,
- * solo da loggati, pericoli attivi e foto. Schermata "spinta" sopra la mappa, con il suo Indietro.
+ * Schermata di dettaglio del sentiero [trailId]: anteprima del percorso, difficoltà, lunghezza, stato, descrizione, POI
+ * e, solo per l'utente loggato, pericoli attivi e foto. È una schermata "spinta" sopra la mappa, con il proprio
+ * pulsante Indietro.
+ *
+ * @param onLogin apre il login (dall'invito mostrato all'ospite).
+ * @param onReportHazard apre il form di segnalazione partendo dal punto indicato.
+ * @param manage azioni del gestore del parco, mostrate sotto lo stato; per gli altri ruoli è vuoto.
  */
 @Composable
 fun TrailDetailScreen(
@@ -154,14 +162,14 @@ fun TrailDetailScreen(
     onBack: () -> Unit,
     onLogin: () -> Unit,
     onReportHazard: (start: GeoPoint) -> Unit,
-    // azioni del gestore del parco (M8.1), sotto lo stato; vuoto per gli altri ruoli
     manage: @Composable (TrailDetailResponse) -> Unit = {},
 ) {
     val viewModel = koinViewModel<TrailDetailViewModel>(key = "trail-$trailId") { parametersOf(trailId) }
     val ui by viewModel.state.collectAsStateWithLifecycle()
 
     val scroll = rememberScrollState()
-    // l'anteprima è scorsa via (fin sotto la barra): in alto compare la barra con il nome, come nelle pagine di iOS
+    // Quando l'anteprima è scorsa via (fin sotto la barra in alto) compare la barra compatta con il nome, come nelle
+    // pagine di iOS.
     val heroPx = with(LocalDensity.current) { (PreviewHeight - 96.dp).toPx() }
     val collapsed by remember { derivedStateOf { scroll.value > heroPx } }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
@@ -190,9 +198,14 @@ fun TrailDetailScreen(
     }
 }
 
-// Altezza dell'anteprima del percorso in testata
+/** Altezza dell'anteprima del percorso in testata. */
 private val PreviewHeight = 300.dp
 
+/**
+ * Contenuto della pagina quando il sentiero è disponibile: testata con l'anteprima, pannello dei dati che scorre e,
+ * fissa in basso, la barra con "Segnala" e "Indicazioni". I callback inoltrano al ViewModel i "Riprova" e gli eventi
+ * delle foto.
+ */
 @Composable
 private fun TrailContent(
     trail: TrailDetailResponse,
@@ -209,14 +222,16 @@ private fun TrailContent(
     onPhotoRetry: (String) -> Unit,
 ) {
     val state = TrailState.of(trail.status.value)
-    // segnalare: l'azione principale della pagina, fissa in basso (solo da loggati, dall'inizio del percorso)
+    // Punto da cui parte il form di segnalazione: l'inizio del percorso. È null per l'ospite (sezioni nascoste), così
+    // il pulsante "Segnala" non compare.
     val reportFrom = if (ui.hazards != Section.Hidden) trail.path.toPositions().firstOrNull() else null
     Box(Modifier.fillMaxSize()) {
     Column(
         Modifier.fillMaxSize().verticalScroll(scroll),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // l'anteprima da bordo a bordo e il pannello del contenuto che le sale sopra con gli angoli da 28 (redesign 11/2026)
+        // Anteprima da bordo a bordo e, sopra il suo margine inferiore, l'inizio del pannello del contenuto con gli
+        // angoli arrotondati da 28 dp.
         Box(Modifier.fillMaxWidth().height(PreviewHeight)) {
             PathPreview(trail, state, Modifier.fillMaxSize())
             Box(
@@ -228,7 +243,8 @@ private fun TrailContent(
             )
         }
         Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
-            // "Sentiero 404: Camigliatello – Spezzano": il numero va nell'occhiello, il nome resta il titolo
+            // Per un nome come "Sentiero 404: Camigliatello - Spezzano" il numero va nell'occhiello e il resto diventa
+            // il titolo; in mancanza si usa il segnavia indicato nella descrizione.
             val (fromName, title) = remember(trail.name) { splitTrailName(trail.name) }
             val facts = remember(trail.description) { trailFacts(trail.description) }
             val number = fromName ?: facts.waymark
@@ -250,7 +266,8 @@ private fun TrailContent(
                 )
             }
             Spacer(Modifier.size(16.dp))
-            // quote dalle Terrain Tiles: dislivello, tempo e profilo; senza (offline) solo la lunghezza
+            // Quote dalle Terrain Tiles: dislivello, tempo stimato e profilo. Se non arrivano (per esempio offline) si
+            // mostra solo la lunghezza.
             val elevation = koinInject<ElevationRepository>()
             val profile by produceState<ElevationProfile?>(null, trail.id) {
                 value = elevation.profile(trail.path.toPositions().map { it.toGeoPoint() })
@@ -285,7 +302,7 @@ private fun TrailContent(
                 }
             }
 
-            // Pericoli e foto: da ospite un invito ad accedere (le rotte richiedono il login)
+            // Pericoli e foto: all'ospite si mostra un invito ad accedere, perché le rotte richiedono il login.
             if (ui.hazards == Section.Hidden && ui.photos == Section.Hidden) {
                 Spacer(Modifier.size(24.dp))
                 Card {
@@ -314,7 +331,7 @@ private fun TrailContent(
                         }
                     }
                 }
-                // Le foto solo se ce ne sono: una sezione vuota non dice niente
+                // La sezione delle foto compare solo se ce ne sono: una sezione vuota non darebbe informazioni.
                 val photos = ui.photos
                 if (photos !is Section.Loaded || photos.value.isNotEmpty()) {
                     SectionTitle(Res.string.trail_photos)
@@ -323,12 +340,12 @@ private fun TrailContent(
                     }
                 }
             }
-            // spazio per la barra fissa in basso
+            // Spazio finale perché l'ultimo contenuto non resti coperto dalla barra fissa in basso.
             Spacer(Modifier.size(112.dp))
         }
     }
-    // la mappa del form parte dall'inizio del sentiero
-    // in basso, fissi: segnalare (da loggati) e le indicazioni fino all'inizio del sentiero, col nostro motore sulla mappa
+    // Barra fissa in basso: "Segnala" (solo da loggati, con la mappa del form che parte dall'inizio del sentiero) e
+    // "Indicazioni" fino all'inizio del sentiero, calcolate dal motore di percorso dell'app e mostrate sulla mappa.
     val start = trail.path.toPositions().firstOrNull()
     val directions = LocalDirections.current
     if (start != null) {
@@ -354,8 +371,10 @@ private fun TrailContent(
     }
 }
 
-// "Aggiornato alle 14:05" sotto la lunghezza; se l'aggiornamento non è riuscito (es. senza rete) si dice perché e
-// un tocco riprova: i dati mostrati sono quelli salvati (§2, "offline visibile")
+/**
+ * Riga "Aggiornato alle hh:mm" sotto la lunghezza. Se l'aggiornamento non è riuscito (per esempio senza rete) dice il
+ * motivo e un tocco riprova: così l'utente sa che i dati mostrati sono quelli salvati sul dispositivo.
+ */
 @Composable
 private fun UpdatedLine(at: Instant?, stale: UiMessage?, onRetry: () -> Unit) {
     if (at == null) return
@@ -378,7 +397,10 @@ private fun UpdatedLine(at: Instant?, stale: UiMessage?, onRetry: () -> Unit) {
     }
 }
 
-// Anteprima ferma del percorso: inquadrato tutto, senza gesti (la mappa vera è nella scheda Mappa)
+/**
+ * Anteprima ferma del percorso: la mappa inquadra tutto il sentiero e non risponde ai gesti (la mappa interattiva è
+ * nella scheda Mappa).
+ */
 @Composable
 private fun PathPreview(trail: TrailDetailResponse, state: TrailState, modifier: Modifier) {
     val colors = MaterialTheme.colorScheme
@@ -395,21 +417,21 @@ private fun PathPreview(trail: TrailDetailResponse, state: TrailState, modifier:
         TrailPath(positions, state, casing = casing, unknownColor = if (mapIsDark) MapMutedDark else MapMutedLight)
     }
     LaunchedEffect(bounds) {
-        // in alto c'è l'Indietro: margine più ampio
+        // Margine superiore più ampio perché in alto c'è il pulsante Indietro.
         bounds?.let { mapState.fitCameraToBounds(it.toBoundingBox(), fitPadding = DpPadding(left = 32.dp, top = 72.dp, right = 32.dp, bottom = 32.dp)) }
     }
-    // decorativa per gli screen reader: nome, stato e lunghezza sono scritti sotto
+    // Anteprima nascosta ai lettori di schermo: nome, stato e lunghezza sono scritti sotto.
     Box(modifier.clearAndSetSemantics { }) {
         MaplibreMap(
             state = mapState,
             interactions = MapInteractions.None,
-            // solo l'attribuzione (obbligatoria): niente scala, bussola o controlli su un'anteprima ferma
+            // Solo l'attribuzione, obbligatoria: su un'anteprima ferma non servono scala, bussola o altri controlli.
             overlay = { AttributionButton(mapState, Modifier.align(Alignment.BottomEnd).padding(8.dp), alignEnd = true) },
         )
     }
 }
 
-/** Stato del sentiero in una capsula con simbolo ed etichetta: si legge anche senza distinguere i colori (§2). */
+/** Stato del sentiero in una capsula con simbolo ed etichetta, leggibile anche da chi non distingue i colori. */
 @Composable
 internal fun TrailStateBadge(state: TrailState) {
     val colors = MaterialTheme.colorScheme
@@ -419,7 +441,7 @@ internal fun TrailStateBadge(state: TrailState) {
         TrailState.CLOSED -> AppIcons.Close
         TrailState.UNKNOWN -> AppIcons.Info
     }
-    // testo e fondo con contrasto verificato (almeno 5:1); il rosso solo per "Chiuso"
+    // Testo e fondo hanno un contrasto verificato di almeno 5:1; il rosso è usato solo per "Chiuso".
     val (content, container) = when (state) {
         TrailState.OPEN -> colors.primary to colors.primaryContainer
         TrailState.WARNING -> warningTextColor() to warningSoftColor()
@@ -429,13 +451,14 @@ internal fun TrailStateBadge(state: TrailState) {
     StatusChip(stringResource(state.label), content, icon = icon, container = container)
 }
 
+/** Riga di un POI nella lista del dettaglio: bollino del tipo, nome e tipo. */
 @Composable
 private fun PoiRow(poi: PoiResponse) {
     Row(
         Modifier.fillMaxWidth().heightIn(min = 56.dp).padding(horizontal = 16.dp, vertical = 8.dp).semantics(mergeDescendants = true) { },
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        // lo stesso bollino della mappa (decorativo: il tipo è scritto accanto)
+        // Lo stesso bollino usato sulla mappa, decorativo perché il tipo è scritto accanto.
         Box(Modifier.size(32.dp).background(poi.type.markerColor(), CircleShape), contentAlignment = Alignment.Center) {
             Icon(poi.type.icon(), contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
         }
@@ -447,6 +470,7 @@ private fun PoiRow(poi: PoiResponse) {
     }
 }
 
+/** Riga di un pericolo attivo nel dettaglio: icona colorata per gravità, tipo e gravità a parole. */
 @Composable
 private fun HazardRow(hazard: HazardResponse) {
     val tint = hazard.severity.color()
@@ -454,7 +478,7 @@ private fun HazardRow(hazard: HazardResponse) {
         Modifier.fillMaxWidth().heightIn(min = 72.dp).padding(horizontal = 16.dp, vertical = 14.dp).semantics(mergeDescendants = true) { },
         verticalAlignment = Alignment.Top,
     ) {
-        // decorativo: tipo e gravità sono scritti accanto (il rosso solo per CRITICAL)
+        // Icona decorativa: tipo e gravità sono scritti accanto (il rosso solo per CRITICAL).
         IconTile(AppIcons.Alert, tint = tint, size = 40.dp)
         Spacer(Modifier.width(14.dp))
         Column {
@@ -468,7 +492,7 @@ private fun HazardRow(hazard: HazardResponse) {
     }
 }
 
-/** Profilo altimetrico: l'area sotto la linea sfuma verso il basso; quota minima e massima negli angoli in alto. */
+/** Grafico del profilo altimetrico: l'area sotto la linea sfuma verso il basso; quota minima e massima negli angoli in alto. */
 @Composable
 private fun ElevationChart(profile: ElevationProfile) {
     val colors = MaterialTheme.colorScheme
@@ -480,6 +504,7 @@ private fun ElevationChart(profile: ElevationProfile) {
                 val values = profile.meters
                 val low = profile.minM.toFloat()
                 val range = (profile.maxM - profile.minM).coerceAtLeast(20).toFloat()
+                // Posizione sul grafico del campione [index]: x lungo la larghezza, y scalata tra quota minima e massima.
                 fun at(index: Int) = Offset(
                     size.width * index / (values.size - 1),
                     size.height * (1f - (values[index].toFloat() - low) / range),
@@ -513,18 +538,25 @@ private fun ElevationChart(profile: ElevationProfile) {
     }
 }
 
-// "Sentiero 404: Camigliatello – Spezzano" → ("404", "Camigliatello – Spezzano"); altri nomi restano interi
+/**
+ * Separa numero e nome di un sentiero: "Sentiero 404: Camigliatello - Spezzano" diventa ("404", "Camigliatello -
+ * Spezzano"). I nomi che non seguono questo schema restano interi, con il numero null.
+ */
 internal fun splitTrailName(name: String): Pair<String?, String> {
     val match = Regex("""^Sentiero\s+([\p{L}\d./-]{1,8})\s*[:–-]\s*(.+)$""", RegexOption.IGNORE_CASE).find(name.trim())
     return if (match != null) match.groupValues[1] to match.groupValues[2] else null to name
 }
 
-/** Quello che la descrizione importata dice in righe fisse: segnavia e scala CAI vanno nell'occhiello. */
+/**
+ * Dati estratti dalle righe fisse della descrizione importata: [waymark] è il segnavia e [caiScale] la scala CAI,
+ * mostrati nell'occhiello; [text] è il resto della descrizione, oppure null se vuoto.
+ */
 internal data class TrailFacts(val waymark: String?, val caiScale: String?, val text: String?)
 
 /**
- * Divide la descrizione importata: "Segnavia 412" e "Scala CAI: T" diventano dati, le righe di attribuzione delle fonti
- * (OpenStreetMap, ©) si tolgono (stanno in Profilo > Crediti e licenze), il resto resta il testo.
+ * Divide la descrizione importata: le righe "Segnavia 412" e "Scala CAI: T" diventano dati, quelle di attribuzione delle
+ * fonti (OpenStreetMap, simbolo del copyright, Wikimedia) si tolgono perché sono già in Profilo, Crediti e licenze, e il
+ * resto rimane come testo.
  */
 internal fun trailFacts(description: String?): TrailFacts {
     var waymark: String? = null
@@ -538,16 +570,20 @@ internal fun trailFacts(description: String?): TrailFacts {
     return TrailFacts(waymark, scale, kept.joinToString("\n").trim().ifBlank { null })
 }
 
-/** Una riga che cita la fonte dei dati: si mostra solo nei crediti. */
+/** Indica se una riga cita la fonte dei dati: queste righe si mostrano solo nei crediti. */
 internal fun isSourceCredit(line: String): Boolean =
     line.contains("OpenStreetMap", ignoreCase = true) || line.contains("©") || line.contains("Wikimedia", ignoreCase = true)
 
-// 190 minuti → "3 h 10", 45 → "45 min"
+/** Formatta una durata in minuti: per esempio 190 diventa "3 h 10" e 45 diventa "45 min". */
 @Composable
 private fun durationLabel(minutes: Int): String =
     if (minutes >= 60) stringResource(Res.string.trail_hours_minutes, minutes / 60, (minutes % 60).toString().padStart(2, '0')) else stringResource(Res.string.trail_minutes, minutes)
 
-// Striscia di foto: ognuna chiede il suo URL firmato quando compare, e uno nuovo se il download non riesce (scaduto)
+/**
+ * Striscia orizzontale delle foto del sentiero. Ogni foto chiede il proprio URL firmato quando compare ([onShown]) e
+ * uno nuovo se il download non riesce, di solito perché è scaduto ([onFailed]); una foto non disponibile mostra un
+ * testo e il tocco riprova ([onRetry]).
+ */
 @Composable
 private fun PhotoStrip(
     photos: List<MediaResponse>,
@@ -572,7 +608,7 @@ private fun PhotoStrip(
                 contentAlignment = Alignment.Center,
             ) {
                 if (photo.id in failed) {
-                    // tutta la foto è il bersaglio del tocco (ben oltre i 48 dp)
+                    // Tutta la foto è l'area toccabile, ben più grande dei 48 dp minimi.
                     Box(
                         Modifier.fillMaxSize().clickable(role = Role.Button) { onRetry(photo.id) },
                         contentAlignment = Alignment.Center,
@@ -586,7 +622,7 @@ private fun PhotoStrip(
                     }
                 } else if (url != null) {
                     val request = remember(url) {
-                        // la chiave della cache è l'id, non l'URL: l'URL cambia a ogni richiesta, la foto no
+                        // La chiave della cache è l'id e non l'URL: l'URL cambia a ogni richiesta, la foto no.
                         ImageRequest.Builder(context).data(url).memoryCacheKey(photo.id).diskCacheKey(photo.id).build()
                     }
                     AsyncImage(
@@ -604,6 +640,7 @@ private fun PhotoStrip(
     }
 }
 
+/** Corpo di una sezione caricata a parte: indicatore, errore con "Riprova" oppure il contenuto [content]. */
 @Composable
 private fun <T> SectionBody(section: Section<T>, onRetry: () -> Unit, content: @Composable (T) -> Unit) {
     when (section) {
@@ -618,6 +655,7 @@ private fun <T> SectionBody(section: Section<T>, onRetry: () -> Unit, content: @
     }
 }
 
+/** Stato di caricamento a tutta pagina, annunciato dai lettori di schermo. */
 @Composable
 private fun Loading() {
     Column(
@@ -631,6 +669,7 @@ private fun Loading() {
     }
 }
 
+/** Errore a tutta pagina quando il sentiero non si carica e non c'è una copia salvata, con "Riprova". */
 @Composable
 private fun LoadFailed(message: UiMessage, onRetry: () -> Unit) {
     Column(
@@ -646,6 +685,7 @@ private fun LoadFailed(message: UiMessage, onRetry: () -> Unit) {
     }
 }
 
+/** Titolo di una sezione, marcato come intestazione per l'accessibilità. */
 @Composable
 private fun SectionTitle(text: StringResource) {
     Text(
@@ -655,9 +695,10 @@ private fun SectionTitle(text: StringResource) {
     )
 }
 
-// Card del nuovo sistema (GroupCard: bianca, angoli da 24, ombra morbida)
+/** Card delle sezioni, basata su GroupCard (bianca, angoli da 24 dp, ombra morbida). */
 @Composable
 private fun Card(content: @Composable () -> Unit) = GroupCard(content = content)
 
+/** Linea di separazione tra le righe di una card. */
 @Composable
 private fun RowDivider() = HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)

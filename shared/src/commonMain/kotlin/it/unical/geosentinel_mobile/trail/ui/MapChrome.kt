@@ -1,3 +1,5 @@
+// Elementi dell'interfaccia disegnati sopra la mappa principale: in alto la barra di ricerca con l'avatar dell'utente,
+// il foglio di ricerca e, in basso, il foglio "Vicino a te" con le card dei sentieri dell'area visibile.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.compose.foundation.background
@@ -85,10 +87,11 @@ import it.unical.geosentinel_mobile.core.ui.theme.MarkerRefuge
 import it.unical.geosentinel_mobile.core.ui.theme.warningTextColor
 import org.jetbrains.compose.resources.stringResource
 
-// Elementi sopra la mappa del redesign "Luce di quota" (Figma, schermata "01 Mappa"): in alto la barra di ricerca con
-// l'avatar, in basso il foglio "Vicino a te" con le card dei sentieri dell'area. La mappa sotto resta quella di prima.
-
-/** In alto: la capsula "Cerca sentieri, rifugi, cime" e, accanto, il tondo dell'utente che apre il Profilo. */
+/**
+ * Barra in alto sulla mappa: la capsula "Cerca sentieri, rifugi, cime", che apre la ricerca con [onSearch], e accanto
+ * il tondo dell'utente, che apre il Profilo con [onProfile]. Il tondo mostra l'iniziale [initial] e, se c'è, la foto
+ * profilo [avatarMediaId] sopra.
+ */
 @Composable
 internal fun MapTopBar(onSearch: () -> Unit, onProfile: () -> Unit, initial: Char?, avatarMediaId: String?, modifier: Modifier = Modifier) {
     val colors = MaterialTheme.colorScheme
@@ -128,21 +131,29 @@ internal fun MapTopBar(onSearch: () -> Unit, onProfile: () -> Unit, initial: Cha
             } else {
                 Icon(AppIcons.User, contentDescription = null, tint = colors.onTertiary, modifier = Modifier.size(22.dp))
             }
-            // la foto profilo sopra l'iniziale, come nel Profilo
+            // La foto profilo si disegna sopra l'iniziale, come nella schermata del Profilo.
             avatarMediaId?.let { AvatarPhoto(it, 48.dp) }
         }
     }
 }
 
-/** Un risultato della ricerca: un sentiero, un rifugio o un punto di quelli caricati sulla mappa. */
+/** Un risultato della ricerca: un sentiero, un rifugio o un POI tra quelli già caricati sulla mappa. */
 internal sealed interface MapSearchHit {
+    /** Nome mostrato e confrontato con la ricerca. */
     val name: String
+
+    /** Risultato che corrisponde a un sentiero. */
     data class Trail(val trail: TrailSummaryResponse) : MapSearchHit { override val name get() = trail.name }
+    /** Risultato che corrisponde a un rifugio. */
     data class Refuge(val refuge: RefugeResponse) : MapSearchHit { override val name get() = refuge.name }
+    /** Risultato che corrisponde a un punto di interesse. */
     data class Poi(val poi: PoiResponse) : MapSearchHit { override val name get() = poi.name }
 }
 
-/** I risultati per [query] (senza maiuscole né accenti): prima quelli che iniziano così, poi quelli che lo contengono. */
+/**
+ * Cerca [query] nei nomi di sentieri, rifugi e POI, ignorando maiuscole e accenti. Restituisce al massimo 30 risultati:
+ * prima quelli il cui nome inizia con il testo cercato, poi quelli che lo contengono, a parità dal nome più corto.
+ */
 internal fun searchMap(query: String, trails: List<TrailSummaryResponse>, refuges: List<RefugeResponse>, pois: List<PoiResponse>): List<MapSearchHit> {
     val needle = query.fold()
     if (needle.isBlank()) return emptyList()
@@ -153,12 +164,14 @@ internal fun searchMap(query: String, trails: List<TrailSummaryResponse>, refuge
         .take(30)
 }
 
+/** Normalizza un testo per la ricerca: minuscolo, senza spazi ai bordi e senza le vocali accentate italiane. */
 private fun String.fold(): String = lowercase().trim()
     .replace('à', 'a').replace('è', 'e').replace('é', 'e').replace('ì', 'i').replace('ò', 'o').replace('ù', 'u')
 
 /**
- * Ricerca (foglio dal basso): un campo e, sotto, i risultati tra quello che la mappa ha già caricato nell'area. Il
- * backend non ha una ricerca per nome: si cerca qui, e lo si dice ("Nell'area della mappa").
+ * Foglio di ricerca che sale dal basso: un campo di testo e, sotto, i risultati tra ciò che la mappa ha già caricato
+ * nell'area. Il backend non offre una ricerca per nome, quindi la ricerca avviene sul dispositivo e la UI lo dichiara
+ * ("Nell'area della mappa"). Il tocco su un risultato chiama [onPick].
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -172,7 +185,7 @@ internal fun MapSearchSheet(
     val colors = MaterialTheme.colorScheme
     var query by rememberSaveable { mutableStateOf("") }
     val hits = remember(query, trails, refuges, pois) { searchMap(query, trails, refuges, pois) }
-    // si scrive subito: la tastiera si apre con il foglio
+    // Il campo riceve subito il focus, così la tastiera si apre insieme al foglio.
     val focus = remember { FocusRequester() }
     LaunchedEffect(Unit) { focus.requestFocus() }
     ModalBottomSheet(
@@ -212,6 +225,7 @@ internal fun MapSearchSheet(
     }
 }
 
+/** Riga di un risultato: icona e colore del tipo, nome e tipo scritto a parole. */
 @Composable
 private fun SearchRow(hit: MapSearchHit, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -235,10 +249,11 @@ private fun SearchRow(hit: MapSearchHit, onClick: () -> Unit) {
 }
 
 /**
- * "Vicino a te" (Figma): un foglio basso sopra la barra con il titolo, l'ora del tramonto e i sentieri dell'area visibile
- * in card che scorrono di lato, i più vicini al centro della mappa per primi. Si chiude con la maniglia o la freccia
- * ([expanded], ricordato tra un avvio e l'altro) e resta una capsula sola, per lasciare la mappa libera. Il titolo apre
- * il foglio completo (Sentieri | Pericoli intorno alla tua posizione).
+ * Foglio "Vicino a te": un pannello basso sopra la barra di navigazione con il titolo, l'ora del tramonto e i sentieri
+ * dell'area visibile in card che scorrono in orizzontale, ordinati per distanza del loro punto di partenza da [center]
+ * (al massimo 12). Si chiude con la maniglia o con la freccia ([expanded], ricordato tra un avvio e l'altro) e resta
+ * una sola capsula, per lasciare libera la mappa. Il titolo apre con [onOpenNearMe] il foglio completo, con le schede
+ * Sentieri e Pericoli intorno alla posizione. [zoomTooLow] segnala che a questo zoom i sentieri non si caricano.
  */
 @Composable
 internal fun NearMePeek(
@@ -265,7 +280,7 @@ internal fun NearMePeek(
     ) {
         Column(Modifier.padding(bottom = if (expanded) 16.dp else 0.dp)) {
             if (expanded) {
-                // la maniglia: un tocco chiude il foglio
+                // Maniglia del foglio: un tocco lo chiude.
                 Box(
                     Modifier
                         .fillMaxWidth()
@@ -300,7 +315,7 @@ internal fun NearMePeek(
                     val daylight = rememberDaylight()
                     daylightShortLabel(daylight)?.let { StatusChip(it, colors.primary, icon = if (daylight.remaining != null) AppIcons.Sunset else AppIcons.Sunrise) }
                 }
-                // apri / chiudi: la freccia dice dove va il foglio
+                // Pulsante apri/chiudi: la direzione della freccia indica dove si sposterà il foglio.
                 Box(
                     Modifier
                         .size(48.dp)
@@ -341,6 +356,10 @@ internal fun NearMePeek(
     }
 }
 
+/**
+ * Card di un sentiero nel foglio "Vicino a te": numero e nome del sentiero, lunghezza e stato con un pallino colorato.
+ * [index] serve a far comparire le card una dopo l'altra con un piccolo ritardo.
+ */
 @Composable
 private fun PeekTrailCard(trail: TrailSummaryResponse, index: Int, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme

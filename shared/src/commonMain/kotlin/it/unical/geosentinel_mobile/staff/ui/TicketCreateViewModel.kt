@@ -1,3 +1,5 @@
+// ViewModel del form per aprire un nuovo ticket di manutenzione su un sentiero, più le regole sui campi condivise con
+// la modifica di un ticket.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.lifecycle.ViewModel
@@ -12,14 +14,16 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
-// I limiti del backend (CreateTicketRequest e UpdateTicketRequest)
+// Limiti di lunghezza di titolo e descrizione, gli stessi del server per la creazione e la modifica dei ticket.
 const val TICKET_TITLE_MIN = 3
 const val TICKET_TITLE_MAX = 150
 const val TICKET_DESCRIPTION_MAX = 2000
 
+/** Vero se titolo e descrizione (senza spazi ai bordi) rispettano i limiti di lunghezza. */
 internal fun ticketFieldsValid(title: String, description: String): Boolean =
     title.trim().length in TICKET_TITLE_MIN..TICKET_TITLE_MAX && description.trim().length <= TICKET_DESCRIPTION_MAX
 
+/** Stato del form del nuovo ticket. */
 data class TicketCreateUiState(
     val title: String = "",
     val description: String = "",
@@ -28,10 +32,14 @@ data class TicketCreateUiState(
     val error: UiMessage? = null,
     val created: Boolean = false,
 ) {
+    /** Vero se i campi sono validi e non c'è un invio in corso. */
     val canSave: Boolean get() = ticketFieldsValid(title, description) && !busy
 }
 
-// Nuovo ticket legato a un sentiero (il backend vuole un solo target): dal dettaglio del sentiero
+/**
+ * ViewModel del nuovo ticket, aperto dal dettaglio del sentiero [trailId]. Il server vuole un solo oggetto a cui
+ * legare il ticket, e qui è sempre il sentiero.
+ */
 class TicketCreateViewModel(
     private val trailId: String,
     private val tickets: TicketRepository,
@@ -40,12 +48,16 @@ class TicketCreateViewModel(
     private val _state = MutableStateFlow(TicketCreateUiState())
     val state: StateFlow<TicketCreateUiState> = _state.asStateFlow()
 
+    /** Aggiorna il titolo, troncato alla lunghezza massima. */
     fun onTitleChange(title: String) = _state.update { it.copy(title = title.take(TICKET_TITLE_MAX), error = null) }
 
+    /** Aggiorna la descrizione, troncata alla lunghezza massima. */
     fun onDescriptionChange(description: String) = _state.update { it.copy(description = description.take(TICKET_DESCRIPTION_MAX), error = null) }
 
+    /** Imposta la priorità. */
     fun onPriorityChange(priority: CreateTicketRequest.Priority) = _state.update { it.copy(priority = priority) }
 
+    /** Crea il ticket, una volta sola; una descrizione vuota si invia come assente. */
     fun save() {
         val current = _state.value
         if (!current.canSave || current.created) return

@@ -1,3 +1,4 @@
+// Schermata con cui un amministratore azzera la verifica in due passaggi di un utente che ha perso l'accesso.
 package it.unical.geosentinel_mobile.staff.ui
 
 import androidx.compose.foundation.layout.Spacer
@@ -35,7 +36,10 @@ import it.unical.geosentinel_mobile.core.ui.resolve
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
-// Azzeramento della verifica in due passaggi (M10.3): email, conferma, esito
+/**
+ * Azzeramento della verifica in due passaggi in tre momenti: inserimento dell'email, dialogo di conferma (l'identità
+ * della persona va verificata fuori dall'app) ed esito finale.
+ */
 @Composable
 fun MfaResetScreen(onBack: () -> Unit) {
     val viewModel = koinViewModel<MfaResetViewModel>()

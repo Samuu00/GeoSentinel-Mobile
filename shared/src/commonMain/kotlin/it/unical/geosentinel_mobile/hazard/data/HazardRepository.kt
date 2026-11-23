@@ -1,3 +1,5 @@
+// Accesso alle segnalazioni di pericolo tramite le API del backend: pericoli attivi di un sentiero, segnalazioni
+// dell'utente, coda da verificare per il gestore, pericoli vicini e invio di una nuova segnalazione.
 package it.unical.geosentinel_mobile.hazard.data
 
 import io.ktor.client.HttpClient
@@ -9,40 +11,48 @@ import it.unical.geosentinel_mobile.api.model.PagedModelHazardResponse
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.network.apiCall
 
-// Come il default del backend: una pagina riempie lo schermo e un po' oltre
+/** Elementi per pagina in "Le mie segnalazioni", uguale al default del backend: una pagina riempie lo schermo e oltre. */
 const val MY_HAZARDS_PAGE_SIZE = 20
 
-// "Pericoli vicini": 5 km dalla posizione. Limiti del server: 50 km e 50 risultati
+/** Raggio predefinito della ricerca "Pericoli vicini", in metri (5 km dalla posizione). */
 const val NEARBY_HAZARDS_RADIUS_METERS = 5_000.0
+
+/** Raggio massimo accettato dal server per la ricerca dei pericoli vicini, in metri (50 km). */
 const val MAX_NEARBY_HAZARDS_RADIUS_METERS = 50_000.0
+
+/** Numero massimo di pericoli restituiti dal server per una ricerca per vicinanza. */
 const val MAX_NEARBY_HAZARDS = 50
 
-/** Pericoli. Richiedono il login: per l'ospite l'app non li chiede nemmeno (il server risponderebbe 401). */
+/**
+ * Repository delle segnalazioni di pericolo. Tutte le rotte richiedono il login: per l'utente ospite l'app non le
+ * chiama nemmeno, perché il server risponderebbe 401. Nessuna risposta viene messa in cache: lo stato di una
+ * segnalazione cambia quando un gestore la verifica, e un dato vecchio mostrato come attuale sarebbe fuorviante.
+ */
 class HazardRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
 
     private val client by lazy(httpClient)
     private val hazardsApi by lazy { HazardReportsApi(apiBaseUrl, client) }
 
-    // Quali sono "attivi" (verificati da un gestore e non risolti) lo decide il server
+    /** Restituisce i pericoli attivi del sentiero [trailId]; quali siano attivi (verificati e non risolti) lo decide il server. */
     suspend fun activeOn(trailId: String): Result<List<HazardResponse>> = apiCall { hazardsApi.findActiveHazardsByTrail(trailId) }
 
     /**
-     * Le segnalazioni dell'utente (M4.3), in ogni stato, dalla più recente (l'ordine lo fissa il server). [page] parte
-     * da 0. Niente cache: lo stato cambia quando un gestore le verifica, e uno vecchio mostrato come attuale inganna.
+     * Restituisce una pagina delle segnalazioni fatte dall'utente, in qualunque stato, dalla più recente (l'ordine lo
+     * fissa il server). [page] parte da 0.
      */
     suspend fun mine(page: Int, size: Int = MY_HAZARDS_PAGE_SIZE): Result<PagedModelHazardResponse> =
         apiCall { hazardsApi.findMyHazards(page = page, size = size) }
 
     /**
-     * Le segnalazioni da verificare di tutti, ovunque siano (solo gestore, M8.1), dalla più recente. Niente cache:
-     * cambiano a ogni verifica.
+     * Restituisce una pagina delle segnalazioni ancora da verificare in tutto il parco, dalla più recente. È riservata
+     * al gestore del parco: per gli altri ruoli il server risponde con un errore.
      */
     suspend fun pending(page: Int, size: Int): Result<PagedModelHazardResponse> =
         apiCall { hazardsApi.findPendingHazards(page = page, size = size) }
 
     /**
-     * I pericoli attivi (verificati e non risolti) di tutti gli utenti entro [radiusMeters] da [center], dal più vicino
-     * (M4.4). Niente cache: un pericolo vecchio mostrato come attivo inganna.
+     * Restituisce i pericoli attivi (verificati e non risolti) segnalati da tutti gli utenti entro [radiusMeters] metri
+     * da [center], dal più vicino. Il raggio viene limitato all'intervallo accettato dal server.
      */
     suspend fun nearby(center: GeoPoint, radiusMeters: Double = NEARBY_HAZARDS_RADIUS_METERS): Result<List<HazardResponse>> =
         apiCall {
@@ -55,8 +65,10 @@ class HazardRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
         }
 
     /**
-     * Nuova segnalazione (M4.1). Nasce `SUBMITTED`: tra i pericoli del sentiero compare solo dopo la verifica di un
-     * gestore. Il POST non ha una `Idempotency-Key`, quindi su un errore di rete non si ritenta da soli: decide l'utente.
+     * Invia una nuova segnalazione nella posizione [location], eventualmente legata al sentiero [trailId]. La
+     * segnalazione nasce nello stato `SUBMITTED` e compare tra i pericoli del sentiero solo dopo la verifica di un
+     * gestore. Una descrizione vuota o di soli spazi viene inviata come assente. Il POST non ha una `Idempotency-Key`,
+     * quindi su un errore di rete non si ritenta in automatico (si rischierebbe un doppione): decide l'utente.
      */
     suspend fun report(
         type: CreateHazardRequest.Type,

@@ -1,3 +1,6 @@
+// Pulsante "Indietro" delle schermate aperte sopra le altre (dettagli, form).
+// Su iPhone non esiste un tasto Indietro di sistema, quindi ogni schermata di questo tipo ha il proprio
+// pulsante; su Android funziona in più anche il gesto Indietro del sistema.
 package it.unical.geosentinel_mobile.core.ui
 
 import androidx.compose.foundation.background
@@ -28,11 +31,15 @@ import geosentinel_mobile.shared.generated.resources.back
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Indietro delle schermate "spinte": su iPhone non c'è un tasto di sistema; su Android il gesto Indietro funziona comunque.
- * Bersaglio da 48 dp, tondo visibile da 44.
- * - [floating] (default): un tondo "vetro" (card quasi opaca con ombra) che si legge sopra foto, cielo e mappa;
- *   altrimenti solo la freccia, su una barra piena.
- * - [inBar]: sta in una barra che ha già il margine della safe area; altrimenti si posiziona da solo in alto a sinistra.
+ * Pulsante tondo con la freccia verso sinistra che chiama [onBack].
+ *
+ * L'area toccabile è di 48 dp (il minimo per l'accessibilità), il tondo visibile di 44 dp. Per i lettori di
+ * schermo il pulsante si annuncia con l'etichetta "Indietro".
+ *
+ * @param floating se vero (predefinito) il tondo è una superficie quasi opaca con ombra, leggibile sopra foto,
+ *   cielo e mappa; se falso si vede solo la freccia, adatta a una barra con sfondo pieno.
+ * @param inBar se vero il pulsante sta in una barra che applica già il margine della safe area; se falso si
+ *   posiziona da solo in alto a sinistra, sotto la barra di stato.
  */
 @Composable
 internal fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier, floating: Boolean = true, inBar: Boolean = false) {
@@ -46,7 +53,8 @@ internal fun BackButton(onBack: () -> Unit, modifier: Modifier = Modifier, float
     Box(
         placed
             .size(48.dp)
-            // niente clip: taglierebbe l'ombra; il ripple resta un tondo da 24
+            // Niente clip sul contenitore, perché taglierebbe l'ombra: l'effetto ripple resta comunque un
+            // cerchio di raggio 24 dp grazie a bounded = false.
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = ripple(bounded = false, radius = 24.dp),

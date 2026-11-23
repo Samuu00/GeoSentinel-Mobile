@@ -1,3 +1,6 @@
+// Schermata del Profilo per la verifica in due passaggi: mostra se è attiva, guida l'attivazione con l'app di
+// autenticazione, mostra i codici di recupero e permette di disattivarla o di rigenerare i codici. Ogni passo è un
+// form con lo scheletro comune; i passi con dati segreti bloccano gli screenshot.
 package it.unical.geosentinel_mobile.profile.ui
 
 import androidx.compose.foundation.layout.Arrangement
@@ -84,15 +87,18 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.viewmodel.koinViewModel
 
 /**
- * Verifica in due passaggi (M10.2): un form per passo, con lo scheletro degli altri. Niente QR code: sul telefono che
- * ha l'app di autenticazione basta aprire l'URI `otpauth://`; per un altro dispositivo c'è la chiave da copiare.
+ * Schermata della verifica in due passaggi, con un form per ogni [MfaStep].
+ *
+ * Non c'è un QR code: sul telefono che ha l'app di autenticazione basta aprire l'URI `otpauth`, e per configurare un
+ * altro dispositivo c'è la chiave da copiare. Indietro, anche quello di sistema, torna alla panoramica invece di
+ * chiudere la schermata.
  */
 @Composable
 fun MfaScreen(onBack: () -> Unit) {
     val viewModel = koinViewModel<MfaViewModel>()
     val state by viewModel.state.collectAsStateWithLifecycle()
     var confirmLeave by rememberSaveable { mutableStateOf(false) }
-    // dal passo dei codici si esce solo confermando: non si rivedranno più
+    // Dal passo dei codici di recupero si esce solo dopo una conferma, perché non si potranno più rivedere.
     val stepBack = { if (state.step == MfaStep.CODES) confirmLeave = true else viewModel.back() }
     if (state.step != MfaStep.OVERVIEW) {
         @Suppress("DEPRECATION")
@@ -154,7 +160,11 @@ fun MfaScreen(onBack: () -> Unit) {
     }
 }
 
-// Un passo con un codice da scrivere: TOTP a 6 cifre, o anche un codice di recupero (disattivazione)
+/**
+ * Form di un passo che chiede un codice. Con [freeText] falso accetta solo il codice a 6 cifre (tastiera numerica);
+ * con [freeText] vero accetta anche un codice di recupero, come nella disattivazione. [above] disegna contenuti extra
+ * sopra il campo, per esempio la chiave nel passo di attivazione.
+ */
 @Composable
 private fun CodeStep(
     state: MfaUiState,
@@ -193,15 +203,20 @@ private fun CodeStep(
     }
 }
 
-// L'URI apre l'app di autenticazione (Google Authenticator, Aegis su Android; Password su iOS); sotto la chiave a gruppi
-// di 4 per chi la scrive a mano
+/**
+ * Chiave segreta dell'attivazione. Il pulsante apre l'URI `otpauth` nell'app di autenticazione installata (per
+ * esempio Google Authenticator o Aegis su Android, Password su iOS); se nessuna app lo gestisce si chiama
+ * [onOpenFailed]. Sotto c'è la chiave in gruppi di 4 caratteri, più facile da scrivere a mano, con il pulsante per
+ * copiarla.
+ */
 @Composable
 private fun SetupKey(state: MfaUiState, onOpenFailed: (UiMessage) -> Unit) {
     val uriHandler = LocalUriHandler.current
     val clipboard = LocalClipboard.current
     val scope = rememberCoroutineScope()
     val secret = state.secret ?: return
-    // la chiave vale quanto i codici di recupero: chi la vede genera i codici per sempre
+    // La chiave è sensibile quanto i codici di recupero: chi la vede può generare codici validi per sempre. Per
+    // questo la schermata blocca screenshot e anteprima nelle app recenti.
     SecureScreen()
     state.otpauthUri?.let { uri ->
         OutlinedButton(
@@ -211,7 +226,8 @@ private fun SetupKey(state: MfaUiState, onOpenFailed: (UiMessage) -> Unit) {
     }
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(stringResource(Res.string.mfa_setup_key), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        // niente SelectionContainer: la copia passa solo dal pulsante, che segna gli appunti come sensibili
+        // Il testo non è selezionabile: la copia passa solo dal pulsante, che segna il contenuto degli appunti come
+        // sensibile e quindi non lo mostra nelle anteprime del sistema.
         Text(secret.chunked(4).joinToString(" "), style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
         TextButton(
             onClick = { scope.launch { clipboard.setClipEntry(sensitiveClipEntry(secret)) } },
@@ -220,8 +236,10 @@ private fun SetupKey(state: MfaUiState, onOpenFailed: (UiMessage) -> Unit) {
     }
 }
 
-// Il codice che il server ha mandato all'email dell'account con lo setup (ADR-0026 del backend): prova che chi attiva
-// la verifica possiede l'email
+/**
+ * Campo del codice che il server invia all'email dell'account quando si avvia l'attivazione. Serve a dimostrare che
+ * chi attiva la verifica ha accesso anche alla casella email.
+ */
 @Composable
 private fun EmailCode(state: MfaUiState, viewModel: MfaViewModel) {
     FormTextField(
@@ -233,8 +251,10 @@ private fun EmailCode(state: MfaUiState, viewModel: MfaViewModel) {
     )
 }
 
-// I codici di recupero, mostrati una volta sola: niente screenshot, copia segnata come sensibile, "Fine" solo dopo
-// "Li ho salvati"
+/**
+ * Passo con i codici di recupero, mostrati una volta sola. Gli screenshot sono bloccati, la copia segna gli appunti
+ * come sensibili e il pulsante "Fine" si attiva solo dopo aver spuntato "Li ho salvati".
+ */
 @Composable
 private fun RecoveryCodes(state: MfaUiState, viewModel: MfaViewModel, onBack: () -> Unit) {
     SecureScreen()

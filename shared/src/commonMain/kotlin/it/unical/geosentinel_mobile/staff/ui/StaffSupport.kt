@@ -1,3 +1,4 @@
+// Funzioni di supporto condivise dalle schermate del personale.
 package it.unical.geosentinel_mobile.staff.ui
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -9,8 +10,9 @@ import it.unical.geosentinel_mobile.core.ui.uiMessage
 import org.jetbrains.compose.resources.StringResource
 
 /**
- * Il messaggio per l'utente. [onRuleViolation] sostituisce il generico "Operazione non consentita" del 422
- * `business-rule` con una frase che dice cosa è successo in questa schermata: la regola resta solo sul server.
+ * Messaggio per l'utente a partire da un errore. Se è indicato, [onRuleViolation] sostituisce il generico "Operazione
+ * non consentita" del 422 `business-rule` con una frase che spiega cosa è successo in quella schermata; la regola
+ * vera e propria resta solo sul server.
  */
 internal fun Throwable.toUiMessage(onRuleViolation: StringResource? = null): UiMessage {
     val error = (this as? ApiException)?.error ?: return UiMessage(Res.string.error_generic)

@@ -1,3 +1,7 @@
+// Archivio sicuro dei token di sessione su iOS, basato sul Keychain.
+// Il Keychain si usa attraverso le API C di Security e CoreFoundation, chiamate da Kotlin/Native con l'interop C:
+// per questo il file gestisce a mano la memoria degli oggetti CoreFoundation che crea.
+// Viene compilato solo sul runner macOS della CI.
 @file:OptIn(ExperimentalForeignApi::class)
 
 package it.unical.geosentinel_mobile.core.session
@@ -46,42 +50,63 @@ import platform.Security.kSecReturnData
 import platform.Security.kSecValueData
 import platform.posix.memcpy
 
+/** Crea l'archivio iOS. [filesDir] non serve, perché i token stanno nel Keychain e non in un file. */
 internal actual fun createSecureTokenStore(filesDir: String): SecureTokenStore = KeychainTokenStore()
 
 /**
- * Token nel Keychain, leggibili dopo il primo sblocco (anche con lo schermo bloccato, per le push) e solo su questo
- * dispositivo: `ThisDeviceOnly` li esclude dai backup e dal trasferimento su un altro iPhone.
+ * Token salvati come voce "generic password" nel Keychain. Sono leggibili dopo il primo sblocco del telefono
+ * (quindi anche a schermo bloccato, quando arriva una notifica push) e solo su questo dispositivo: l'accesso
+ * `ThisDeviceOnly` li esclude dai backup e dal trasferimento su un altro iPhone.
+ *
+ * Gli errori del Keychain diversi da "voce non trovata" vengono lanciati come eccezione; li gestisce
+ * `SessionManager`, che li trasforma in un errore o nello stato di ospite.
  */
 internal class KeychainTokenStore : SecureTokenStore {
 
+    /**
+     * Legge i token. Alla prima lettura dopo un'installazione cancella prima l'eventuale sessione rimasta; se i dati
+     * salvati non sono in un formato valido li cancella e restituisce null.
+     */
     override suspend fun read(): AuthTokens? = withContext(Dispatchers.IO) {
         clearIfReinstalled()
         val bytes = keychainRead() ?: return@withContext null
         try {
             decodeAuthTokens(bytes)
         } catch (_: IllegalArgumentException) {
-            keychainDelete() // formato non valido: si riparte da ospite
+            keychainDelete() // Formato non valido: si riparte come ospite.
             null
         }
     }
 
-    // Prima update, add solo se la voce manca: mai un momento senza token salvati (con delete + add, un add fallito
-    // li perderebbe mentre il server li ha già ruotati). Gli attributi di accesso li fissa l'add e l'update li tiene.
+    /**
+     * Salva i token aggiornando la voce esistente e creandola solo se manca. Non si usa "cancella e aggiungi"
+     * perché lascerebbe un momento senza token salvati: se l'aggiunta fallisse, i token andrebbero persi mentre il
+     * server li ha già ruotati. Gli attributi di accesso li stabilisce l'aggiunta e l'aggiornamento li conserva.
+     */
     override suspend fun write(tokens: AuthTokens) = withContext(Dispatchers.IO) {
         val bytes = tokens.encode()
         if (!keychainUpdate(bytes)) keychainAdd(bytes)
     }
 
+    /** Cancella la voce della sessione dal Keychain. */
     override suspend fun clear() = withContext(Dispatchers.IO) { keychainDelete() }
 }
 
+// Attributo "service" della voce nel Keychain: identifica la sessione dell'app.
 private const val SERVICE = "it.unical.geosentinel_mobile.session"
+// Chiave in UserDefaults che segna "Keychain già controllato dopo questa installazione".
 private const val INSTALLED_KEY = "session.keychainChecked"
+// Attributo "account" della voce nel Keychain.
 private const val ACCOUNT = "tokens"
 
+/** Errore del Keychain con il codice OSStatus restituito dal sistema. */
 private class KeychainException(status: Int) : Exception("Keychain OSStatus $status")
 
-// Query sulla voce della sessione, più gli attributi extra. Libera tutto ciò che crea (regola "Create" di CF).
+/**
+ * Costruisce la query che individua la voce della sessione (classe, service e account), aggiunge gli attributi
+ * [extra] e la passa a [block], restituendone il risultato. Secondo la regola "Create" di CoreFoundation chi crea un
+ * oggetto deve rilasciarlo: per questo nel `finally` si liberano la query e le stringhe create qui.
+ */
 private inline fun <T> withSessionQuery(extra: Map<CFStringRef?, CFTypeRef?>, block: (CFDictionaryRef?) -> T): T {
     val service = CFBridgingRetain(SERVICE)
     val account = CFBridgingRetain(ACCOUNT)
@@ -99,6 +124,7 @@ private inline fun <T> withSessionQuery(extra: Map<CFStringRef?, CFTypeRef?>, bl
     }
 }
 
+/** Legge i byte della voce; null se la voce non esiste. Lancia [KeychainException] per gli altri errori. */
 private fun keychainRead(): ByteArray? =
     withSessionQuery(mapOf(kSecReturnData to kCFBooleanTrue, kSecMatchLimit to kSecMatchLimitOne)) { query ->
         memScoped {
@@ -111,6 +137,10 @@ private fun keychainRead(): ByteArray? =
         }
     }
 
+/**
+ * Crea la voce con i byte dati e l'accesso "dopo il primo sblocco, solo su questo dispositivo".
+ * Lancia [KeychainException] se il sistema rifiuta l'aggiunta.
+ */
 private fun keychainAdd(bytes: ByteArray) {
     val data = CFBridgingRetain(bytes.toNSData())
     try {
@@ -124,8 +154,13 @@ private fun keychainAdd(bytes: ByteArray) {
     }
 }
 
-// Il Keychain sopravvive alla disinstallazione, UserDefaults no: alla prima lettura dopo un'installazione si cancella
-// la sessione rimasta da prima (es. telefono ceduto o app reinstallata). Se il Keychain non risponde, si riprova dopo.
+/**
+ * Cancella la sessione rimasta da un'installazione precedente. Su iOS il Keychain sopravvive alla disinstallazione
+ * dell'app, UserDefaults no: se il segno in UserDefaults manca, l'app è stata appena installata e un'eventuale voce
+ * nel Keychain appartiene a una vecchia installazione (per esempio un telefono ceduto). Il segno si scrive solo
+ * dopo la cancellazione: se il Keychain non risponde, l'eccezione interrompe la funzione e si riprova alla lettura
+ * successiva.
+ */
 private fun clearIfReinstalled() {
     val defaults = NSUserDefaults.standardUserDefaults
     if (defaults.boolForKey(INSTALLED_KEY)) return
@@ -133,7 +168,10 @@ private fun clearIfReinstalled() {
     defaults.setBool(true, INSTALLED_KEY)
 }
 
-// false se la voce non c'è ancora
+/**
+ * Sostituisce i byte della voce esistente. Restituisce false se la voce non esiste ancora; lancia
+ * [KeychainException] per gli altri errori.
+ */
 private fun keychainUpdate(bytes: ByteArray): Boolean {
     val data = CFBridgingRetain(bytes.toNSData())
     val attributes = CFDictionaryCreateMutable(null, 0, kCFTypeDictionaryKeyCallBacks.ptr, kCFTypeDictionaryValueCallBacks.ptr)
@@ -152,13 +190,16 @@ private fun keychainUpdate(bytes: ByteArray): Boolean {
     }
 }
 
+/** Cancella la voce; non è un errore se la voce non esiste. */
 private fun keychainDelete() = withSessionQuery(emptyMap()) { query ->
     val status = SecItemDelete(query)
     if (status != errSecSuccess && status != errSecItemNotFound) throw KeychainException(status)
 }
 
+/** Copia i byte in un `NSData`, bloccando l'array in memoria durante la copia. */
 private fun ByteArray.toNSData(): NSData = usePinned { NSData.dataWithBytes(it.addressOf(0), size.convert()) }
 
+/** Copia il contenuto di un `NSData` in un nuovo `ByteArray`. */
 private fun NSData.toByteArray(): ByteArray {
     val result = ByteArray(length.toInt())
     if (result.isNotEmpty()) result.usePinned { memcpy(it.addressOf(0), bytes, length) }

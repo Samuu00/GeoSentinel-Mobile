@@ -1,3 +1,5 @@
+// Stato e logica della registrazione di un nuovo escursionista. I campi si controllano prima con le stesse regole
+// del server, poi la richiesta passa da SessionManager, che a registrazione riuscita apre anche la sessione.
 package it.unical.geosentinel_mobile.auth.ui
 
 import androidx.lifecycle.ViewModel
@@ -26,8 +28,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.LocalDate
 
+/** Campi del form di registrazione a cui si può attaccare un errore. */
 enum class RegisterField { EMAIL, PASSWORD, DISPLAY_NAME, BIRTH_DATE }
 
+/** Stato immutabile del form di registrazione; [registered] dice alla schermata di chiudersi. */
 data class RegisterUiState(
     val email: String = "",
     val password: String = "",
@@ -38,28 +42,34 @@ data class RegisterUiState(
     val error: UiMessage? = null,
     val registered: Boolean = false,
 ) {
-    // niente dati personali nei log
+    // toString scritto a mano: email, password, nome e data di nascita non devono finire nei log.
     override fun toString() = "RegisterUiState(submitting=$submitting, fieldErrors=${fieldErrors.keys}, error=$error)"
 }
 
+/** ViewModel della registrazione: tiene lo stato del form, valida i campi e invia la richiesta. */
 class RegisterViewModel(private val session: SessionManager) : ViewModel() {
 
     private val _state = MutableStateFlow(RegisterUiState())
     val state: StateFlow<RegisterUiState> = _state.asStateFlow()
 
+    /** Aggiorna l'email. */
     fun onEmailChange(value: String) = edit(RegisterField.EMAIL) { copy(email = value) }
+    /** Aggiorna la password. */
     fun onPasswordChange(value: String) = edit(RegisterField.PASSWORD) { copy(password = value) }
+    /** Aggiorna il nome visualizzato. */
     fun onDisplayNameChange(value: String) = edit(RegisterField.DISPLAY_NAME) { copy(displayName = value) }
+    /** Imposta la data di nascita scelta dal calendario. */
     fun onBirthDateChange(value: LocalDate) = edit(RegisterField.BIRTH_DATE) { copy(birthDate = value) }
 
-    // Modificare un campo toglie il suo errore
+    /** Applica [change] allo stato: modificare un campo toglie il suo errore e quello generale. */
     private fun edit(field: RegisterField, change: RegisterUiState.() -> RegisterUiState) =
         _state.update { it.change().copy(fieldErrors = it.fieldErrors - field, error = null) }
 
+    /** Valida il form e, se è corretto, invia la registrazione. */
     fun submit() {
         val current = _state.value
         if (current.submitting) return
-        // Prima i controlli locali (gli stessi del server): niente richiesta se il form è già sbagliato
+        // Prima i controlli locali, gli stessi del server: se il form è già sbagliato non si fa la richiesta.
         val localErrors = localErrors(current)
         val birthDate = current.birthDate
         if (localErrors.isNotEmpty() || birthDate == null) {
@@ -79,6 +89,12 @@ class RegisterViewModel(private val session: SessionManager) : ViewModel() {
         }
     }
 
+    /**
+     * Controlli locali del form: email con la chiocciola, password secondo [passwordProblem], nome tra 2 e 100
+     * caratteri (spazi esclusi ai bordi), data di nascita presente.
+     *
+     * @return gli errori per campo, vuoto se il form è valido.
+     */
     private fun localErrors(state: RegisterUiState): Map<RegisterField, UiMessage> = buildMap {
         if (state.email.isBlank() || '@' !in state.email) put(RegisterField.EMAIL, UiMessage(Res.string.error_field_email))
         when (passwordProblem(state.password)) {
@@ -93,8 +109,13 @@ class RegisterViewModel(private val session: SessionManager) : ViewModel() {
     }
 }
 
-// I campi segnalati dal server (errors[].field) arrivano al form con un messaggio italiano nostro: il testo del
-// server è in inglese e non si mostra. Un campo che il form non conosce diventa un errore generico di validazione.
+/**
+ * Restituisce lo stato con l'errore del server applicato al form.
+ *
+ * Per un errore di validazione, ogni campo segnalato dal server riceve il messaggio italiano dell'app: il testo del
+ * server è in inglese e non si mostra. Se il server segnala un campo che il form non conosce, si aggiunge anche un
+ * errore generale di validazione.
+ */
 private fun RegisterUiState.withServerError(failure: Throwable): RegisterUiState =
     when (val error = (failure as? ApiException)?.error) {
         is ApiError.Validation -> {
@@ -102,12 +123,13 @@ private fun RegisterUiState.withServerError(failure: Throwable): RegisterUiState
             val unknownField = fields.isEmpty() || fields.size < error.fieldErrors.size
             copy(fieldErrors = fields, error = if (unknownField) UiMessage(Res.string.error_validation) else null)
         }
-        // business-rule in registrazione: di solito l'email è già registrata
+        // In registrazione un errore business-rule vuol dire di solito che l'email è già registrata.
         is ApiError.BusinessRule if error.slug == "business-rule" -> copy(error = UiMessage(Res.string.error_register_failed))
         null -> copy(error = UiMessage(Res.string.error_generic))
         else -> copy(error = error.uiMessage())
     }
 
+/** Corrispondenza tra i nomi dei campi nella risposta del server e i campi del form. */
 private val serverFields = mapOf(
     "email" to RegisterField.EMAIL,
     "password" to RegisterField.PASSWORD,
@@ -115,6 +137,7 @@ private val serverFields = mapOf(
     "birthDate" to RegisterField.BIRTH_DATE,
 )
 
+/** Messaggio da mostrare per ogni campo rifiutato dal server. */
 private val fieldMessages = mapOf(
     RegisterField.EMAIL to UiMessage(Res.string.error_field_email),
     RegisterField.PASSWORD to UiMessage(Res.string.error_field_password_short),

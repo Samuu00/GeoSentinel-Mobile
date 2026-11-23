@@ -1,3 +1,5 @@
+// Test di TrailRepository, il repository dei sentieri: dettaglio con richieste condizionali (ETag e 304), POI del
+// sentiero, sentieri e POI per riquadro e pulizia della cache Room quando il server non restituisce più un elemento.
 package it.unical.geosentinel_mobile.trail
 
 import io.ktor.http.HttpStatusCode
@@ -23,23 +25,30 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Instant
 
+/** Verifica la sincronizzazione tra il catalogo finto e la cache in memoria. */
 class TrailRepositoryTest {
 
     private val backend = FakeBackend()
     private val catalog = FakeCatalog(backend).also { it.install() }
     private val dao = FakeCatalogDao()
+    /** Istante corrente restituito al repository, modificabile per simulare il passare del tempo. */
     private var clock = Instant.fromEpochSeconds(1_790_000_000)
 
+    /** Crea un repository collegato al backend finto (da ospite), alla cache in memoria e all'orologio del test. */
     private suspend fun TestScope.repository(): TrailRepository {
         val (session, client) = sessionWith(backend)
         session.restore()
         return TrailRepository({ client }, TEST_BASE_URL, dao, now = { clock }, converting = StandardTestDispatcher(testScheduler))
     }
 
+    /** Riquadro che comprende la zona della Sila in cui si trova il sentiero di prova. */
     private val sila = GeoBounds.of(16.30, 39.10, 16.80, 39.50)
 
-    // ---- dettaglio con ETag ----------------------------------------------------------------------------------
 
+    /**
+     * La seconda apertura del sentiero invia l'ETag salvato; il server risponde 304, i dati in cache restano uguali e
+     * cambia solo la data dell'ultima conferma del server.
+     */
     @Test
     fun `la seconda apertura del sentiero manda l'ETag e con il 304 cambia solo la data`() = runTest {
         val repository = repository()
@@ -57,6 +66,7 @@ class TrailRepositoryTest {
         assertEquals(clock, second.updatedAt, "ma aggiorna la data")
     }
 
+    /** Se il sentiero è cambiato sul server arriva con un ETag nuovo, che sostituisce dati ed ETag in cache. */
     @Test
     fun `un sentiero cambiato sul server arriva con un ETag nuovo`() = runTest {
         val repository = repository()
@@ -71,11 +81,15 @@ class TrailRepositoryTest {
         assertEquals("W/\"d2\"", dao.etags["trail/$SEED_TRAIL_ID"])
     }
 
+    /**
+     * Se la copia in cache è sparita ma l'ETag è rimasto, l'ETag non si invia: un 304 lascerebbe la pagina senza dati.
+     */
     @Test
     fun `senza la copia in cache l'ETag non si manda`() = runTest {
         val repository = repository()
         repository.refreshDetail(SEED_TRAIL_ID)
-        dao.details.value = emptyMap() // copia persa, ETag rimasto
+        // Si perde la copia del dettaglio mentre l'ETag resta salvato.
+        dao.details.value = emptyMap()
 
         repository.refreshDetail(SEED_TRAIL_ID)
 
@@ -83,6 +97,10 @@ class TrailRepositoryTest {
         assertNotNull(repository.observeDetail(SEED_TRAIL_ID).first())
     }
 
+    /**
+     * In modalità aereo l'aggiornamento fallisce con un errore di rete, ma il sentiero già aperto resta in cache con la
+     * data dell'ultima conferma del server, non con l'ora corrente.
+     */
     @Test
     fun `in modalità aereo il sentiero già aperto resta con la sua data`() = runTest {
         val repository = repository()
@@ -98,6 +116,7 @@ class TrailRepositoryTest {
         assertEquals(savedAt, cached.updatedAt, "la data resta quella dell'ultima conferma del server")
     }
 
+    /** Il percorso salvato in cache mantiene l'ordine [lon, lat] e torna con le coordinate originali. */
     @Test
     fun `il percorso salvato resta in lon lat`() = runTest {
         val repository = repository()
@@ -108,8 +127,11 @@ class TrailRepositoryTest {
         assertEquals(39.2934, start.latitude)
     }
 
-    // ---- POI del sentiero ------------------------------------------------------------------------------------
 
+    /**
+     * I POI del sentiero si rivalidano con l'ETag (la seconda richiesta riceve un 304), e quando il server li cambia
+     * quelli tolti spariscono dalla cache.
+     */
     @Test
     fun `i POI del sentiero si rivalidano con l'ETag e quelli tolti spariscono`() = runTest {
         val repository = repository()
@@ -125,8 +147,8 @@ class TrailRepositoryTest {
         assertTrue(repository.observePoisOf(SEED_TRAIL_ID).first().isEmpty())
     }
 
-    // ---- bbox ------------------------------------------------------------------------------------------------
 
+    /** Se la risposta per un riquadro è completa, i sentieri che il server non restituisce più vengono tolti dalla cache. */
     @Test
     fun `la bbox completa toglie dalla cache i sentieri che il server non ha più`() = runTest {
         val repository = repository()
@@ -139,6 +161,10 @@ class TrailRepositoryTest {
         assertEquals(listOf(SEED_TRAIL_ID), repository.observeInBounds(sila).first().map { it.id })
     }
 
+    /**
+     * Se la risposta contiene il numero massimo di sentieri potrebbe essere stata troncata: in quel caso non si
+     * cancella niente dalla cache, perché un sentiero mancante potrebbe esistere ancora.
+     */
     @Test
     fun `con il massimo dei sentieri la cache non si svuota`() = runTest {
         val repository = repository()
@@ -152,6 +178,7 @@ class TrailRepositoryTest {
         assertTrue("fuori-dalla-risposta" in ids, "con una risposta parziale non si cancella niente")
     }
 
+    /** La lettura dalla cache restituisce solo i sentieri che toccano la vista richiesta. */
     @Test
     fun `dalla cache tornano solo i sentieri che toccano la vista`() = runTest {
         val repository = repository()
@@ -161,6 +188,7 @@ class TrailRepositoryTest {
         assertTrue(repository.observeInBounds(GeoBounds.of(10.0, 44.0, 11.0, 45.0)).first().isEmpty())
     }
 
+    /** Una riga della cache con un GeoJSON non valido viene saltata invece di far crashare la mappa. */
     @Test
     fun `una riga illeggibile si salta senza crash`() = runTest {
         val repository = repository()
@@ -169,17 +197,20 @@ class TrailRepositoryTest {
         assertNull(repository.observeInBounds(sila).first().firstOrNull { it.id == "rotto" })
     }
 
+    /** Crea il riassunto di un sentiero di prova con il percorso del sentiero del seed. */
     private fun summary(id: String) = TrailSummaryEntity(
         id = id, name = "Sentiero", difficulty = "EASY", lengthMeters = 1000.0, status = "OPEN",
         simplifiedGeoJson = SEED_TRAIL_PATH, minLon = 16.48, minLat = 39.29, maxLon = 16.52, maxLat = 39.31, updatedAt = clock,
     )
 
-    // ---- dalla review di M3 --------------------------------------------------------------------------------
 
+    /**
+     * Un sentiero a forma di L il cui riquadro tocca l'area senza esserne contenuto non viene cancellato: il server
+     * può non restituirlo anche se esiste ancora. Si cancellano solo i sentieri interamente dentro l'area.
+     */
     @Test
     fun `un sentiero a L che tocca l'area solo con il riquadro non si cancella`() = runTest {
         val repository = repository()
-        // il riquadro esce dall'area: il server può non restituirlo anche se esiste ancora
         dao.upsertSummaries(listOf(summary("a-elle").copy(minLon = 16.0, minLat = 39.0, maxLon = 16.9, maxLat = 39.9)))
 
         repository.refreshInBounds(sila)
@@ -187,6 +218,7 @@ class TrailRepositoryTest {
         assertTrue("a-elle" in dao.summaries.value, "si cancellano solo i riquadri tutti dentro l'area")
     }
 
+    /** Un 404 sul dettaglio cancella dalla cache sia la copia salvata sia il suo ETag. */
     @Test
     fun `un 404 toglie la copia salvata e il suo ETag`() = runTest {
         val repository = repository()
@@ -199,6 +231,7 @@ class TrailRepositoryTest {
         assertNull(dao.etags["trail/$SEED_TRAIL_ID"])
     }
 
+    /** Con una risposta completa per un riquadro, i POI che il server non restituisce più spariscono da quel riquadro. */
     @Test
     fun `con la risposta completa i POI tolti dal server spariscono dal riquadro`() = runTest {
         val repository = repository()
@@ -213,6 +246,7 @@ class TrailRepositoryTest {
         assertEquals(listOf("p1"), repository.observePoisInBounds(area).first().map { it.id })
     }
 
+    /** Un errore in scrittura del database (per esempio disco pieno) diventa un Result fallito e non un crash. */
     @Test
     fun `un errore del database diventa un fallimento e non un crash`() = runTest {
         val repository = repository()

@@ -1,3 +1,5 @@
+// ViewModel della pagina di dettaglio di un sentiero: dati del sentiero e POI dalla cache, aggiornati dalla rete, più
+// pericoli attivi e foto, che si caricano solo per l'utente loggato.
 package it.unical.geosentinel_mobile.trail.ui
 
 import androidx.lifecycle.ViewModel
@@ -31,35 +33,59 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Instant
 
-/** Una parte del dettaglio che si carica da sola (pericoli, foto). Hidden = da ospite non si chiede. */
+/** Stato di una parte del dettaglio che si carica in modo indipendente (pericoli, foto). */
 sealed interface Section<out T> {
+    /** Sezione nascosta: per l'ospite non viene nemmeno richiesta. */
     data object Hidden : Section<Nothing>
+
+    /** Caricamento in corso. */
     data object Loading : Section<Nothing>
+
+    /** Dati arrivati. */
     data class Loaded<T>(val value: T) : Section<T>
+
+    /** Caricamento fallito, con il messaggio da mostrare accanto a "Riprova". */
     data class Failed(val message: UiMessage) : Section<Nothing>
 }
 
+/**
+ * Stato immutabile della pagina di dettaglio di un sentiero.
+ *
+ * @property trail il sentiero mostrato, oppure null finché non è disponibile.
+ * @property updatedAt ultima conferma del server per la copia mostrata ("aggiornato alle").
+ * @property error errore quando il dettaglio non si è caricato e non esiste una copia in cache.
+ * @property stale errore quando l'aggiornamento non è riuscito ma c'è la copia in cache: si mostra quella, con l'invito
+ * a riprovare.
+ * @property pois i punti di interesse del sentiero.
+ * @property hazards i pericoli attivi del sentiero.
+ * @property photos le foto del sentiero.
+ * @property photoUrls URL firmati (validi 5 minuti) per id della foto; quelli mancanti si chiedono quando la foto compare.
+ * @property failedPhotos foto il cui URL non è arrivato (rete, 429) o che hanno esaurito i tentativi: si mostra un
+ * tocco per riprovare.
+ */
 data class TrailDetailUiState(
     val trail: TrailDetailResponse? = null,
-    // ultima conferma del server per la copia mostrata ("aggiornato alle", M3.3)
     val updatedAt: Instant? = null,
-    // il dettaglio non si è caricato e non c'è una copia in cache
     val error: UiMessage? = null,
-    // l'aggiornamento non è riuscito ma c'è la copia in cache: si mostra quella, con l'invito a riprovare
     val stale: UiMessage? = null,
     val pois: List<PoiResponse> = emptyList(),
     val hazards: Section<List<HazardResponse>> = Section.Hidden,
     val photos: Section<List<MediaResponse>> = Section.Hidden,
-    // URL firmati per id della foto (validi 5 minuti); quelle senza URL si chiedono quando compaiono
     val photoUrls: Map<String, String> = emptyMap(),
-    // foto per cui l'URL non è arrivato (rete, 429) o i tentativi sono finiti: si mostra un tocco per riprovare
     val failedPhotos: Set<String> = emptySet(),
 ) {
+    /** true finché non c'è né il sentiero né un errore. */
     val loading: Boolean get() = trail == null && error == null
 
+    /** Rappresentazione per i log, senza contenuti. */
     override fun toString() = "TrailDetailUiState(loaded=${trail != null}, error=$error, stale=$stale, hazards=$hazards, photos=$photos)"
 }
 
+/**
+ * ViewModel del dettaglio del sentiero [trailId]. La UI legge sempre dalla cache (prima la copia salvata, poi quella
+ * aggiornata dalla rete). Pericoli e foto richiedono il login: si caricano quando l'utente accede e spariscono quando
+ * esce, seguendo lo stato di [session].
+ */
 class TrailDetailViewModel(
     private val trailId: String,
     private val trails: TrailRepository,
@@ -71,20 +97,27 @@ class TrailDetailViewModel(
     private val _state = MutableStateFlow(TrailDetailUiState())
     val state: StateFlow<TrailDetailUiState> = _state.asStateFlow()
 
-    // URL chiesti per foto: un URL scaduto se ne fa dare un altro, ma non all'infinito (foto rotta sullo storage)
+    /**
+     * Numero di URL chiesti per ogni foto. Un URL scaduto viene sostituito con uno nuovo, ma non all'infinito: una
+     * foto danneggiata sullo storage fallirebbe sempre.
+     */
     private val urlRequests = mutableMapOf<String, Int>()
-    // Pericoli, foto e URL della sessione attuale: uno scope figlio di viewModelScope, annullato all'uscita.
-    // Resta attivo anche dopo pericoli e foto, per gli URL chiesti quando le foto compaiono.
+
+    /**
+     * Scope delle richieste della sessione attuale (pericoli, foto e URL), figlio di viewModelScope e annullato al
+     * logout. Resta attivo anche dopo il caricamento di pericoli e foto, per gli URL chiesti quando le foto compaiono.
+     */
     private var loggedInScope: CoroutineScope? = null
 
     init {
-        // La UI legge sempre dalla cache (M3.3): prima la copia salvata, poi quella aggiornata dalla rete
+        // La UI legge sempre dalla cache: prima arriva la copia salvata, poi quella aggiornata dalla rete.
         viewModelScope.launch {
             trails.observeDetail(trailId).collect { cached ->
                 _state.update { state ->
-                    // copia sparita (404 sul server): un "non aggiornato" già arrivato diventa l'errore della schermata
+                    // La copia è sparita (il server ha risposto 404): un avviso "non aggiornato" già arrivato diventa
+                    // l'errore della schermata.
                     if (cached == null) return@update state.copy(trail = null, updatedAt = null, error = state.error ?: state.stale, stale = null)
-                    // un errore arrivato prima della copia in cache diventa "non aggiornato"
+                    // Un errore arrivato prima della copia in cache diventa l'avviso "non aggiornato".
                     state.copy(trail = cached.value, updatedAt = cached.updatedAt, error = null, stale = state.stale ?: state.error)
                 }
             }
@@ -93,7 +126,8 @@ class TrailDetailViewModel(
             trails.observePoisOf(trailId).collect { pois -> _state.update { it.copy(pois = pois) } }
         }
         refresh()
-        // Pericoli e foto solo da loggati (le rotte vogliono il bearer): si caricano all'accesso, spariscono all'uscita
+        // Pericoli e foto solo per l'utente loggato, perché le rotte richiedono il token: si caricano all'accesso e
+        // spariscono al logout.
         viewModelScope.launch {
             session.state.map { it is SessionState.LoggedIn }.distinctUntilChanged().collect { loggedIn ->
                 loggedInScope?.cancel()
@@ -101,7 +135,7 @@ class TrailDetailViewModel(
                 urlRequests.clear()
                 _state.update { it.copy(hazards = Section.Hidden, photos = Section.Hidden, photoUrls = emptyMap(), failedPhotos = emptySet()) }
                 if (loggedIn) {
-                    // SupervisorJob: una sezione che fallisce non ferma le altre né i "Riprova" successivi
+                    // Con un SupervisorJob una sezione che fallisce non annulla le altre né i "Riprova" successivi.
                     val scope = CoroutineScope(viewModelScope.coroutineContext + SupervisorJob(viewModelScope.coroutineContext[Job]))
                     loggedInScope = scope
                     scope.launch { loadHazards() }
@@ -111,22 +145,29 @@ class TrailDetailViewModel(
         }
     }
 
+    /** "Riprova" del dettaglio: riparte solo se c'è un errore o un avviso di copia non aggiornata. */
     fun retry() {
         if (_state.value.error != null || _state.value.stale != null) refresh()
     }
 
+    /** "Riprova" della sezione dei pericoli, solo se il caricamento era fallito. */
     fun retryHazards() {
         if (_state.value.hazards is Section.Failed) loggedInScope?.launch { loadHazards() }
     }
 
+    /** "Riprova" della sezione delle foto, solo se il caricamento era fallito. */
     fun retryPhotos() {
         if (_state.value.photos is Section.Failed) loggedInScope?.launch { loadPhotos() }
     }
 
-    // Aggiorna la cache dalla rete (con l'ETag: se non è cambiato niente, 304 e solo la data nuova). Uno alla volta:
-    // tocchi ripetuti su "Riprova" non moltiplicano le richieste (rate limit di 60 al minuto)
+    /** Aggiornamento del dettaglio in corso, conservato per non avviarne due insieme. */
     private var refreshJob: Job? = null
 
+    /**
+     * Aggiorna dalla rete dettaglio e POI nella cache, con l'ETag: se nulla è cambiato il server risponde 304 e si
+     * aggiorna solo l'orario. Gira un aggiornamento alla volta, così tocchi ripetuti su "Riprova" non moltiplicano le
+     * richieste (il server ne accetta 60 al minuto).
+     */
     private fun refresh() {
         if (refreshJob?.isActive == true) return
         _state.update { it.copy(error = null, stale = null) }
@@ -136,64 +177,73 @@ class TrailDetailViewModel(
                 _state.update { if (it.trail != null) it.copy(stale = message) else it.copy(error = message) }
             }
         }
-        // I POI non sono essenziali: senza, il dettaglio si mostra lo stesso (con quelli in cache)
+        // I POI non sono essenziali: se l'aggiornamento fallisce il dettaglio si mostra lo stesso, con quelli in cache.
         viewModelScope.launch { trails.refreshPoisOf(trailId) }
     }
 
+    /** Carica i pericoli attivi del sentiero e aggiorna la sezione. */
     private suspend fun loadHazards() {
         _state.update { it.copy(hazards = Section.Loading) }
         val result = safely { hazards.activeOn(trailId) }
         _state.update { it.copy(hazards = result.toSection()) }
     }
 
+    /** Carica le foto del sentiero e aggiorna la sezione. */
     private suspend fun loadPhotos() {
         _state.update { it.copy(photos = Section.Loading) }
         val result = safely { media.photosOfTrail(trailId) }
         _state.update { it.copy(photos = result.toSection()) }
     }
 
-    /** La foto è sullo schermo e non ha ancora un URL. */
+    /** La foto [mediaId] è comparsa sullo schermo: se non ha ancora un URL, e non è già stato chiesto, lo chiede. */
     fun onPhotoShown(mediaId: String) {
         if (mediaId in _state.value.photoUrls || mediaId in urlRequests) return
         requestUrl(mediaId)
     }
 
-    /** Il download non è riuscito: di solito l'URL è scaduto (5 minuti), se ne chiede un altro. */
+    /**
+     * Il download della foto non è riuscito, di solito perché l'URL è scaduto (dopo 5 minuti): se ne chiede un altro,
+     * finché non si raggiunge MaxUrlRequests.
+     */
     fun onPhotoFailed(mediaId: String) {
         _state.update { it.copy(photoUrls = it.photoUrls - mediaId) }
         if ((urlRequests[mediaId] ?: 0) >= MaxUrlRequests) {
-            // tentativi finiti: "Foto non disponibile", e un tocco riparte da capo
+            // Tentativi esauriti: si mostra "Foto non disponibile" e un tocco riparte da capo.
             _state.update { it.copy(failedPhotos = it.failedPhotos + mediaId) }
             return
         }
         requestUrl(mediaId)
     }
 
-    /** Tocco su "Foto non disponibile": si riparte con un URL nuovo e i tentativi azzerati. */
+    /** Tocco su "Foto non disponibile": riparte con un URL nuovo e il conteggio dei tentativi azzerato. */
     fun onPhotoRetry(mediaId: String) {
         urlRequests.remove(mediaId)
         _state.update { it.copy(failedPhotos = it.failedPhotos - mediaId) }
         requestUrl(mediaId)
     }
 
+    /** Chiede al server un URL firmato per la foto, se l'utente è ancora loggato. */
     private fun requestUrl(mediaId: String) {
         val scope = loggedInScope ?: return
         urlRequests[mediaId] = (urlRequests[mediaId] ?: 0) + 1
         scope.launch {
             safely { media.downloadUrl(mediaId) }.fold(
                 onSuccess = { url -> _state.update { it.copy(photoUrls = it.photoUrls + (mediaId to url)) } },
-                // senza URL la foto resterebbe in caricamento: si mostra l'errore con il tocco per riprovare
+                // Senza URL la foto resterebbe in caricamento per sempre: si mostra l'errore con il tocco per riprovare.
                 onFailure = { _state.update { it.copy(failedPhotos = it.failedPhotos + mediaId) } },
             )
         }
     }
 
+    /** Costanti del ViewModel. */
     private companion object {
-        // il primo URL più due rinnovi
+        /** URL massimi per foto: il primo più due rinnovi. */
         const val MaxUrlRequests = 3
     }
 }
 
+/** Converte il risultato di un caricamento nello stato della sezione. */
 private fun <T> Result<T>.toSection(): Section<T> = fold({ Section.Loaded(it) }, { Section.Failed(it.toUiMessage()) })
 
+/** Converte un errore in un messaggio per l'utente, con un testo generico se non è un errore dell'API. */
 private fun Throwable.toUiMessage(): UiMessage = (this as? ApiException)?.error?.uiMessage() ?: UiMessage(Res.string.error_generic)

@@ -1,3 +1,6 @@
+// Radice dell'interfaccia condivisa tra Android e iOS. Applica il tema, costruisce lo Scaffold con la barra in basso e
+// il pulsante SOS, definisce il grafo di navigazione con tutte le schermate e coordina i comportamenti globali legati
+// alla sessione: ripristino della sessione, invio delle azioni rimaste in coda, SOS, notifiche push.
 package it.unical.geosentinel_mobile
 
 import androidx.compose.animation.EnterTransition
@@ -151,44 +154,55 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 
-// Durate delle transizioni "spinte": l'uscita è più rapida dell'entrata
+/** Durata in millisecondi dell'entrata di una schermata "spinta". */
 private const val PushMillis = 320
+
+/** Durata in millisecondi dell'uscita di una schermata "spinta", più rapida dell'entrata. */
 private const val PopMillis = 240
-// Dal dettaglio di un sentiero la mappa della segnalazione parte dall'inizio del percorso, da vicino
+
+/** Zoom della mappa del form di segnalazione aperto dal dettaglio di un sentiero: vicino all'inizio del percorso. */
 private const val ReportFromTrailZoom = 15.0
-// La base di una squadra nuova (M8.3): il parco intero, da cui si avvicina il punto
+
+/** Zoom iniziale della mappa per la base di una nuova squadra: tutto il parco, da cui l'utente si avvicina al punto. */
 private const val TeamBaseZoom = 10.0
 
+/**
+ * Composable radice dell'app, chiamato da MainActivity su Android e da MainViewController su iOS. Oltre a disegnare
+ * l'interfaccia gestisce gli effetti che dipendono dalla sessione e dal ruolo dell'utente.
+ */
 @Composable
 fun App() {
     val themeSettings = koinInject<ThemeSettings>()
     val session = koinInject<SessionManager>()
     val sessionState by session.state.collectAsState()
-    // null finché DataStore non ha letto il file (pochi ms): meglio un frame vuoto che un lampo del tema sbagliato
+    // Il tema è null finché DataStore non ha letto il file (pochi millisecondi): un frame vuoto è preferibile a un lampo
+    // del tema sbagliato.
     val themeMode by themeSettings.mode.collectAsState(initial = null)
     val scope = rememberCoroutineScope()
-    // Il ruolo arriva dalla sessione (GET /users/me) e decide solo cosa mostrare
+    // Il ruolo arriva dalla sessione (GET /users/me) e decide solo cosa mostrare: i permessi li controlla il server.
     val role = sessionState.role
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val destination = backStackEntry?.destination
 
-    // Sessione salvata letta una volta all'avvio (una seconda chiamata non fa nulla)
+    // La sessione salvata si legge una volta all'avvio (una seconda chiamata non avrebbe effetto).
     LaunchedEffect(session) { session.restore() }
-    // Prenotazioni rimaste in coda (app chiusa prima della risposta, M5.2): ripartono appena si sa chi è l'utente,
-    // con la stessa Idempotency-Key, quindi senza doppioni
+    // Le prenotazioni rimaste in coda (per esempio perché l'app è stata chiusa prima della risposta) ripartono appena si
+    // conosce l'utente, con la stessa Idempotency-Key, quindi senza creare doppioni.
     val bookings = koinInject<BookingRepository>()
-    // l'utente anche senza profilo letto (dal token), come per l'SOS: con poca rete /users/me può non arrivare
+    // Basta sapere che l'utente è loggato: il suo id si ricava dal token anche senza il profilo, come per l'SOS, perché
+    // con poca rete la risposta di /users/me può non arrivare.
     val loggedInNow = sessionState is SessionState.LoggedIn
     LaunchedEffect(loggedInNow) { if (loggedInNow) session.currentUserId()?.let { bookings.resendPending(it) } }
-    // SOS (M6.1): da loggati riparte quello rimasto in coda o si rilegge l'allerta attiva (anche senza profilo letto:
-    // con poca rete non si aspetta /users/me); da ospite o con la sessione chiusa si smette di inviare
+    // SOS: da loggati riparte l'invio rimasto in coda o si rilegge l'allerta attiva (anche senza il profilo, per non
+    // dipendere da /users/me con poca rete); da ospite o a sessione chiusa si smette di inviare.
     val sos = koinInject<SosController>()
     val loggedIn = sessionState is SessionState.LoggedIn
-    // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa
-    // (non durante il caricamento: si vedrebbe GUEST e una scheda del personale ripristinata verrebbe chiusa)
+    // true mentre la sessione si sta ancora leggendo. Serve a non reagire troppo presto: durante il caricamento il ruolo
+    // risulterebbe GUEST e, per esempio, una scheda del personale ripristinata verrebbe chiusa.
     val loading = sessionState == SessionState.Loading
-    // Da ospite (avvio o dopo un logout) le foto dei pericoli e dei sentieri, scaricate da loggati, non restano in cache
+    // Da ospite (all'avvio o dopo un logout) le foto di pericoli e sentieri, scaricate da loggati, vengono tolte dalla
+    // cache delle immagini.
     val imageContext = LocalPlatformContext.current
     LaunchedEffect(loggedIn, loading) {
         if (loading) return@LaunchedEffect
@@ -202,30 +216,34 @@ fun App() {
             }
         }
     }
-    // M6.2: con un'allerta attiva la posizione va al soccorso ogni 60 s, in primo piano e su ogni schermata
+    // Con un'allerta SOS attiva la posizione viene inviata al soccorso ogni 60 s, con l'app in primo piano e da
+    // qualunque schermata.
     val sosState by sos.state.collectAsState()
     if (sosState is SosState.Raised) SosLocationUpdates(sos)
 
-    // Push (M7.1): da loggati il token si registra a ogni avvio e a ogni rinnovo (il server tollera i doppioni);
-    // al logout lo toglie SessionManager
+    // Notifiche push: da loggati il token del dispositivo si registra a ogni avvio e a ogni rinnovo (il server accetta
+    // i doppioni); al logout lo rimuove SessionManager.
     val push = koinInject<PushManager>()
     val pushToken by push.token.collectAsState()
     LaunchedEffect(loggedIn, pushToken) {
         val token = pushToken
         if (loggedIn && token != null) push.register(token)
     }
-    // Il permesso delle notifiche la prima volta che serve: l'operatore da loggato, l'escursionista dal primo SOS
+    // Il permesso delle notifiche si chiede la prima volta che serve: all'operatore appena loggato, all'escursionista dal
+    // primo SOS.
     if (role.canViewAlerts() || sosState !is SosState.Idle) RequestNotificationPermission()
-    // Con l'app aperta lo stato dell'SOS si rilegge subito, senza aspettare il giro dei 30 s
+    // Con l'app aperta, alla ricezione di una notifica sul proprio SOS lo stato si rilegge subito, senza aspettare
+    // l'aggiornamento periodico.
     LaunchedEffect(push) {
         push.received.collect { event -> if (event !is PushEvent.SosRaised) sos.refresh() }
     }
-    // Notifica toccata (anche ad app chiusa: resta in PushManager finché la sessione non è letta).
-    // Una notifica doppia apre la stessa schermata.
+    // Notifica toccata dall'utente, anche ad app chiusa: resta in PushManager finché la sessione non è stata letta. Una
+    // notifica doppia apre la stessa schermata.
     val openedPush by push.opened.collectAsState()
-    // il grafo esiste solo con il NavHost composto, cioè dopo che il tema è letto: navigare prima è un crash
+    // Il grafo di navigazione esiste solo quando il NavHost è composto, cioè dopo la lettura del tema: navigare prima
+    // causerebbe un crash.
     val navReady = themeMode != null
-    // il ruolo vale solo con il profilo letto: LoggedIn(null) dà HIKER anche a un operatore
+    // Il ruolo è attendibile solo con il profilo letto: LoggedIn senza profilo risulterebbe HIKER anche per un operatore.
     val roleKnown = when (val current = sessionState) {
         is SessionState.LoggedIn -> current.profile != null
         SessionState.Loading -> false
@@ -235,12 +253,13 @@ fun App() {
         val event = openedPush ?: return@LaunchedEffect
         if (!roleKnown || !navReady) return@LaunchedEffect
         when (event) {
-            // all'operatore: il dettaglio dell'allerta sopra la scheda Allerte (M7.2). A chi non può vederla la notifica
-            // non serve: si scarta, così non si apre da sola per un operatore che entra dopo
+            // Nuovo SOS: all'operatore si apre il dettaglio dell'allerta sopra la scheda Allerte. Per chi non può
+            // vederla la notifica viene scartata, così non si aprirebbe da sola per un operatore che accede dopo.
             is PushEvent.SosRaised -> {
                 push.consumeOpened(event)
                 if (!role.canViewAlerts()) return@LaunchedEffect
-                // già aperto sulla stessa allerta (notifica doppia): non si ricrea, un dialogo aperto resta
+                // Se il dettaglio della stessa allerta è già aperto (notifica doppia) non si ricrea, così un eventuale
+                // dialogo aperto resta.
                 val current = navController.currentBackStackEntry
                 if (current?.destination?.hasRoute<Route.AlertDetail>() == true && current.toRoute<Route.AlertDetail>().alertId == event.alertId) {
                     return@LaunchedEffect
@@ -251,8 +270,9 @@ fun App() {
                 }
                 navController.navigate(Route.AlertDetail(event.alertId)) { launchSingleTop = true }
             }
-            // all'escursionista: la sua allerta. Prima si naviga: consumeOpened cambia la chiave e annulla questo effetto
-            // (refresh() gira nello scope del controller e finisce lo stesso)
+            // Aggiornamento del proprio SOS: all'escursionista si apre la schermata della sua allerta. Si naviga prima
+            // di consumeOpened, che cambia la chiave e annulla questo effetto; refresh() gira nello scope del
+            // controller e termina comunque.
             is PushEvent.SosDispatched, is PushEvent.SosResolved -> {
                 navController.navigate(Route.SosEmergency) { launchSingleTop = true }
                 push.consumeOpened(event)
@@ -260,24 +280,27 @@ fun App() {
             }
         }
     }
+    // Se il ruolo cambia (logout, sessione scaduta) e la scheda aperta non è più visibile, si torna alla mappa.
     LaunchedEffect(role, destination, loading) {
         if (loading) return@LaunchedEffect
         val tab = BottomNavItems.firstOrNull { item -> destination?.hierarchy?.any { it.hasRoute(item.route::class) } == true }
         if (tab != null && !tab.isVisible(role)) navController.navigate(Route.Map) { popUpTo(navController.graph.findStartDestination().id) }
     }
 
-    // stessa funzione tra una ricomposizione e l'altra: il livello delle allerte sulla mappa non si riconfigura ogni volta
+    // La stessa istanza della funzione tra una ricomposizione e l'altra, così il livello delle allerte sulla mappa non si
+    // riconfigura ogni volta.
     val openAlert: (String) -> Unit = remember(navController) { { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } } }
 
-    // Scheda Rifugi (redesign 11/2026): Esplora | Prenotazioni. Il segmento sta qui perché "Vedi le prenotazioni" (dal
-    // foglio Prenota) e il Profilo aprono direttamente le prenotazioni
-    // la destinazione di "Indicazioni" chiesta da un'altra schermata, finché la mappa non la prende
+    // Destinazione di "Indicazioni" chiesta da un'altra schermata, conservata finché la mappa non la prende in carico.
     var pendingRoute by remember { mutableStateOf<Place?>(null) }
+    // Segmento della scheda Rifugi (Esplora o Prenotazioni). Sta qui perché "Vedi le prenotazioni" (dal foglio Prenota)
+    // e il Profilo aprono direttamente le prenotazioni.
     var refugesSegment by rememberSaveable { mutableStateOf(REFUGES_EXPLORE) }
+    // Apre la scheda Rifugi sul segmento delle prenotazioni.
     val openMyBookings: () -> Unit = {
         refugesSegment = REFUGES_BOOKINGS
-        // la scheda è già nella pila (dal dettaglio di un rifugio aperto dalla lista): si torna lì;
-        // altrimenti si apre come dalla barra in basso, senza ripristinare un dettaglio rimasto nella sua pila
+        // Se la scheda è già nella pila (per esempio dal dettaglio di un rifugio aperto dalla lista) si torna lì;
+        // altrimenti si apre come dalla barra in basso, senza ripristinare un dettaglio rimasto nella sua pila.
         if (!navController.popBackStack<Route.Refuges>(inclusive = false)) {
             navController.navigate(Route.Refuges) {
                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -290,11 +313,12 @@ fun App() {
     GeoSentinelTheme(mode) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
-            // safeDrawing e non systemBars (il default): include anche tacca e Dynamic Island,
-            // che in orizzontale stanno di lato. Vale per contenuto e pulsante SOS.
+            // safeDrawing invece di systemBars (il valore predefinito): comprende anche tacca e Dynamic Island, che in
+            // orizzontale stanno di lato. Vale sia per il contenuto sia per il pulsante SOS.
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
-                // nei form la barra non serve (con la tastiera aperta ruberebbe spazio), nel dettaglio del sentiero nemmeno
+                // La barra in basso non compare nei form (con la tastiera aperta ruberebbe spazio) né nel dettaglio del
+                // sentiero.
                 if (NoBottomBarRoutes.any { route -> destination?.hasRoute(route) == true }) return@Scaffold
                 TabBar(
                     role,
@@ -306,18 +330,20 @@ fun App() {
                             restoreState = true
                         }
                     },
-                    // il tocco apre la schermata, dove l'SOS parte tenendo premuto 3 s (M6.1)
+                    // Il tocco apre la schermata SOS, dove l'allerta parte solo tenendo premuto per 3 secondi.
                     onSos = { navController.navigate(Route.SosEmergency) { launchSingleTop = true } },
                 )
             },
         ) { innerPadding ->
-            // Il contenuto passa sotto la barra in basso, che galleggia come un'isola (§2): niente margine sotto. La
-            // mappa sposta da sola i suoi controlli, le altre schede aggiungono LocalBottomBarInset in fondo.
+            // Il contenuto passa sotto la barra in basso, che galleggia come un'isola, quindi non riceve un margine
+            // inferiore. La mappa sposta da sola i propri controlli; le altre schede aggiungono LocalBottomBarInset in
+            // fondo al contenuto.
             val bottomBar = innerPadding.calculateBottomPadding()
-            // solo le schede: le schermate spinte con la barra visibile (SOS) si fermano sopra la barra come prima
+            // Solo le schede passano sotto la barra; le schermate spinte con la barra visibile (come l'SOS) si fermano
+            // sopra di essa.
             val barShown = BottomNavItems.any { item -> destination?.hasRoute(item.route::class) == true }
-            // "Indicazioni" da un rifugio o da un sentiero: si torna alla mappa (la destinazione di partenza, sempre in fondo
-            // allo stack) e la mappa chiede il percorso al nostro motore
+            // "Indicazioni" da un rifugio o da un sentiero: si torna alla mappa (la destinazione iniziale, sempre in fondo
+            // alla pila) e la mappa chiede il percorso al motore di percorso del backend.
             val directions: (String, Double, Double) -> Unit = { name, lat, lon ->
                 pendingRoute = Place(name, GeoPoint(lat = lat, lon = lon))
                 navController.popBackStack<Route.Map>(inclusive = false)
@@ -329,20 +355,22 @@ fun App() {
             NavHost(
                 navController = navController,
                 startDestination = Route.Map,
-                // niente margine in alto: le testate (ForestHeader) arrivano sotto la barra di stato, e ogni
-                // schermata sposta il suo contenuto con WindowInsets.safeDrawing.only(Top)
+                // Nessun margine in alto: le testate arrivano sotto la barra di stato e ogni schermata sposta il proprio
+                // contenuto con WindowInsets.safeDrawing.only(Top).
                 modifier = Modifier.padding(
                     start = innerPadding.calculateStartPadding(LocalLayoutDirection.current),
                     end = innerPadding.calculateEndPadding(LocalLayoutDirection.current),
-                    // l'SOS disegna fino in fondo il suo fondo scuro e si tiene da sé il margine della safe area
+                    // La schermata SOS disegna il proprio sfondo scuro fino al bordo e gestisce da sé il margine della
+                    // safe area.
                     bottom = if (barShown || destination?.hasRoute<Route.SosEmergency>() == true) 0.dp else bottomBar,
                 ),
-                // cambio di scheda: dissolvenza breve, niente movimento
+                // Cambio di scheda: una breve dissolvenza, senza movimento.
                 enterTransition = { fadeIn(tween(150)) },
                 exitTransition = { fadeOut(tween(100)) },
             ) {
                 composable<Route.Map>(
-                    // quando entra un sentiero, un rifugio o un'allerta la mappa scivola un po' a sinistra e lascia il posto (parallasse)
+                    // Quando si apre un sentiero, un rifugio, un'allerta o l'SOS la mappa scivola un po' a sinistra
+                    // lasciando il posto alla nuova schermata (effetto parallasse).
                     exitTransition = {
                         val destination = targetState.destination
                         if (destination.hasRoute<Route.SosEmergency>() || destination.hasRoute<Route.TrailDetail>() ||
@@ -357,27 +385,27 @@ fun App() {
                 ) {
                     MapScreen(
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
-                        // segnalare richiede il login (HIKER e superiori): l'ospite non vede il pulsante
+                        // Segnalare richiede il login (ruolo HIKER o superiore): l'ospite non vede il pulsante.
                         onReportHazard = if (role.canReportHazards()) {
                             { center, zoom -> navController.navigate(Route.ReportHazard(center.lat, center.lon, zoom)) { launchSingleTop = true } }
                         } else {
                             null
                         },
-                        // /hazards/** richiede il login: l'ospite non ha il livello né "Pericoli vicini"
+                        // Le rotte dei pericoli richiedono il login: l'ospite non ha il livello né "Pericoli vicini".
                         showHazards = role != UserRole.GUEST,
-                        // nuovo POI solo per il gestore del parco (M8.1): il server risponde comunque 403 agli altri
+                        // Nuovo POI solo per il gestore del parco; il server risponde comunque 403 agli altri ruoli.
                         onCreatePoi = if (role.canManagePark()) {
                             { center, zoom -> navController.navigate(Route.PoiCreate(center.lat, center.lon, zoom)) { launchSingleTop = true } }
                         } else {
                             null
                         },
-                        // /refuges/** richiede il login: l'ospite non vede i rifugi
+                        // Le rotte dei rifugi richiedono il login: l'ospite non vede i rifugi.
                         onOpenRefuge = if (role.canViewRefuges()) {
                             { id -> navController.navigate(Route.RefugeDetail(id)) { launchSingleTop = true } }
                         } else {
                             null
                         },
-                        // le allerte aperte solo per chi vede la scheda Allerte (M7.2): il tocco apre il dettaglio
+                        // Le allerte aperte compaiono solo per chi vede la scheda Allerte; il tocco apre il dettaglio.
                         onOpenAlert = if (role.canViewAlerts()) openAlert else null,
                         bottomBar = bottomBar,
                         onOpenProfile = {
@@ -464,7 +492,7 @@ fun App() {
                     ReportHazardScreen(route.trailId, GeoPoint(route.lat, route.lon), route.zoom, onBack = { navController.popBackStack() })
                 }
                 composable<Route.Refuges>(
-                    // come la mappa: il dettaglio entra da destra e la lista scivola via in parallasse
+                    // Come per la mappa: il dettaglio entra da destra e la lista scivola via con effetto parallasse.
                     exitTransition = {
                         val pushed = targetState.destination.hasRoute<Route.RefugeDetail>()
                         if (pushed) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
@@ -487,7 +515,8 @@ fun App() {
                         onBack = { navController.popBackStack() },
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
                         onOpenBookings = openMyBookings,
-                        // posti letto (M8.3): il gestore di questo rifugio o un ADMIN; il server risponde comunque 403 agli altri
+                        // Modifica dei posti letto: per il gestore di questo rifugio o per un ADMIN; il server risponde
+                        // comunque 403 agli altri.
                         canManage = { refuge -> role == UserRole.ADMIN || (role.canManagePark() && refuge.managerId == userId) },
                         onEditCapacity = { refuge ->
                             navController.navigate(Route.RefugeCapacity(refuge.id, refuge.capacity)) { launchSingleTop = true }
@@ -516,7 +545,7 @@ fun App() {
                 composable<Route.Alerts> {
                     RescueAlertsListScreen(
                         onOpenAlert = { id -> navController.navigate(Route.AlertDetail(id)) { launchSingleTop = true } },
-                        // nuova squadra (M8.3) solo per ADMIN: la base parte dal centro del parco
+                        // Nuova squadra di soccorso, solo per ADMIN: la mappa della base parte dal centro del parco.
                         onCreateTeam = if (role == UserRole.ADMIN) {
                             { navController.navigate(Route.RescueTeamCreate(DefaultArea.lat, DefaultArea.lon, TeamBaseZoom)) { launchSingleTop = true } }
                         } else {
@@ -532,18 +561,19 @@ fun App() {
                     RescueAlertDetailScreen(route.alertId, onBack = { navController.popBackStack() })
                 }
                 composable<Route.Management>(
-                    // il sentiero di una segnalazione o un ticket entrano da destra e la lista scivola via in parallasse
+                    // Il sentiero di una segnalazione o un ticket entrano da destra e la lista scivola via con effetto
+                    // parallasse.
                     exitTransition = {
                         val pushed = targetState.destination.hasRoute<Route.TrailDetail>() || targetState.destination.hasRoute<Route.TicketDetail>()
                         if (pushed) slideOutHorizontally(tween(PushMillis)) { -it / 4 } else fadeOut(tween(100))
                     },
                     popEnterTransition = { slideInHorizontally(tween(PopMillis)) { -it / 4 } },
                 ) {
-                    // le segnalazioni da verificare di tutto il parco (M8.1) e i ticket di manutenzione (M8.2)
+                    // Scheda Gestione: le segnalazioni da verificare di tutto il parco e i ticket di manutenzione.
                     ManagementScreen(
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
                         onOpenTicket = { id -> navController.navigate(Route.TicketDetail(id)) { launchSingleTop = true } },
-                        // il server risponde comunque 403 agli altri ruoli
+                        // La scheda è nascosta agli altri ruoli, ma il server risponde comunque 403.
                         onResetMfa = if (role == UserRole.ADMIN) {
                             { navController.navigate(Route.MfaReset) { launchSingleTop = true } }
                         } else {
@@ -564,7 +594,7 @@ fun App() {
                         onRegister = { navController.navigate(Route.Register) },
                         onEditName = { navController.navigate(Route.EditName) },
                         onChangePassword = { navController.navigate(Route.ChangePassword) },
-                        // account aperto con Google: la password si imposta con il codice via email
+                        // Per un account creato con Google la password si imposta con il codice ricevuto via email.
                         onSetPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
                         onMfa = { navController.navigate(Route.Mfa) { launchSingleTop = true } },
                         onMyHazards = { navController.navigate(Route.MyHazards) { launchSingleTop = true } },
@@ -587,7 +617,7 @@ fun App() {
                     MyHazardsScreen(
                         onBack = { navController.popBackStack() },
                         onOpenTrail = { id -> navController.navigate(Route.TrailDetail(id)) { launchSingleTop = true } },
-                        // la segnalazione parte dalla mappa: si passa alla scheda Mappa come dalla barra in basso
+                        // Le segnalazioni partono dalla mappa: si passa alla scheda Mappa come dalla barra in basso.
                         onGoToMap = {
                             navController.navigate(Route.Map) {
                                 popUpTo(navController.graph.findStartDestination().id) { saveState = true }
@@ -603,10 +633,11 @@ fun App() {
                 ) {
                     LoginScreen(
                         onBack = { navController.popBackStack() },
-                        // la registrazione prende il posto dell'accesso: Indietro torna al Profilo
+                        // La registrazione sostituisce l'accesso nella pila, così Indietro torna al Profilo.
                         onRegister = { navController.navigate(Route.Register) { popUpTo<Route.Login> { inclusive = true } } },
                         onForgotPassword = { email -> navController.navigate(Route.PasswordReset(email)) { launchSingleTop = true } },
-                        // dal Profilo si torna al Profilo; dal dettaglio di un sentiero (Profilo non nella pila) al sentiero
+                        // Dopo l'accesso si torna al Profilo se è nella pila; altrimenti (per esempio dal dettaglio di un
+                        // sentiero) alla schermata precedente.
                         onLoggedIn = { if (!navController.popBackStack<Route.Profile>(inclusive = false)) navController.popBackStack() },
                     )
                 }
@@ -627,7 +658,8 @@ fun App() {
                     PasswordResetScreen(
                         email = entry.toRoute<Route.PasswordReset>().email,
                         onBack = { navController.popBackStack() },
-                        // fatto: al login che c'era sotto; dal Profilo un login nuovo al posto del reset
+                        // A reset completato si torna al login che c'era sotto; se si era partiti dal Profilo, un nuovo
+                        // login prende il posto del reset.
                         onDone = {
                             if (!navController.popBackStack<Route.Login>(inclusive = false)) {
                                 navController.navigate(Route.Login) { popUpTo<Route.PasswordReset> { inclusive = true } }
@@ -653,7 +685,7 @@ fun App() {
                 ) {
                     MfaScreen(onBack = { navController.popBackStack() })
                 }
-                // Schermata "spinta" sopra la mappa: entra da destra e copre tutto (ha uno sfondo pieno)
+                // Schermata SOS, "spinta" sopra la schermata corrente: entra da destra e copre tutto, con uno sfondo pieno.
                 composable<Route.SosEmergency>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
                     exitTransition = { ExitTransition.None },
@@ -668,9 +700,12 @@ fun App() {
     }
 }
 
-// Barra in basso (redesign "Luce di quota"): un'isola a capsula con le schede, la pillola felce che scorre con una
-// molla sotto la voce attiva, e accanto, staccato, il tondo rosso dell'SOS da 72 dp: l'emergenza a un tocco da ogni
-// scheda, non solo dalla mappa. Il tocco apre la schermata SOS, dove l'invio vuole 3 secondi di pressione.
+/**
+ * Barra di navigazione in basso: un'isola a capsula con le schede visibili per [role], con un indicatore color felce che
+ * scorre con un'animazione a molla sotto la voce attiva, e accanto, separato, il pulsante rosso dell'SOS da 72 dp.
+ * Così l'emergenza è a un tocco da ogni scheda, non solo dalla mappa. Il tocco sull'SOS ([onSos]) apre la schermata
+ * SOS, dove l'invio richiede 3 secondi di pressione.
+ */
 @Composable
 private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Route) -> Unit, onSos: () -> Unit) {
     val items = BottomNavItems.filter { it.isVisible(role) }
@@ -681,14 +716,14 @@ private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Ro
     Row(
         Modifier
             .fillMaxWidth()
-            // indicatore Home / barra di navigazione in basso, tacca sui lati in orizzontale
+            // Margini per l'indicatore Home o la barra di navigazione in basso, e per la tacca sui lati in orizzontale.
             .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Horizontal + WindowInsetsSides.Bottom))
             .padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.Center,
     ) {
         Surface(
-            // in orizzontale e sui tablet non si allunga da bordo a bordo
+            // In orizzontale e sui tablet la barra non si allunga da bordo a bordo.
             modifier = Modifier.weight(1f, fill = false).widthIn(max = 480.dp).fillMaxWidth().islandShadow(CircleShape),
             shape = CircleShape,
             color = colors.surfaceContainerHigh,
@@ -722,6 +757,7 @@ private fun TabBar(role: UserRole, destination: NavDestination?, onNavigate: (Ro
     }
 }
 
+/** Voce della barra in basso: icona ed etichetta, selezionabile come una scheda. */
 @Composable
 private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
     val content by animateColorAsState(if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant)
@@ -739,7 +775,7 @@ private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Un
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        // l'etichetta è sempre visibile: l'icona è decorativa, altrimenti TalkBack la legge due volte
+        // L'etichetta è sempre visibile e l'icona è decorativa: altrimenti TalkBack leggerebbe la voce due volte.
         Icon(item.icon, contentDescription = null, tint = content, modifier = Modifier.size(24.dp))
         Text(
             text = stringResource(item.label),
@@ -752,13 +788,18 @@ private fun TabBarItem(item: BottomNavItem, selected: Boolean, onClick: () -> Un
     }
 }
 
+/**
+ * Pulsante SOS rotondo da 72 dp con un alone pulsante. Il tocco dà un feedback aptico e chiama [onClick], che apre la
+ * schermata SOS.
+ */
 @Composable
 private fun SosButton(onClick: () -> Unit) {
     val description = stringResource(Res.string.sos_button_description)
     val haptics = LocalHapticFeedback.current
     val still = rememberReduceMotion()
-    // un alone che respira attorno al tondo: si vede anche con la coda dell'occhio. Fermo con "Riduci movimento".
-    // Letto solo dentro graphicsLayer: a ogni fotogramma si ridisegna l'alone, senza ricomporre il pulsante (lag su iPhone)
+    // Un alone che "respira" attorno al pulsante, visibile anche con la coda dell'occhio; resta fermo se l'utente ha
+    // attivato "Riduci movimento". Il valore si legge solo dentro graphicsLayer: a ogni fotogramma si ridisegna l'alone
+    // senza ricomporre il pulsante, cosa che su iPhone rallentava l'interfaccia.
     val halo: State<Float> = if (still) {
         remember { mutableFloatStateOf(0.5f) }
     } else {
@@ -789,11 +830,12 @@ private fun SosButton(onClick: () -> Unit) {
             color = EmergencyRed,
             contentColor = EmergencyOnRed,
             shadowElevation = 6.dp,
-            // 72 dp = azione d'emergenza
+            // 72 dp: la dimensione minima prevista per le azioni d'emergenza.
             modifier = Modifier.size(72.dp).semantics { contentDescription = description },
         ) {
             Box(contentAlignment = Alignment.Center) {
-                // lettere da cartello, spaziate: si leggono da lontano. 22 sp fissi, come il pulsante
+                // Lettere spaziate come su un cartello, leggibili da lontano. La dimensione è fissata a 22 sp invece di
+                // seguire lo stile del tema, così come è fissa la dimensione del pulsante.
                 Text(
                     text = stringResource(Res.string.sos_button),
                     style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, lineHeight = 26.sp),

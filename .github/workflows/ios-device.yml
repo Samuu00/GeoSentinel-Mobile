@@ -1,16 +1,19 @@
-# App per iPhone vero senza firma, da installare dal PC Windows con xtool (tools/ios-device/README.md).
-# Kotlin/Native non può creare il framework di shared su Windows o Linux: lo fa questo runner macOS, e xtool
-# firma l'app con l'Apple ID dell'utente. Solo a mano (Actions → "iOS device build" → Run workflow): i minuti macOS
-# costano, e l'URL del backend cambia con la rete del PC.
+# Workflow manuale che produce l'app per un iPhone vero, senza firma, da installare dal PC Windows con xtool
+# (istruzioni in tools/ios-device/README.md). Kotlin/Native non può creare il framework di shared su Windows o
+# Linux: lo fa questo runner macOS, e xtool firma poi l'app con l'Apple ID dell'utente. Si avvia solo a mano
+# (Actions, "iOS device build", Run workflow), perché i minuti macOS costano e l'URL del backend cambia con la
+# rete del PC.
 name: iOS device build
 
 on:
+  # Parametro richiesto all'avvio: l'indirizzo del backend come lo raggiunge l'iPhone.
   workflow_dispatch:
     inputs:
       api_base_url:
         description: "URL del backend visto dall'iPhone (l'IP del PC in rete locale, es. http://192.168.1.20:8080)"
         required: true
 
+# Il token del workflow ha solo il permesso di leggere il codice.
 permissions:
   contents: read
 
@@ -27,14 +30,16 @@ jobs:
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v6
         with:
+          # Questo workflow legge la cache di Gradle ma non la scrive.
           cache-read-only: true
-      # La fase "Compile Kotlin Framework" del progetto Xcode chiama embedAndSignAppleFrameworkForXcode (framework e
-      # risorse di Compose nel bundle). Senza firma: la mette xtool, con il profilo dell'Apple ID (le push restano
-      # spente con un account gratuito, che non ha aps-environment).
+      # La fase "Compile Kotlin Framework" del progetto Xcode chiama embedAndSignAppleFrameworkForXcode, che mette nel
+      # bundle il framework e le risorse di Compose. La build è senza firma: la firma la aggiunge xtool con il profilo
+      # dell'Apple ID (con un account gratuito le push restano spente, perché manca aps-environment).
       - name: Build
         env:
           API_BASE_URL: ${{ inputs.api_base_url }}
-          # login con Google: client OAuth iOS (Settings → Variables → GOOGLE_IOS_CLIENT_ID); vuota = niente pulsante
+          # Login con Google: client OAuth per iOS, letto dalla variabile del repository GOOGLE_IOS_CLIENT_ID. Se è vuota
+          # il pulsante non compare. Lo script ricava anche il "reversed client ID" usato come schema URL di ritorno.
           GOOGLE_IOS_CLIENT_ID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
         run: |
           REVERSED_CLIENT_ID=geosentinel-google-non-configurato
@@ -50,11 +55,13 @@ jobs:
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
             API_BASE_URL="$API_BASE_URL" \
             GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" GOOGLE_REVERSED_CLIENT_ID="$REVERSED_CLIENT_ID"
+      # Un file .ipa è un archivio zip con l'app dentro la cartella Payload.
       - name: Pacchetto .ipa
         run: |
           mkdir -p Payload
           cp -R build/ios/Build/Products/Debug-iphoneos/*.app Payload/
           zip -qry GeoSentinel.ipa Payload
+      # Il pacchetto resta scaricabile per 7 giorni come artefatto della run (lo scarica tools/ios-device/install.ps1).
       - uses: actions/upload-artifact@v4
         with:
           name: GeoSentinel-ipa

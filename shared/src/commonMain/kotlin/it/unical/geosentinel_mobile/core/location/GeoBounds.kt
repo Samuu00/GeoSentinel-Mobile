@@ -1,3 +1,6 @@
+// Riquadri geografici (bounding box) e funzioni di geometria sulla sfera.
+// Ogni conversione tra i formati di coordinate (API, GeoJSON, MapLibre) e ogni bbox inviata al backend passano da
+// questo file, così l'ordine latitudine/longitudine non si può sbagliare altrove.
 package it.unical.geosentinel_mobile.core.location
 
 import it.unical.geosentinel_mobile.api.model.GeoJsonLineString
@@ -14,46 +17,59 @@ import kotlin.math.sin
 import kotlin.math.sqrt
 
 /**
- * Rettangolo della mappa nell'ordine del backend (`bbox=minLon,minLat,maxLon,maxLat`, TrailController).
- * Il costruttore lo tiene dentro i limiti del mondo: su MapLibre la vista può superare ±180° di longitudine.
+ * Un rettangolo della mappa, con i lati nell'ordine usato dal backend (`bbox=minLon,minLat,maxLon,maxLat`).
+ *
+ * Il costruttore è privato: si crea con [of], che riporta i valori dentro i limiti del mondo, perché su MapLibre
+ * la vista può superare i ±180 gradi di longitudine.
  */
 class GeoBounds private constructor(val minLon: Double, val minLat: Double, val maxLon: Double, val maxLat: Double) {
 
-    // Il backend vuole min < max (altrimenti 400)
+    // Vero se il riquadro non è degenere: il backend richiede min < max su entrambi gli assi e risponde 400 altrimenti.
     val isValid: Boolean get() = minLon < maxLon && minLat < maxLat
 
-    // Mai la notazione scientifica di Double.toString ("1.0E-4" vicino allo 0): il backend la leggerebbe male
+    /**
+     * Il valore del parametro `bbox` per le richieste al backend. I numeri sono scritti in forma decimale semplice,
+     * mai in notazione scientifica come fa `Double.toString` vicino allo zero ("1.0E-4"), che il backend leggerebbe male.
+     */
     fun toQuery(): String = listOf(minLon, minLat, maxLon, maxLat).joinToString(",") { it.plainDecimal() }
 
+    /** Vero se [other] è interamente contenuto in questo riquadro. */
     operator fun contains(other: GeoBounds): Boolean =
         other.minLon >= minLon && other.maxLon <= maxLon && other.minLat >= minLat && other.maxLat <= maxLat
 
-    /** Lo stesso rettangolo allargato di [fraction] della sua misura su ogni lato (per caricare un margine). */
+    /**
+     * Restituisce lo stesso rettangolo allargato su ogni lato di [fraction] della sua dimensione, per caricare
+     * i dati anche in un margine attorno alla parte visibile.
+     */
     fun expandedBy(fraction: Double): GeoBounds {
         val dLon = (maxLon - minLon) * fraction
         val dLat = (maxLat - minLat) * fraction
         return of(minLon - dLon, minLat - dLat, maxLon + dLon, maxLat + dLat)
     }
 
-    /** La parte comune dei due riquadri, o null se non si toccano (il backend darebbe 400 su un riquadro vuoto). */
+    /** La parte comune ai due riquadri, oppure null se non si sovrappongono (su un riquadro vuoto il backend darebbe 400). */
     infix fun intersect(other: GeoBounds): GeoBounds? =
         of(maxOf(minLon, other.minLon), maxOf(minLat, other.minLat), minOf(maxLon, other.maxLon), minOf(maxLat, other.maxLat))
             .takeIf { it.isValid }
 
+    /** Il centro del rettangolo. */
     val center: GeoPoint get() = GeoPoint(lat = (minLat + maxLat) / 2, lon = (minLon + maxLon) / 2)
 
-    /** Metà della diagonale: il raggio che copre tutto il rettangolo dal centro. */
+    /** Metà della diagonale in metri: il raggio che, partendo dal centro, copre tutto il rettangolo. */
     val radiusMeters: Double get() = center.distanceTo(GeoPoint(lat = maxLat, lon = maxLon))
 
+    /** Due riquadri sono uguali se hanno gli stessi quattro lati. */
     override fun equals(other: Any?) = other is GeoBounds &&
         minLon == other.minLon && minLat == other.minLat && maxLon == other.maxLon && maxLat == other.maxLat
 
+    /** Coerente con [equals]: si calcola sulla rappresentazione testuale dei quattro lati. */
     override fun hashCode() = toQuery().hashCode()
 
-    // Niente coordinate nei log (dicono dove guarda o dove si trova l'utente, §4)
+    // Le coordinate non compaiono nei log, perché rivelano dove l'utente guarda o dove si trova.
     override fun toString() = "GeoBounds(…)"
 
     companion object {
+        /** Crea un riquadro limitando longitudine a ±180 gradi e latitudine a ±90 gradi. */
         fun of(minLon: Double, minLat: Double, maxLon: Double, maxLat: Double) = GeoBounds(
             minLon.coerceIn(-180.0, 180.0),
             minLat.coerceIn(-90.0, 90.0),
@@ -62,8 +78,10 @@ class GeoBounds private constructor(val minLon: Double, val minLat: Double, val 
         )
 
         /**
-         * Il quadrato di ±[radiusMeters] attorno a [center] (un grado di latitudine ≈ 111 km, quello di longitudine
-         * si stringe con cos(lat)). Gli angoli stanno a circa 1,4 volte il raggio: per la mappa va bene.
+         * Il quadrato che si estende di [radiusMeters] in ogni direzione attorno a [center]. Un grado di latitudine
+         * vale circa 111 km, mentre quello di longitudine si restringe con il coseno della latitudine (limitato in
+         * basso per non dividere per zero vicino ai poli). Gli angoli del quadrato distano circa 1,4 volte il
+         * raggio: per la mappa l'approssimazione va bene.
          */
         fun around(center: GeoPoint, radiusMeters: Double): GeoBounds {
             val dLat = radiusMeters / METERS_PER_DEGREE_LAT
@@ -71,7 +89,7 @@ class GeoBounds private constructor(val minLon: Double, val minLat: Double, val 
             return of(center.lon - dLon, center.lat - dLat, center.lon + dLon, center.lat + dLat)
         }
 
-        /** Il riquadro che contiene tutte le [positions], o null se non ce ne sono. */
+        /** Il riquadro più piccolo che contiene tutte le [positions], oppure null se la lista è vuota. */
         fun around(positions: List<Position>): GeoBounds? {
             if (positions.isEmpty()) return null
             return of(
@@ -84,22 +102,29 @@ class GeoBounds private constructor(val minLon: Double, val minLat: Double, val 
     }
 }
 
-/** La parte dentro [limit] (null = nessun limite), o null se è tutta fuori. */
+/**
+ * La parte del riquadro che cade dentro [limit] (null significa nessun limite), oppure null se è tutta fuori.
+ * Si usa per restringere le richieste all'area attorno all'utente.
+ */
 fun GeoBounds.within(limit: GeoBounds?): GeoBounds? = if (limit == null) this else this intersect limit
 
-// MapLibre (spatialk) e il backend ordinano allo stesso modo: ovest, sud, est, nord
+/** Converte nel `BoundingBox` di MapLibre, che usa lo stesso ordine del backend: ovest, sud, est, nord. */
 fun GeoBounds.toBoundingBox(): BoundingBox = BoundingBox(west = minLon, south = minLat, east = maxLon, north = maxLat)
 
 /**
- * Il percorso di un sentiero come lo vuole MapLibre. GeoJSON è `[lon, lat]`: il primo valore è la longitudine
- * (ADR-0010 del backend). Le coppie malformate si saltano invece di far cadere la mappa.
+ * Il tracciato di un sentiero come lo vuole MapLibre. In GeoJSON ogni coppia è `[lon, lat]`, cioè il primo valore
+ * è la longitudine. Le coppie malformate vengono saltate invece di far fallire il disegno della mappa.
  */
 fun GeoJsonLineString.toPositions(): List<Position> =
     coordinates.mapNotNull { pair -> if (pair.size >= 2) Position(longitude = pair[0], latitude = pair[1]) else null }
 
+/** Converte il punto del client generato nel [GeoPoint] dell'app. */
 fun GeoPointDto.toGeoPoint(): GeoPoint = GeoPoint(lat = lat, lon = lon)
 
-// Al più 7 decimali (circa 1 cm), con il punto e senza esponente: "16.47", "-180.0", "0.0001"
+/**
+ * Scrive il numero con al massimo 7 decimali (circa un centimetro), con il punto come separatore e senza esponente:
+ * per esempio "16.47", "-180.0", "0.0001". Gli zeri finali vengono tolti, lasciandone almeno uno.
+ */
 internal fun Double.plainDecimal(): String {
     val scaled = (this * 10_000_000).roundToLong()
     val sign = if (scaled < 0) "-" else ""
@@ -108,7 +133,10 @@ internal fun Double.plainDecimal(): String {
     return "$sign${absolute / 10_000_000}.$fraction"
 }
 
-/** Distanza in metri sulla sfera (haversine): basta per raggi di ricerca di qualche km. */
+/**
+ * Distanza in metri tra due punti, calcolata sulla sfera con la formula dell'emisenoverso (haversine).
+ * È abbastanza precisa per raggi di ricerca di qualche chilometro.
+ */
 fun GeoPoint.distanceTo(other: GeoPoint): Double {
     val dLat = (other.lat - lat).toRadians()
     val dLon = (other.lon - lon).toRadians()
@@ -116,7 +144,10 @@ fun GeoPoint.distanceTo(other: GeoPoint): Double {
     return 2 * EARTH_RADIUS_METERS * asin(sqrt(a.coerceIn(0.0, 1.0)))
 }
 
+// Raggio medio della Terra in metri.
 private const val EARTH_RADIUS_METERS = 6_371_000.0
+// Metri in un grado di latitudine.
 private const val METERS_PER_DEGREE_LAT = 111_320.0
 
+/** Da gradi a radianti. */
 private fun Double.toRadians() = this * PI / 180

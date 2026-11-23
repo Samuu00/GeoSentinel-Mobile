@@ -1,3 +1,5 @@
+// Test di PushManager, che gestisce le notifiche push delle allerte SOS: interpretazione del contenuto ricevuto,
+// notifica toccata dall'utente, registrazione del dispositivo sul backend e rimozione al logout.
 package it.unical.geosentinel_mobile.core.push
 
 import io.ktor.client.engine.mock.respond
@@ -15,10 +17,14 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Verifica la logica delle notifiche push senza Firebase, usando il backend finto per le richieste HTTP. */
 class PushManagerTest {
 
+    /**
+     * Backend finto con le rotte dei dispositivi: come il server vero, POST /devices e DELETE /devices/{token} rispondono
+     * 204 agli utenti autenticati. Il corpo di ogni richiesta viene salvato in [bodies] per i controlli.
+     */
     private val backend = FakeBackend().apply {
-        // POST /devices e DELETE /devices/{token} come nel backend: 204, il corpo si tiene per i controlli
         extraRoutes = { request, owner ->
             if (owner != null && request.url.encodedPath.startsWith("/api/v1/devices")) {
                 bodies += request.bodyText()
@@ -28,10 +34,11 @@ class PushManagerTest {
             }
         }
     }
+    /** Corpi delle richieste ricevute dalle rotte dei dispositivi. */
     private val bodies = mutableListOf<String>()
 
-    // ---- payload ---------------------------------------------------------------------------------------------
 
+    /** I tre tipi di notifica inviati dal backend diventano gli eventi corrispondenti, con l'id dell'allerta. */
     @Test
     fun `i tre type del backend diventano eventi con il loro alertId`() {
         assertEquals(PushEvent.SosRaised("00000000-0000-0000-0000-0000000000a1"), PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "00000000-0000-0000-0000-0000000000a1")))
@@ -39,6 +46,10 @@ class PushManagerTest {
         assertEquals(PushEvent.SosResolved("00000000-0000-0000-0000-0000000000a3"), PushEvent.fromPayload(mapOf("type" to "SOS_RESOLVED", "alertId" to "00000000-0000-0000-0000-0000000000a3")))
     }
 
+    /**
+     * Un id di allerta che non è un UUID viene scartato: il valore finirebbe nel percorso di una richiesta HTTP, e
+     * una notifica manipolata potrebbe altrimenti far chiamare un'altra rotta.
+     */
     @Test
     fun `un alertId che non e un UUID si scarta e non finisce nel path di una richiesta`() {
         assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "../users/me")))
@@ -46,6 +57,10 @@ class PushManagerTest {
         assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_RAISED", "alertId" to "a1")))
     }
 
+    /**
+     * Alla fine della sessione la notifica toccata in attesa viene scartata, il token del dispositivo viene dimenticato
+     * e il revocatore del token viene chiamato una volta, così il nuovo utente non riceve le push del precedente.
+     */
     @Test
     fun `a fine sessione la notifica toccata si scarta e il token si invalida`() {
         val push = PushManager({ error("nessuna richiesta") }, "http://api.test", RegisterDeviceRequest.Platform.ANDROID)
@@ -61,6 +76,7 @@ class PushManagerTest {
         assertEquals(1, revoked)
     }
 
+    /** Un tipo di notifica sconosciuto, un id assente o vuoto e un tipo assente vengono ignorati. */
     @Test
     fun `un type sconosciuto o senza alertId si ignora`() {
         assertNull(PushEvent.fromPayload(mapOf("type" to "SOS_ESCALATED", "alertId" to "00000000-0000-0000-0000-0000000000a1")))
@@ -69,8 +85,11 @@ class PushManagerTest {
         assertNull(PushEvent.fromPayload(mapOf("type" to null, "alertId" to "00000000-0000-0000-0000-0000000000a1")))
     }
 
-    // ---- notifica toccata ------------------------------------------------------------------------------------
 
+    /**
+     * La notifica toccata resta in attesa finché la schermata non la consuma; toccarla due volte apre comunque la
+     * stessa allerta in attesa, senza duplicarla.
+     */
     @Test
     fun `la notifica toccata resta finche non si apre e una doppia apre la stessa allerta`() = runTest {
         val (_, client) = sessionWith(backend)
@@ -85,6 +104,7 @@ class PushManagerTest {
         assertNull(push.opened.value)
     }
 
+    /** Consumare un evento già superato non cancella la notifica arrivata dopo, che resta da aprire. */
     @Test
     fun `aprire un evento vecchio non cancella quello arrivato dopo`() = runTest {
         val (_, client) = sessionWith(backend)
@@ -96,8 +116,8 @@ class PushManagerTest {
         assertEquals(PushEvent.SosRaised("00000000-0000-0000-0000-00000000000b"), push.opened.value)
     }
 
-    // ---- registrazione e logout ------------------------------------------------------------------------------
 
+    /** La registrazione invia token e piattaforma con il bearer dell'utente autenticato. */
     @Test
     fun `la registrazione manda token e piattaforma con il bearer dell utente`() = runTest {
         val (session, client) = sessionWith(backend)
@@ -112,6 +132,7 @@ class PushManagerTest {
         assertTrue("\"token\":\"fcm-1\"" in body && "\"platform\":\"ANDROID\"" in body, body)
     }
 
+    /** Senza rete la registrazione restituisce un fallimento invece di lanciare un'eccezione. */
     @Test
     fun `senza rete la registrazione fallisce senza eccezioni`() = runTest {
         val (session, client) = sessionWith(backend)
@@ -122,6 +143,10 @@ class PushManagerTest {
         assertTrue(push.register("fcm-1").isFailure)
     }
 
+    /**
+     * Al logout il dispositivo viene rimosso dal server prima della revoca della sessione: dopo, il bearer non sarebbe
+     * più valido per farlo. Alla fine i token locali sono cancellati.
+     */
     @Test
     fun `il logout toglie il dispositivo prima di revocare la sessione`() = runTest {
         val store = FakeSecureTokenStore()
@@ -140,6 +165,7 @@ class PushManagerTest {
     }
 }
 
+/** Legge come testo il corpo di una richiesta inviata dal client, qualunque sia il tipo di contenuto. */
 private fun HttpRequestData.bodyText(): String = when (val content = body) {
     is OutgoingContent.ByteArrayContent -> content.bytes().decodeToString()
     is io.ktor.http.content.TextContent -> content.text

@@ -1,14 +1,15 @@
-"""Icona di GeoSentinel per Android e iOS, generata da una sola geometria.
+"""Genera l'icona di GeoSentinel per Android e iOS partendo da una sola geometria.
 
-Una vetta color lichene con un abete ritagliato in negativo, una seconda cima più scura dietro e due curve di livello
-(la firma della testata ForestHeader) su un fondo verde bosco. Colori del tema (core/ui/theme/Color.kt).
+L'icona è una vetta color lichene con un abete ritagliato in negativo, una seconda cima più scura dietro e due
+curve di livello, su un fondo verde bosco; i colori sono quelli del tema dell'app (core/ui/theme/Color.kt).
 
-Uscite:
-- Android: drawable/ic_launcher_{background,foreground,monochrome}.xml (icona adattiva vettoriale, 108 x 108 dp,
-  zona sicura il cerchio di raggio 33 al centro) e i PNG mipmap-*dpi per i launcher senza icone adattive.
+File prodotti:
+- Android: drawable/ic_launcher_background.xml, ic_launcher_foreground.xml e ic_launcher_monochrome.xml (icona
+  adattiva vettoriale da 108 x 108 dp, con la zona sicura nel cerchio di raggio 33 al centro) e i PNG
+  mipmap-*dpi per i launcher che non supportano le icone adattive.
 - iOS: AppIcon.appiconset con le varianti chiara, scura e a tinta (1024 x 1024).
 
-Uso: python tools/app-icon/build_app_icon.py   (dalla radice del progetto; serve Pillow)
+Uso, dalla radice del progetto (serve Pillow): python tools/app-icon/build_app_icon.py
 """
 
 from pathlib import Path
@@ -19,22 +20,24 @@ ROOT = Path(__file__).resolve().parents[2]
 RES = ROOT / "androidApp/src/main/res"
 APPICON = ROOT / "iosApp/iosApp/Assets.xcassets/AppIcon.appiconset"
 
-# ---- palette (dal tema) ----
+# Palette dell'icona, presa dai colori del tema dell'app.
 SKY_TOP = "#2B5A45"      # abete schiarito
 SKY_BOTTOM = "#0D1F16"   # bosco di notte
 LICHEN = "#A9D3B6"       # la vetta
 MOSS = "#5E8A71"         # la cima dietro
 CONTOUR = "#A9D3B6"      # curve di livello, molto trasparenti
+# Opacità delle curve di livello, da 0 a 1.
 CONTOUR_ALPHA = 0.16
 
-# ---- geometria, in unità della tela adattiva (108) ----
+# Geometria dell'icona, in unità della tela adattiva di Android (108 x 108): centro e raggi delle curve di
+# livello, spessore del loro tratto e vertici delle due cime.
 CENTER = (54.0, 56.0)
 RINGS = (27.0, 36.0)
 RING_WIDTH = 1.3
 BACK_PEAK = [(52, 76), (71, 47), (90, 76)]
 MAIN_PEAK = [(20, 76), (47, 33), (78, 76)]
-# abete ritagliato nella vetta: tre palchi e il tronco che tocca la base, piccolo rispetto alla montagna (più grande la
-# vetta si leggeva come una "A")
+# Abete ritagliato nella vetta: tre palchi e il tronco che tocca la base. È piccolo rispetto alla montagna perché,
+# più grande, faceva leggere la vetta come una lettera "A".
 FIR = [
     (45, 53), (50.5, 61), (48.5, 61), (54, 68), (51.5, 68), (57, 74.5),
     (46.3, 74.5), (46.3, 76), (43.7, 76), (43.7, 74.5),
@@ -43,15 +46,18 @@ FIR = [
 
 
 def path_d(points):
+    """Restituisce il pathData SVG di un poligono chiuso con i vertici indicati."""
     return "M" + " L".join(f"{x:g},{y:g}" for x, y in points) + " Z"
 
 
 def circle_d(r):
+    """Restituisce il pathData SVG di un cerchio di raggio r centrato in CENTER, disegnato con due archi."""
     cx, cy = CENTER
     return f"M{cx - r:g},{cy:g} a{r:g},{r:g} 0 1,0 {2 * r:g},0 a{r:g},{r:g} 0 1,0 {-2 * r:g},0"
 
 
 def vector(body):
+    """Avvolge il contenuto di un drawable vettoriale Android da 108 x 108 dp, segnalato come file generato."""
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         "<!-- Generato da tools/app-icon/build_app_icon.py: non modificare a mano -->\n"
@@ -65,6 +71,8 @@ def vector(body):
 
 
 def android_vectors():
+    """Scrive i drawable vettoriali dell'icona adattiva (fondo, primo piano, versione monocroma) e i file
+    mipmap-anydpi-v26 che li combinano."""
     background = vector(
         '    <path android:pathData="M0,0h108v108h-108z">\n'
         '        <aapt:attr name="android:fillColor">\n'
@@ -78,13 +86,13 @@ def android_vectors():
         f'        android:strokeAlpha="{CONTOUR_ALPHA}" android:strokeWidth="{RING_WIDTH}" android:fillColor="#00000000"/>\n'
         for r in RINGS
     )
-    # la vetta e l'abete in un solo path pari-dispari: l'abete è un buco, si vede il fondo
+    # La vetta e l'abete stanno in un solo path con la regola pari-dispari: l'abete diventa un buco da cui si vede il fondo.
     peaks = (
         f'    <path android:pathData="{path_d(BACK_PEAK)}" android:fillColor="{MOSS}"/>\n'
         f'    <path android:pathData="{path_d(MAIN_PEAK)} {path_d(FIR)}" android:fillType="evenOdd" android:fillColor="{LICHEN}"/>\n'
     )
     foreground = vector(rings + peaks)
-    # icone a tema (Android 13+): solo la sagoma, il sistema la ricolora
+    # Icona a tema (Android 13 e successivi): solo la sagoma, che il sistema ricolora.
     monochrome = vector(
         f'    <path android:pathData="{path_d(BACK_PEAK)}" android:fillColor="#FFFFFFFF" android:fillAlpha="0.6"/>\n'
         f'    <path android:pathData="{path_d(MAIN_PEAK)} {path_d(FIR)}" android:fillType="evenOdd" android:fillColor="#FFFFFFFF"/>\n'
@@ -93,7 +101,7 @@ def android_vectors():
     (drawable / "ic_launcher_background.xml").write_text(background, encoding="utf-8")
     (drawable / "ic_launcher_foreground.xml").write_text(foreground, encoding="utf-8")
     (drawable / "ic_launcher_monochrome.xml").write_text(monochrome, encoding="utf-8")
-    # il primo piano del template stava in drawable-v24 e avrebbe la precedenza
+    # Il primo piano del template iniziale stava in drawable-v24 e avrebbe la precedenza su quello generato.
     old = RES / "drawable-v24/ic_launcher_foreground.xml"
     if old.exists():
         old.unlink()
@@ -109,21 +117,26 @@ def android_vectors():
         (RES / "mipmap-anydpi-v26" / name).write_text(adaptive, encoding="utf-8")
 
 
-# ---- raster (Pillow), disegnato 4 volte più grande e poi ridotto: bordi lisci ----
-
+# Disegno raster con Pillow: l'immagine si disegna 4 volte più grande e poi si riduce, per avere bordi lisci.
 def hex_rgb(value):
+    """Converte un colore "#RRGGBB" nella tupla (R, G, B)."""
     value = value.lstrip("#")
     return tuple(int(value[i:i + 2], 16) for i in (0, 2, 4))
 
 
 def render(size, window, background=True, mark=LICHEN, back=MOSS, rings=True):
-    """[window] = (x0, larghezza) della tela 108 da inquadrare. Senza fondo l'abete è trasparente."""
+    """Disegna l'icona come immagine RGBA quadrata di lato size pixel.
+
+    window = (x0, larghezza) indica la parte della tela 108 da inquadrare. Con background=False il fondo è
+    trasparente, e così anche l'abete; mark e back sono i colori delle due cime, rings attiva le curve di livello.
+    """
     ss = 4
     s = size * ss
     x0, w = window
     k = s / w
 
     def pt(p):
+        """Converte un punto dalle unità della tela 108 ai pixel dell'immagine ingrandita."""
         return ((p[0] - x0) * k, (p[1] - x0) * k)
 
     img = Image.new("RGBA", (s, s), (0, 0, 0, 0))
@@ -131,7 +144,7 @@ def render(size, window, background=True, mark=LICHEN, back=MOSS, rings=True):
         top, bottom = hex_rgb(SKY_TOP), hex_rgb(SKY_BOTTOM)
         draw = ImageDraw.Draw(img)
         for y in range(s):
-            # il gradiente copre tutta la tela 108, qui se ne vede la finestra
+            # Il gradiente copre tutta la tela 108: qui se ne disegna solo la finestra inquadrata.
             t = (x0 + y / k) / 108
             draw.line([(0, y), (s, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
     if rings:
@@ -146,7 +159,7 @@ def render(size, window, background=True, mark=LICHEN, back=MOSS, rings=True):
     d = ImageDraw.Draw(peaks)
     d.polygon([pt(p) for p in BACK_PEAK], fill=hex_rgb(back) + (255,))
     d.polygon([pt(p) for p in MAIN_PEAK], fill=hex_rgb(mark) + (255,))
-    # l'abete: un buco nella vetta (anche nella cima dietro, dove si sovrappone)
+    # L'abete è un buco nella vetta, e anche nella cima dietro dove le due si sovrappongono.
     cut = Image.new("L", (s, s), 0)
     ImageDraw.Draw(cut).polygon([pt(p) for p in FIR], fill=255)
     peaks.putalpha(Image.composite(Image.new("L", (s, s), 0), peaks.getchannel("A"), cut))
@@ -155,7 +168,8 @@ def render(size, window, background=True, mark=LICHEN, back=MOSS, rings=True):
 
 
 def android_pngs():
-    # launcher senza icone adattive (Android < 8): quadrata arrotondata e tonda, dalla zona sicura
+    """Genera i PNG mipmap, quadrati arrotondati e tondi, per i launcher senza icone adattive (prima di Android 8).
+    Inquadrano la zona sicura dell'icona adattiva."""
     sizes = {"mdpi": 48, "hdpi": 72, "xhdpi": 96, "xxhdpi": 144, "xxxhdpi": 192}
     for density, px in sizes.items():
         full = render(px, (14, 80))
@@ -172,11 +186,12 @@ def android_pngs():
 
 
 def ios_icons():
-    # iOS ritaglia da solo gli angoli: la chiara è piena e senza trasparenza (lo chiede l'App Store)
+    """Genera le tre varianti dell'icona iOS da 1024 px (chiara, scura, a tinta) e il Contents.json del set.
+    La chiara è piena e senza trasparenza, come vuole Apple per l'icona dell'app; gli angoli li arrotonda iOS."""
     render(1024, (14, 80)).convert("RGB").save(APPICON / "app-icon-1024.png")
-    # scura: il fondo lo mette il sistema, qui solo il segno
+    # Variante scura: il fondo lo mette il sistema, qui c'è solo il segno.
     render(1024, (14, 80), background=False).save(APPICON / "app-icon-dark-1024.png")
-    # a tinta: in scala di grigi, il sistema la colora
+    # Variante a tinta: in scala di grigi, il sistema la colora.
     render(1024, (14, 80), background=False, mark="#FFFFFF", back="#9A9A9A", rings=False).convert("LA").save(APPICON / "app-icon-tinted-1024.png")
     contents = """{
   "images" : [

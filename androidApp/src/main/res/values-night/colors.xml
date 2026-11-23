@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Variante notturna dei colori di avvio: sfondo dell'app nel tema scuro (definito in core/ui/theme/Color.kt). -->
 <resources>
     <color name="start_background">#0D1411</color>
 </resources>

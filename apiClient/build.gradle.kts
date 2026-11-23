@@ -1,8 +1,9 @@
+// Script di build del modulo apiClient: genera il client Kotlin Multiplatform dell'API REST a partire dal
+// contratto OpenAPI in api/openapi.json, con openapi-generator. Il codice generato sta in build/, si rigenera a
+// ogni build quando il contratto cambia e non va mai modificato a mano: si cambia la configurazione qui sotto.
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 import org.openapitools.generator.gradle.plugin.tasks.GenerateTask
 
-// Client dell'API generato da api/openapi.json (M1.1). Il codice generato non si modifica a mano:
-// sta in build/ e si rigenera a ogni build quando il contratto cambia.
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
@@ -10,15 +11,17 @@ plugins {
     alias(libs.plugins.openapiGenerator)
 }
 
+/** Cartella in cui openapi-generator scrive il codice del client. */
 val generatedDir = layout.buildDirectory.dir("generated/openapi")
 
+/** Configurazione del task che genera il client: generatore "kotlin" nella variante multiplatform (Ktor). */
 val generateApiClient = tasks.named<GenerateTask>("openApiGenerate") {
     generatorName.set("kotlin")
     library.set("multiplatform")
-    // URI file:/// e non il percorso: su Windows "C:\..." viene letto come un URI non valido
+    // Il contratto si passa come URI file:///, perché su Windows un percorso "C:\..." verrebbe letto come URI non valido.
     inputSpec.set(rootProject.layout.projectDirectory.file("api/openapi.json").asFile.toURI().toString())
-    // come stringa URI il contratto non è un input che Gradle controlla: senza questa riga, dopo un cambio di
-    // api/openapi.json il task restava "aggiornato" e il client non si rigenerava (successo con MediaResponse.credit)
+    // Passato come stringa URI, il contratto non sarebbe un input controllato da Gradle: senza questa riga, dopo una
+    // modifica di api/openapi.json il task risulterebbe aggiornato e il client non verrebbe rigenerato.
     inputs.file(rootProject.layout.projectDirectory.file("api/openapi.json"))
     outputDir.set(generatedDir.get().asFile.path)
     packageName.set("it.unical.geosentinel_mobile.api")
@@ -30,24 +33,25 @@ val generateApiClient = tasks.named<GenerateTask>("openApiGenerate") {
             "sourceFolder" to "src/commonMain/kotlin",
         ),
     )
-    // ogni enum ha un ultimo caso unknown_default_open_api per i valori nuovi del server (M1.2)
+    // Ogni enum generato ha un ultimo caso unknown_default_open_api per i valori nuovi che il server potrebbe
+    // introdurre, così l'app non va in crash.
     additionalProperties.set(mapOf("enumUnknownDefaultCase" to "true"))
-    // data_class.mustache di openapi-generator 7.14.0 con il serializer per il caso sconosciuto anche in
-    // multiplatform (il template originale lo mette solo con kotlinx_serialization). Quando si aggiorna il
-    // generatore va ricopiato dal jar nuovo e ripatchato: i due blocchi sono marcati "GeoSentinel"
+    // Template data_class.mustache modificato: aggiunge il serializer per il caso sconosciuto anche nella variante
+    // multiplatform (il template originale lo fa solo con kotlinx_serialization). Quando si aggiorna il generatore va
+    // ricopiato dal jar nuovo e corretto di nuovo: i due blocchi modificati sono marcati "GeoSentinel".
     templateDir.set(layout.projectDirectory.dir("templates").asFile.path)
-    // kotlinx.datetime.Instant è deprecato da datetime 0.7: le date-ora usano kotlin.time.Instant
+    // kotlinx.datetime.Instant è deprecato: le date-ora si mappano su kotlin.time.Instant della libreria standard.
     typeMappings.set(mapOf("DateTime" to "kotlin.time.Instant"))
-    // solo il codice: niente test, documentazione o file di progetto generati
+    // Si genera solo il codice: niente test, documentazione o file di progetto.
     generateApiTests.set(false)
     generateModelTests.set(false)
     generateApiDocumentation.set(false)
     generateModelDocumentation.set(false)
 }
 
-// ./gradlew :apiClient:checkApiContract — segnala se api/openapi.json non è più uguale al contratto del backend.
-// Confronta il contenuto JSON e non i byte (i fine riga cambiano tra Windows e Linux).
-// Senza il repo del backend accanto (es. in CI) non fa nulla.
+// Task checkApiContract (./gradlew :apiClient:checkApiContract): segnala se api/openapi.json non è più uguale al
+// contratto pubblicato dal backend nel repository accanto. Confronta il contenuto JSON e non i byte, perché i fine
+// riga cambiano tra Windows e Linux. Se il repository del backend non c'è (per esempio in CI) non fa nulla.
 tasks.register("checkApiContract") {
     val local = rootProject.layout.projectDirectory.file("api/openapi.json").asFile
     val backend = rootProject.layout.projectDirectory.file("../GeoSentinel-Backend/docs/openapi.json").asFile
@@ -66,6 +70,7 @@ tasks.register("checkApiContract") {
     }
 }
 
+// Target del modulo: iOS (dispositivo e simulatore Apple Silicon) e Android. I sorgenti comuni sono quelli generati.
 kotlin {
     listOf(iosArm64(), iosSimulatorArm64())
 
@@ -92,6 +97,6 @@ kotlin {
     }
 }
 
-// AGP cerca i baseline profile accanto ai sorgenti (src/commonMain/baselineProfiles), quindi anche nella cartella
-// generata: il task che li legge deve aspettare la generazione. Succede solo nelle build con R8 (release, M9.3)
+// AGP cerca i baseline profile accanto ai sorgenti, quindi anche nella cartella generata: il task che li legge
+// deve aspettare la generazione del client. Succede solo nelle build con R8 (release e staging).
 tasks.matching { it.name.endsWith("ArtProfile") }.configureEach { dependsOn(generateApiClient) }

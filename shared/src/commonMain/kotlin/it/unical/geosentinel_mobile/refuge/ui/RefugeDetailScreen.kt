@@ -1,3 +1,6 @@
+// Pagina di dettaglio di un rifugio: foto o mappa in testata, dati principali, contatti, disponibilità delle
+// prossime notti, descrizione, servizi, sentieri vicini e, per chi lo gestisce, la modifica dei posti letto. In basso
+// una barra fissa apre il foglio "Prenota".
 package it.unical.geosentinel_mobile.refuge.ui
 
 import androidx.compose.foundation.background
@@ -164,19 +167,24 @@ import geosentinel_mobile.shared.generated.resources.stat_altitude
 import geosentinel_mobile.shared.generated.resources.stat_beds
 import geosentinel_mobile.shared.generated.resources.stat_season
 
+/** Altezza della testata con la foto o la mappa. */
 private val HeroHeight = 320.dp
-// Il pannello del contenuto sale sulla foto con gli angoli alti arrotondati
+/** Quanto il pannello del contenuto sale sopra la foto; è anche il raggio dei suoi angoli alti arrotondati. */
 private val PanelLip = 28.dp
-// Zoom della mappa in testata: il rifugio con paesi e strade intorno
+/** Zoom della mappa in testata, che mostra il rifugio con paesi e strade attorno. */
 private const val HeroZoom = 12.5
-// Oltre questa scala del testo i servizi vanno in una colonna sola
+/** Scala del testo oltre la quale i servizi si dispongono in una sola colonna. */
 private const val LargeTextScale = 1.3f
 
 /**
- * Pagina del rifugio (M5.1, rifatta con il redesign 11/2026, docs/UI_REDESIGN_PLAN.md §3.2): foto (o mappa) da bordo a
- * bordo, poi un pannello con nome, quota · posti · stagione, Chiama e Indicazioni, subito la disponibilità delle
- * prossime notti (ogni giorno apre "Prenota" da quella data), la descrizione, i servizi, i sentieri vicini e, per chi
- * gestisce il rifugio, la gestione. In basso, fissa, com'è stanotte e "Prenota", che apre il foglio [BookingSheet].
+ * Pagina del rifugio [refugeId]. In alto le foto (o la mappa, se non ce ne sono) da bordo a bordo; sotto, un pannello
+ * con il nome, le tessere di quota, posti e stagione, i pulsanti "Chiama" e "Indicazioni", subito la disponibilità
+ * delle prossime notti (ogni giorno apre "Prenota" da quella data), poi descrizione, servizi, sentieri vicini e, per
+ * chi gestisce il rifugio, la sezione di gestione. In basso, fissa, c'è la barra con il numero di persone e
+ * "Prenota", che apre [BookingSheet].
+ *
+ * [canManage] decide se mostrare la modifica dei posti letto (al gestore di quel rifugio o a un amministratore): è
+ * solo una scelta di interfaccia, perché agli altri il server risponde comunque 403.
  */
 @Composable
 fun RefugeDetailScreen(
@@ -184,31 +192,32 @@ fun RefugeDetailScreen(
     onBack: () -> Unit,
     onOpenTrail: (String) -> Unit,
     onOpenBookings: () -> Unit,
-    // posti letto (M8.3): il gestore di questo rifugio o un ADMIN (il server risponde comunque 403 agli altri)
     canManage: (RefugeResponse) -> Boolean = { false },
     onEditCapacity: (RefugeResponse) -> Unit = {},
 ) {
     val viewModel = koinViewModel<RefugeDetailViewModel> { parametersOf(refugeId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
-    // tornando dal form dei posti (M8.3) posti e disponibilità si rileggono
+    // A ogni ritorno sulla pagina (per esempio dal form dei posti letto) posti e disponibilità si rileggono.
     LifecycleResumeEffect(viewModel) {
         viewModel.refresh()
         onPauseOrDispose { }
     }
     val loaded = (state.refuge as? Section.Loaded)?.value
-    // il foglio "Prenota": null chiuso, "" aperto senza un giorno, altrimenti la data d'arrivo (ISO)
+    // Stato del foglio "Prenota": null se è chiuso, stringa vuota se è aperto senza un giorno, altrimenti la data
+    // d'arrivo in formato ISO. È una stringa perché così si salva con rememberSaveable.
     var sheetArrival by rememberSaveable { mutableStateOf<String?>(null) }
-    // le persone scelte nella barra in basso (Figma): il foglio "Prenota" parte con queste
+    // Persone scelte nella barra in basso: il foglio "Prenota" si apre con questo numero.
     var guests by rememberSaveable { mutableIntStateOf(1) }
 
     val listState = rememberLazyListState()
-    // la foto (primo item) è scorsa via: in alto compare la barra con il nome, come nelle pagine di iOS
+    // Quando la testata (primo elemento della lista) è scorsa via, in alto compare una barra con il nome, come
+    // nelle pagine di iOS.
     val collapsed by remember { derivedStateOf { listState.firstVisibleItemIndex > 0 } }
     Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             state = listState,
             horizontalAlignment = Alignment.CenterHorizontally,
-            // spazio per la barra fissa in basso
+            // Spazio in fondo per non finire sotto la barra fissa.
             contentPadding = PaddingValues(bottom = if (loaded != null) 112.dp else 24.dp),
             modifier = Modifier.fillMaxSize(),
         ) {
@@ -241,7 +250,8 @@ fun RefugeDetailScreen(
                             is Section.Loaded -> NightStrip(nights.value) { date -> sheetArrival = date.toString() }
                         }
                     }
-                    // le righe che citano le fonti (OpenStreetMap, ©) stanno nei crediti, non qui
+                    // Le righe della descrizione che citano le fonti (OpenStreetMap, copyright) si tolgono: le
+                    // attribuzioni stanno nella pagina dei crediti.
                     value.description?.lines()?.filterNot { isSourceCredit(it.trim()) }?.joinToString("\n")?.trim()?.takeIf { it.isNotBlank() }?.let { description ->
                         item(key = "about-title") { SectionHeader(stringResource(Res.string.refuge_about_title)) }
                         item(key = "about") { Description(description) }
@@ -262,7 +272,7 @@ fun RefugeDetailScreen(
                             }
                         }
                     }
-                    // la gestione in fondo: è fuori dal percorso dell'escursionista
+                    // La gestione sta in fondo, fuori dal percorso di lettura dell'escursionista.
                     if (canManage(value)) {
                         item(key = "manage-title") { SectionHeader(stringResource(Res.string.refuge_manage_title)) }
                         item(key = "manage") {
@@ -279,7 +289,7 @@ fun RefugeDetailScreen(
             }
         }
         if (collapsed && loaded != null) CompactBar(loaded.name, collapsed = true, onBack = onBack, actions = null) else BackButton(onBack)
-        // l'azione principale in fondo, nella zona del pollice, con com'è stanotte accanto
+        // L'azione principale sta in basso, nella zona raggiungibile con il pollice.
         if (loaded != null) {
             StickyActionBar(Modifier.align(Alignment.BottomCenter)) {
                 BookBar(guests = guests, maxGuests = minOf(loaded.capacity, MaxGuestsPerBooking), onGuests = { guests = it }) { sheetArrival = "" }
@@ -307,7 +317,11 @@ fun RefugeDetailScreen(
     }
 }
 
-// Il ViewModel del foglio vive con questa pagina (la voce della pila), non con il foglio: chiuderlo non annulla un invio
+/**
+ * Ospita il foglio "Prenota". Il suo ViewModel è legato a questa pagina (alla sua voce nella pila di navigazione) e
+ * non al foglio: così chiudere il foglio non annulla un invio in corso. A ogni nuova apertura il foglio riparte da
+ * [arrival] (vuota: nessun giorno scelto) e da [guests] persone.
+ */
 @Composable
 private fun BookingHost(refuge: RefugeResponse, arrival: String, guests: Int, onClose: () -> Unit, onBooked: () -> Unit, onOpenBookings: () -> Unit) {
     val viewModel = koinViewModel<BookRefugeViewModel>(key = "book-${refuge.id}") { parametersOf(refuge.id, refuge.capacity) }
@@ -318,14 +332,15 @@ private fun BookingHost(refuge: RefugeResponse, arrival: String, guests: Int, on
     BookingSheet(refuge.name, viewModel, onDismiss = onClose, onBooked = onBooked, onOpenBookings = onOpenBookings)
 }
 
-// ---- Testata ----
+// Testata.
 
+/** Testata della pagina: la galleria delle foto, o la mappa se non ce ne sono, con il bordo arrotondato del pannello. */
 @Composable
 private fun Hero(refuge: RefugeResponse, photos: List<MediaResponse>) {
     val background = MaterialTheme.colorScheme.background
     Box(Modifier.fillMaxWidth().height(HeroHeight)) {
         if (photos.isEmpty()) MapHero(refuge) else Gallery(photos)
-        // il pannello che sale sulla foto: gli angoli alti, nel colore della pagina
+        // Inizio del pannello che sale sulla foto: una fascia con gli angoli alti arrotondati nel colore della pagina.
         Box(
             Modifier
                 .align(Alignment.BottomCenter)
@@ -336,7 +351,11 @@ private fun Hero(refuge: RefugeResponse, photos: List<MediaResponse>) {
     }
 }
 
-// Le foto del rifugio, una alla volta scorrendo; puntini (fino a 5) o "2/7"; un tocco la apre intera
+/**
+ * Galleria delle foto del rifugio, una per pagina con lo scorrimento orizzontale. Con più foto mostra dei puntini
+ * (fino a 5) o un contatore. Un tocco apre la foto a schermo intero. Gli URL firmati si chiedono per ogni foto e si
+ * rinnovano se il download fallisce.
+ */
 @Composable
 private fun Gallery(photos: List<MediaResponse>) {
     val colors = MaterialTheme.colorScheme
@@ -392,7 +411,10 @@ private fun Gallery(photos: List<MediaResponse>) {
     opened?.let { PhotoViewer(it, media, onClose = { opened = null }) }
 }
 
-// Senza foto: la mappa ferma sul rifugio con il suo segnaposto. Decorativa per gli screen reader: nome e posti sono sotto
+/**
+ * Testata senza foto: la mappa ferma sul rifugio con il suo segnaposto, senza interazioni. È nascosta allo screen
+ * reader perché nome e posti sono scritti subito sotto.
+ */
 @Composable
 private fun MapHero(refuge: RefugeResponse) {
     val style = rememberMapStyle(rememberSavedMapType())
@@ -400,7 +422,7 @@ private fun MapHero(refuge: RefugeResponse) {
         baseStyle = style,
         initialCameraPosition = CameraPosition(target = refuge.location.toGeoPoint().toPosition(), zoom = HeroZoom),
     ) {
-        // senza nome sulla mappa: è scritto subito sotto, nel pannello
+        // Etichetta trasparente: il nome è già scritto nel pannello sotto.
         RefugeMarkers(listOf(refuge), label = Color.Transparent, halo = Color.Transparent, onRefugeClick = {})
     }
     Box(Modifier.fillMaxSize().clearAndSetSemantics { }) {
@@ -408,7 +430,8 @@ private fun MapHero(refuge: RefugeResponse) {
             state = mapState,
             interactions = MapInteractions.None,
             overlay = {
-                // sopra il bordo del pannello, in basso a destra: in alto coprirebbe Indietro, al centro il rifugio
+                // Attribuzione della mappa in basso a destra, sopra il bordo del pannello: in alto coprirebbe il
+                // pulsante Indietro, al centro il rifugio.
                 AttributionButton(
                     mapState,
                     Modifier.align(Alignment.BottomEnd).padding(bottom = PanelLip + 4.dp, end = 8.dp),
@@ -420,10 +443,11 @@ private fun MapHero(refuge: RefugeResponse) {
     }
 }
 
-// Il nome grande in Archivo e, sotto, le tessere dei dati: quota, posti, stagione (quelle che ci sono)
+/** Nome del rifugio in grande e, sotto, le tessere con i dati disponibili: quota, posti e stagione. */
 @Composable
 private fun Title(refuge: RefugeResponse) {
-    // la quota dei dati o, se manca (rifugi importati), quella delle Terrain Tiles nel punto del rifugio
+    // Si usa la quota del rifugio; se manca (succede per i rifugi importati) si ricava dai dati di elevazione nel
+    // punto del rifugio.
     val elevation = koinInject<ElevationRepository>()
     val altitude by produceState(refuge.altitudeM, refuge.id) {
         if (value == null) value = elevation.metersAt(refuge.location.toGeoPoint())
@@ -441,11 +465,14 @@ private fun Title(refuge: RefugeResponse) {
     }
 }
 
-// 1760 → "1 760", come sulle carte
+/** Separa le migliaia con uno spazio, come sulle carte topografiche (per esempio 1 760). */
 private fun formatThousands(value: Int): String =
     value.toString().reversed().chunked(3).joinToString(" ").reversed()
 
-// Chiamata (se c'è il numero) e indicazioni con le mappe del telefono, metà e metà; senza numero Indicazioni resta a metà
+/**
+ * Pulsanti "Chiama" (solo se il rifugio ha un numero) e "Indicazioni", affiancati a metà larghezza. Le indicazioni
+ * usano il percorso calcolato dall'app ([LocalDirections]). Senza numero, "Indicazioni" resta comunque largo metà.
+ */
 @Composable
 private fun Contacts(refuge: RefugeResponse) {
     val dial = rememberDialer()
@@ -467,9 +494,9 @@ private fun Contacts(refuge: RefugeResponse) {
     }
 }
 
-// ---- Disponibilità ----
+// Disponibilità.
 
-// Le prossime notti come una striscia di giorni: ogni giorno con posti apre "Prenota" con quell'arrivo già scelto
+/** Striscia orizzontale delle prossime notti: toccare un giorno con posti apre "Prenota" con quell'arrivo già scelto. */
 @Composable
 private fun NightStrip(nights: List<NightAvailability>, onPick: (LocalDate) -> Unit) {
     LazyRow(
@@ -483,12 +510,14 @@ private fun NightStrip(nights: List<NightAvailability>, onPick: (LocalDate) -> U
     }
 }
 
-// Una notte: giorno della settimana, numero del giorno (Barlow) e i posti liberi. Stanotte ha il fondo muschio.
-// Pochi posti in ambra con "ultimi"; "Pieno" spento e non toccabile (mai rosso: il rosso resta all'emergenza)
+/**
+ * Cella di una notte: giorno della settimana, numero del giorno e posti liberi. Stanotte ha un fondo pieno nel
+ * colore terziario. Con pochi posti il numero è in ambra con la parola "ultimi"; una notte piena è spenta e non si
+ * può toccare, ma non diventa mai rossa, perché il rosso è riservato all'emergenza.
+ */
 @Composable
 private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    // stanotte nel pino, come la scelta nel progetto Figma; le altre notti su card bianche
     val container = if (tonight) colors.tertiary else colors.surfaceContainerLowest
     val content = if (tonight) colors.onTertiary else colors.onSurface
     val few = !night.isFull && night.freeBeds <= FEW_BEDS
@@ -541,8 +570,10 @@ private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () ->
     }
 }
 
-// La barra in basso (come nel progetto Figma): a sinistra quante persone (− 2 +), a destra "Prenota", che apre il
-// foglio con quelle persone già scelte. I posti di ogni notte sono nella striscia sopra.
+/**
+ * Barra fissa in basso: a sinistra il contatore delle persone, a destra "Prenota", che apre il foglio con quel numero
+ * di persone già scelto. I posti di ogni notte sono nella striscia più in alto.
+ */
 @Composable
 private fun BookBar(guests: Int, maxGuests: Int, onGuests: (Int) -> Unit, onBook: () -> Unit) {
     val colors = MaterialTheme.colorScheme
@@ -569,12 +600,12 @@ private fun BookBar(guests: Int, maxGuests: Int, onGuests: (Int) -> Unit, onBook
     }
 }
 
-// Il contratto (CreateBookingRequest.guests) accetta al massimo 20 persone per prenotazione
+/** Persone al massimo per prenotazione, secondo il contratto della richiesta. */
 private const val MaxGuestsPerBooking = 20
 
-// ---- Descrizione e servizi ----
+// Descrizione e servizi.
 
-// Quattro righe e "Leggi tutto", che apre il testo sul posto
+/** Descrizione limitata a quattro righe; se il testo è più lungo compare "Leggi tutto", che lo apre sul posto. */
 @Composable
 private fun Description(text: String) {
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -599,7 +630,7 @@ private fun Description(text: String) {
     }
 }
 
-// I servizi in una card, due colonne (una con il testo grande), spunta verde e testo
+/** Servizi del rifugio in una card, su due colonne (una sola con il testo grande), ognuno con una spunta. */
 @Composable
 private fun Amenities(labels: List<StringResource>) {
     val colors = MaterialTheme.colorScheme
@@ -610,7 +641,7 @@ private fun Amenities(labels: List<StringResource>) {
                 Row(Modifier.fillMaxWidth()) {
                     row.forEach { label ->
                         Row(Modifier.weight(1f).padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            // decorativa: il servizio è scritto accanto
+                            // Icona decorativa: il nome del servizio è scritto accanto.
                             Icon(AppIcons.Check, contentDescription = null, tint = colors.primary, modifier = Modifier.size(18.dp))
                             Spacer(Modifier.width(8.dp))
                             Text(stringResource(label), style = MaterialTheme.typography.bodyMedium)
@@ -623,7 +654,7 @@ private fun Amenities(labels: List<StringResource>) {
     }
 }
 
-// L'etichetta di un servizio; un valore nuovo del server (unknown) non si mostra
+/** Etichetta di un servizio. Un valore che l'app non conosce ancora restituisce null e non si mostra. */
 private fun RefugeResponse.Amenities.label(): StringResource? = when (this) {
     RefugeResponse.Amenities.DRINKING_WATER -> Res.string.refuge_amenity_drinking_water
     RefugeResponse.Amenities.RESTAURANT -> Res.string.refuge_amenity_restaurant
@@ -636,7 +667,7 @@ private fun RefugeResponse.Amenities.label(): StringResource? = when (this) {
     RefugeResponse.Amenities.unknown_default_open_api -> null
 }
 
-// Sagoma della pagina mentre arriva il rifugio: foto, titolo, due righe, la striscia dei giorni
+/** Sagoma della pagina mostrata durante il caricamento: testata, titolo, una riga, due pulsanti e la striscia dei giorni. */
 @Composable
 private fun DetailSkeleton() {
     Column(Modifier.fillMaxWidth()) {
@@ -658,10 +689,11 @@ private fun DetailSkeleton() {
     }
 }
 
-/** "sab 10/10": giorno della settimana e data, nel calendario, nel riepilogo e nelle prenotazioni. */
+/** Giorno della settimana abbreviato seguito da giorno e mese in numeri, usato nel riepilogo e nelle prenotazioni. */
 @Composable
 internal fun LocalDate.shortLabel(): String = "${stringResource(weekday())} $day/${month.number}"
 
+/** Nome abbreviato del giorno della settimana, dalle risorse di testo. */
 internal fun LocalDate.weekday(): StringResource = when (dayOfWeek.isoDayNumber) {
     1 -> Res.string.weekday_1
     2 -> Res.string.weekday_2

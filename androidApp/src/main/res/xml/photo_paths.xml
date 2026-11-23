@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Solo la cartella delle foto scattate (rememberCameraCapture), nient'altro della cache -->
+<!-- Percorsi condivisi dal FileProvider: solo la cartella delle foto scattate con la fotocamera
+     (rememberCameraCapture), nient'altro della cache dell'app. -->
 <paths>
     <cache-path name="camera" path="camera/"/>
 </paths>

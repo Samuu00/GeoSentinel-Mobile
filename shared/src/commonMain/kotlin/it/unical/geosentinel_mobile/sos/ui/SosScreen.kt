@@ -1,3 +1,5 @@
+// Schermata SOS: pulsante da tenere premuto per lanciare l'allerta, note mediche, stato della richiesta, posizione
+// attuale, annullamento e pulsante "Chiama 112". Usa sempre il tema scuro d'emergenza.
 package it.unical.geosentinel_mobile.sos.ui
 
 import androidx.compose.animation.core.Animatable
@@ -139,19 +141,22 @@ import org.maplibre.compose.location.rememberLocationState
 import kotlin.time.Clock
 import kotlin.time.Duration.Companion.seconds
 
-// Il fix si aspetta al massimo 10 s (M6.1); il primo è l'ultima posizione nota, se il sistema ce l'ha
+/** Attesa massima della posizione al momento del lancio; se il sistema ce l'ha, si usa subito l'ultima posizione nota. */
 private val FixTimeout = 10.seconds
-// Senza risposta dopo 30 s "Chiama 112" passa in primo piano
+/** Tempo senza risposta dopo il quale "Chiama 112" passa in primo piano. */
 private val LateAfter = 30.seconds
-// Finché mancano le push (M7) lo stato si rilegge ogni 30 s con la schermata aperta (M6.2)
+/** Intervallo di rilettura dello stato con la schermata aperta, utile anche quando le notifiche push non arrivano. */
 private val RefreshEvery = 30.seconds
+/** Durata in millisecondi della pressione necessaria per lanciare l'SOS. */
 private const val HoldMillis = 3_000
+/** Numero unico europeo di emergenza. */
 private const val EmergencyNumber = "112"
 
 /**
- * SOS (M6.1, stato aggiornato in M6.2). Niente paesaggio in testata: qui conta solo lo stato. Lo stato dice sempre se il soccorso ha la
- * richiesta; "Chiama 112" è sempre visibile e passa in primo piano (pieno, rosso) quando l'app non basta: ospite,
- * sessione scaduta, invio senza risposta dopo 30 s, risposta negativa, posizione assente.
+ * Schermata SOS. Non ha il paesaggio in testata, perché qui conta solo lo stato, che dice sempre se il soccorso ha
+ * ricevuto la richiesta. "Chiama 112" è sempre visibile e passa in primo piano (pieno e rosso) quando l'app da sola
+ * non basta: utente ospite o con sessione scaduta, invio senza risposta dopo 30 secondi, risposta negativa,
+ * posizione non disponibile. [onLogin] apre il login per l'ospite.
  */
 @Composable
 fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
@@ -162,7 +167,8 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
     val dial = rememberDialer()
     val loggedIn = session is SessionState.LoggedIn
 
-    // il permesso si chiede qui, quando serve davvero; la posizione intanto arriva, così al tocco c'è già un fix
+    // Il permesso della posizione si chiede qui, quando serve davvero; intanto la posizione comincia ad arrivare,
+    // così al momento del lancio è già disponibile.
     val location = rememberLocationState()
     LaunchedEffect(loggedIn) {
         val permission = location.permission
@@ -171,12 +177,13 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
     val scope = rememberCoroutineScope()
     var locating by remember { mutableStateOf(false) }
     var noLocation by remember { mutableStateOf(false) }
-    // remember, non rememberSaveable: le note mediche non finiscono nello stato salvato dell'Activity (si perdono a
-    // una rotazione, prezzo accettato). Si svuotano all'invio: da lì stanno nell'outbox, finché il server non risponde
+    // remember e non rememberSaveable: le note mediche non devono finire nello stato salvato dell'Activity, anche a
+    // costo di perderle ruotando lo schermo. Si svuotano all'invio, perché da quel momento stanno nell'outbox finché
+    // il server non risponde.
     var notes by remember { mutableStateOf("") }
     var confirmCancel by remember { mutableStateOf(false) }
 
-    // invio partito da più di 30 s (anche prima di un riavvio) e ancora senza risposta
+    // Vero se l'invio è partito da più di 30 secondi (anche prima di un riavvio) ed è ancora senza risposta.
     var late by remember { mutableStateOf(false) }
     val since = (state as? SosState.Sending)?.since
     LaunchedEffect(since) {
@@ -187,7 +194,8 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
         }
     }
 
-    // la posizione la manda App (SosLocationUpdates); qui si rilegge lo stato, per vedere la squadra anche senza push
+    // La posizione la invia App (SosLocationUpdates); qui si rilegge solo lo stato, per vedere la squadra assegnata
+    // anche se la notifica push non arriva.
     val raised = state is SosState.Raised
     val lifecycleOwner = LocalLifecycleOwner.current
     LaunchedEffect(raised, lifecycleOwner) {
@@ -202,7 +210,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
 
     val callFirst = !loggedIn || late || noLocation || state is SosState.Failed
 
-    // Redesign "Luce di quota": la schermata d'emergenza è sempre scura, con un alone rosso dietro al pulsante
+    // La schermata d'emergenza è sempre scura, con un alone rosso dietro al pulsante.
     StatusBarOverDark(true)
     EmergencyTheme {
     Box(
@@ -235,7 +243,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
                     style = MaterialTheme.typography.displaySmall,
                     modifier = Modifier.semantics { heading() },
                 )
-                // lo stato si annuncia da solo a TalkBack e VoiceOver quando cambia
+                // Regione "live": TalkBack e VoiceOver annunciano lo stato da soli quando cambia.
                 Column(Modifier.semantics { liveRegion = LiveRegionMode.Polite }, verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     when (val current = state) {
                         is SosState.Sending -> SendingStatus(current, late, expired = session is SessionState.Expired)
@@ -266,7 +274,8 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
                             noLocation = false
                             locating = true
                             scope.launch {
-                                // prima il permesso, se manca e si può ancora chiedere; poi il fix (o l'ultimo noto)
+                                // Prima il permesso, se manca e si può ancora chiedere; poi la posizione (o l'ultima
+                                // nota).
                                 val permission = location.permission
                                 if (permission is LocationPermission.NotGranted && permission.canRequest != false) location.requestPermission()
                                 val fix = withTimeoutOrNull(FixTimeout) { snapshotFlow { location.lastLocation }.filterNotNull().first() }
@@ -280,7 +289,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
                     if (noLocation) FormErrorBanner(stringResource(Res.string.sos_no_location))
                 }
 
-                // dove sei, come lo riceverà il soccorso (Figma): da loggati, prima di "Chiama 112"
+                // Da loggati, prima di "Chiama 112", la posizione come la riceverà il soccorso.
                 if (loggedIn) PositionCard(location.lastLocation?.position?.let { coordinatesLabel(it.latitude, it.longitude) })
                 Call112Button(prominent = callFirst, onClick = { dial(EmergencyNumber) })
 
@@ -318,7 +327,7 @@ fun SosScreen(onBack: () -> Unit, onLogin: () -> Unit) {
     }
 }
 
-// La posizione attuale in una card: il mirino e le coordinate, o l'attesa del GPS
+/** Card con la posizione attuale: un mirino e le coordinate, oppure l'attesa del GPS se [coordinates] è null. */
 @Composable
 private fun PositionCard(coordinates: String?) {
     val colors = MaterialTheme.colorScheme
@@ -338,17 +347,23 @@ private fun PositionCard(coordinates: String?) {
     }
 }
 
+/** Testo normale della schermata, nel colore secondario. */
 @Composable
 private fun Body(text: String, modifier: Modifier = Modifier) {
     Text(text, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = modifier)
 }
 
+/** Titolo dello stato dell'SOS. */
 @Composable
 private fun StatusTitle(text: String) {
-    // 26 sp fissi: la schermata SOS non segue la scala ridotta dei titoli (redesign)
+    // Dimensione fissa di 26 sp: la schermata SOS non usa la scala ridotta dei titoli del resto dell'app.
     Text(text, style = MaterialTheme.typography.headlineSmall.copy(fontSize = 26.sp, lineHeight = 30.sp), fontWeight = FontWeight.SemiBold)
 }
 
+/**
+ * Stato "in invio": spiegazione, numero di tentativi, avviso se la richiesta è scaduta ([expired]) e avviso se
+ * tarda la risposta ([late]).
+ */
 @Composable
 private fun SendingStatus(state: SosState.Sending, late: Boolean, expired: Boolean) {
     StatusTitle(stringResource(Res.string.sos_sending_title))
@@ -358,6 +373,7 @@ private fun SendingStatus(state: SosState.Sending, late: Boolean, expired: Boole
     if (late) FormErrorBanner(stringResource(Res.string.sos_sending_late))
 }
 
+/** Stato "ricevuto": se è già stata inviata una squadra ne mostra nome e nominativo, poi i consigli per l'attesa. */
 @Composable
 private fun RaisedStatus(alert: SosAlertResponse) {
     val team = alert.assignedTeam
@@ -371,13 +387,15 @@ private fun RaisedStatus(alert: SosAlertResponse) {
     Body(stringResource(Res.string.sos_keep_open))
 }
 
-// "Chiama 112": 72 dp (azione d'emergenza, §2). In primo piano pieno e rosso, altrimenti con il solo bordo rosso.
-// Apre il compositore con il numero, la chiamata la fa l'utente.
+/**
+ * Pulsante "Chiama 112", alto 72 dp come le altre azioni d'emergenza. Con [prominent] è pieno e rosso, altrimenti ha
+ * solo il bordo rosso. Apre il compositore del telefono con il numero: la chiamata la avvia l'utente.
+ */
 @Composable
 private fun Call112Button(prominent: Boolean, onClick: () -> Unit) {
     val modifier = Modifier.fillMaxWidth().heightIn(min = 72.dp)
     val label: @Composable () -> Unit = {
-        // decorativa: l'azione è scritta accanto
+        // Icona decorativa: l'azione è scritta accanto.
         Icon(AppIcons.Phone, contentDescription = null, modifier = Modifier.size(24.dp))
         Spacer(Modifier.width(12.dp))
         Text(stringResource(Res.string.sos_call_112), style = MaterialTheme.typography.titleLarge)
@@ -404,8 +422,9 @@ private fun Call112Button(prominent: Boolean, onClick: () -> Unit) {
 }
 
 /**
- * Il pulsante dell'SOS: si tiene premuto 3 s mentre un anello si riempie, così non parte dalla tasca. Lasciando prima
- * l'anello torna indietro. Con TalkBack e VoiceOver basta l'azione "tieni premuto" del lettore, già deliberata.
+ * Pulsante dell'SOS: va tenuto premuto per 3 secondi mentre un anello si riempie, così non parte per sbaglio in tasca.
+ * Lasciandolo prima, l'anello torna indietro. Con TalkBack e VoiceOver basta l'azione "tieni premuto" del lettore di
+ * schermo, che è già un gesto deliberato. [onTriggered] viene chiamata a pressione completata.
  */
 @Composable
 private fun HoldToSendButton(enabled: Boolean, onTriggered: () -> Unit, modifier: Modifier = Modifier) {
@@ -414,7 +433,7 @@ private fun HoldToSendButton(enabled: Boolean, onTriggered: () -> Unit, modifier
     val haptics = LocalHapticFeedback.current
     val description = stringResource(Res.string.sos_hold_description)
     val still = rememberReduceMotion()
-    // due aloni che si allargano e svaniscono finché il pulsante aspetta: si vede dove toccare
+    // Due aloni che si allargano e svaniscono finché il pulsante è in attesa, per far vedere dove toccare.
     val wave = if (still || !enabled) {
         0f
     } else {
@@ -437,7 +456,8 @@ private fun HoldToSendButton(enabled: Boolean, onTriggered: () -> Unit, modifier
                 if (!enabled) return@pointerInput
                 detectTapGestures(onPress = {
                     haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                    // nello scope della composizione, non del gesto: se il pulsante si disabilita a fine corsa non si annulla
+                    // Si lancia nello scope della composizione e non in quello del gesto: se a fine corsa il pulsante
+                    // si disattiva, il lancio non viene annullato.
                     val hold = scope.launch {
                         val remaining = (HoldMillis * (1f - progress.value)).toInt().coerceAtLeast(1)
                         progress.animateTo(1f, tween(remaining, easing = LinearEasing))
@@ -455,14 +475,15 @@ private fun HoldToSendButton(enabled: Boolean, onTriggered: () -> Unit, modifier
             .drawBehind {
                 val stroke = 6.dp.toPx()
                 val disc = size.minDimension / 2 - 22.dp.toPx()
-                // aloni: due onde sfasate di mezzo giro, dal bordo del disco fino al bordo del pulsante
+                // Aloni: due onde sfasate di mezzo ciclo, che vanno dal bordo del disco fino al bordo del pulsante.
                 if (progress.value == 0f) {
                     listOf(wave, (wave + 0.5f) % 1f).forEach { t ->
                         drawCircle(EmergencyRed.copy(alpha = 0.35f * (1f - t)), radius = disc + (size.minDimension / 2 - disc) * t)
                     }
                 }
                 drawCircle(EmergencyRed, radius = disc)
-                // l'anello bianco dentro il bordo del disco: prima appena accennato, poi pieno man mano che si tiene premuto
+                // Anello bianco dentro il bordo del disco: appena accennato a riposo, si riempie man mano che si tiene
+                // premuto.
                 val ring = disc - stroke * 1.5f
                 val topLeft = Offset(center.x - ring, center.y - ring)
                 val arcSize = Size(ring * 2, ring * 2)

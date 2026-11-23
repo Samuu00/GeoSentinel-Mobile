@@ -1,3 +1,5 @@
+// Test dei ViewModel di autenticazione: accesso con email e password, registrazione, accesso con Google, recupero
+// della password con codice via email e passo del codice per gli account con la verifica in due passaggi.
 package it.unical.geosentinel_mobile.auth.ui
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -36,22 +38,27 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/** Verifica LoginViewModel, RegisterViewModel e PasswordResetViewModel contro il backend finto. */
 @OptIn(ExperimentalCoroutinesApi::class)
 class AuthViewModelsTest {
 
     private val backend = FakeBackend()
 
-    // viewModelScope usa Dispatchers.Main: lo si sostituisce con quello del test (tempo virtuale)
+    /**
+     * Crea una sessione sul backend finto. viewModelScope usa Dispatchers.Main, che qui viene sostituito con il
+     * dispatcher del test, così tutto gira nel tempo virtuale.
+     */
     private fun TestScope.session(): SessionManager {
         Dispatchers.setMain(StandardTestDispatcher(testScheduler))
         return sessionWith(backend, FakeSecureTokenStore()).first
     }
 
+    /** Ripristina il dispatcher principale dopo ogni test. */
     @AfterTest
     fun tearDown() = Dispatchers.resetMain()
 
-    // ---- accesso --------------------------------------------------------------------------------------------
 
+    /** Dopo un accesso riuscito la password viene tolta dallo stato e la sessione riporta il ruolo dell'utente. */
     @Test
     fun `accesso riuscito - la password non resta nello stato`() = runTest {
         val session = session()
@@ -68,6 +75,7 @@ class AuthViewModelsTest {
         assertEquals(UserRole.RESCUE_OPERATOR, session.state.value.role)
     }
 
+    /** Una password sbagliata mostra il messaggio di credenziali errate, non quello di sessione scaduta. */
     @Test
     fun `password sbagliata mostra credenziali errate - non sessione scaduta`() = runTest {
         val viewModel = LoginViewModel(session())
@@ -81,9 +89,13 @@ class AuthViewModelsTest {
         assertEquals(false, viewModel.state.value.submitting)
     }
 
+    /**
+     * Con troppi tentativi il server risponde 429 con un'attesa di 60 secondi, oltre il limite del retry automatico:
+     * il messaggio mostra all'utente quanti secondi aspettare.
+     */
     @Test
     fun `troppi tentativi mostra il tempo d'attesa`() = runTest {
-        backend.loginStatus = HttpStatusCode.TooManyRequests // Retry-After 60: oltre il retry automatico
+        backend.loginStatus = HttpStatusCode.TooManyRequests
         val viewModel = LoginViewModel(session())
 
         viewModel.onEmailChange("hiker@test.dev")
@@ -94,6 +106,7 @@ class AuthViewModelsTest {
         assertEquals(UiMessage(Res.string.error_rate_limited_seconds, 60L), viewModel.state.value.error)
     }
 
+    /** Senza email o senza password l'invio non produce nessuna richiesta. */
     @Test
     fun `senza email o password non parte nessuna richiesta`() = runTest {
         val viewModel = LoginViewModel(session())
@@ -105,8 +118,8 @@ class AuthViewModelsTest {
         assertTrue(backend.requests.isEmpty())
     }
 
-    // ---- registrazione --------------------------------------------------------------------------------------
 
+    /** Compila il form di registrazione con dati validi, permettendo di cambiare password e data di nascita. */
     private fun RegisterViewModel.fill(password: String = "password-lunga-123", birthDate: LocalDate? = LocalDate(1990, 5, 1)) {
         onDisplayNameChange("Nuovo Escursionista")
         onEmailChange("nuovo@test.dev")
@@ -114,6 +127,7 @@ class AuthViewModelsTest {
         birthDate?.let(::onBirthDateChange)
     }
 
+    /** Una registrazione riuscita apre la sessione con il ruolo HIKER. */
     @Test
     fun `registrazione riuscita apre la sessione`() = runTest {
         val session = session()
@@ -128,6 +142,7 @@ class AuthViewModelsTest {
         assertEquals(UserRole.HIKER, session.state.value.role)
     }
 
+    /** Password troppo corta e data di nascita mancante producono errori sui campi senza chiamare il server. */
     @Test
     fun `i controlli locali fermano il form senza chiamare il server`() = runTest {
         val viewModel = RegisterViewModel(session())
@@ -141,6 +156,7 @@ class AuthViewModelsTest {
         assertTrue(backend.requests.isEmpty())
     }
 
+    /** Una password di 40 lettere accentate supera i 72 byte e viene bloccata in locale con l'errore "troppo lunga". */
     @Test
     fun `una password oltre i 72 byte si blocca in locale`() = runTest {
         val viewModel = RegisterViewModel(session())
@@ -151,6 +167,7 @@ class AuthViewModelsTest {
         assertEquals(UiMessage(Res.string.error_field_password_long), viewModel.state.value.fieldErrors[RegisterField.PASSWORD])
     }
 
+    /** Gli errori di validazione per campo restituiti dal server arrivano sui campi del form, senza un errore generale. */
     @Test
     fun `gli errori per campo del server arrivano al form`() = runTest {
         backend.registerProblem = HttpStatusCode.BadRequest to
@@ -166,6 +183,7 @@ class AuthViewModelsTest {
         assertNull(viewModel.state.value.error)
     }
 
+    /** Se il server rifiuta la registrazione per una regola di business, compare il messaggio generale della registrazione. */
     @Test
     fun `email già registrata mostra il messaggio della registrazione`() = runTest {
         backend.registerProblem = HttpStatusCode.UnprocessableEntity to
@@ -179,6 +197,7 @@ class AuthViewModelsTest {
         assertEquals(UiMessage(Res.string.error_register_failed), viewModel.state.value.error)
     }
 
+    /** Modificare un campo toglie l'errore mostrato su quel campo. */
     @Test
     fun `modificare un campo toglie il suo errore`() = runTest {
         val viewModel = RegisterViewModel(session())
@@ -190,8 +209,11 @@ class AuthViewModelsTest {
         assertNull(viewModel.state.value.fieldErrors[RegisterField.PASSWORD])
     }
 
-    // ---- Google e password dimenticata ----------------------------------------------------------------------
 
+    /**
+     * Al primo accesso con Google il server chiede la data di nascita: il form la richiede e poi completa l'accesso
+     * riusando lo stesso ID token di Google.
+     */
     @Test
     fun `primo accesso con Google - chiede la data e poi entra con lo stesso token`() = runTest {
         val session = session()
@@ -211,6 +233,10 @@ class AuthViewModelsTest {
         assertEquals(UserRole.HIKER, session.state.value.role)
     }
 
+    /**
+     * Se l'utente annulla l'accesso con Google non compare nessun errore; un account del personale, che non può
+     * usare Google, riceve un messaggio dedicato.
+     */
     @Test
     fun `Google annullato non mostra errori e account del personale ha il suo messaggio`() = runTest {
         val session = session()
@@ -227,6 +253,10 @@ class AuthViewModelsTest {
         assertEquals(UiMessage(Res.string.error_google_staff), viewModel.state.value.error)
     }
 
+    /**
+     * Il recupero della password chiede il codice via email; un codice sbagliato mostra l'errore sul campo, quello
+     * giusto completa il recupero e la nuova password viene tolta dallo stato.
+     */
     @Test
     fun `password dimenticata - codice sbagliato sul campo poi fatto`() = runTest {
         val session = session()
@@ -250,6 +280,7 @@ class AuthViewModelsTest {
         assertEquals("", viewModel.state.value.newPassword)
     }
 
+    /** Senza un'email valida la richiesta del codice non parte e l'errore compare sul campo. */
     @Test
     fun `password dimenticata - controlli locali senza richieste`() = runTest {
         val session = session()
@@ -260,8 +291,8 @@ class AuthViewModelsTest {
         assertTrue(backend.requests.isEmpty())
     }
 
-    // ---- verifica in due passaggi (M10.1) -------------------------------------------------------------------
 
+    /** Attiva la 2FA per l'utente di prova, compila il login e lo invia: il server risponde chiedendo il codice. */
     private fun TestScope.loginWithMfa(session: SessionManager): LoginViewModel {
         backend.mfaTotp["hiker@test.dev"] = "654321"
         val viewModel = LoginViewModel(session)
@@ -272,6 +303,11 @@ class AuthViewModelsTest {
         return viewModel
     }
 
+    /**
+     * La risposta "mfa-required" apre il passo del codice senza mostrare errori; la password non è più nello stato
+     * visibile ma resta nel ViewModel per la seconda richiesta. Il codice accetta solo cifre, al massimo 6, e con il
+     * codice giusto l'accesso riesce. Il 401 del login non fa partire il refresh, perché il login è escluso dal bearer.
+     */
     @Test
     fun `2FA - mfa-required apre il passo del codice e la seconda richiesta lo manda`() = runTest {
         val session = session()
@@ -279,21 +315,24 @@ class AuthViewModelsTest {
         val viewModel = loginWithMfa(session)
 
         assertTrue(viewModel.state.value.mfaStep)
-        assertEquals("", viewModel.state.value.password) // la password resta solo nel ViewModel
+        assertEquals("", viewModel.state.value.password)
         assertNull(viewModel.state.value.error)
         assertEquals(SessionState.Anonymous, session.state.value)
 
-        viewModel.onMfaCodeChange("65a43 21") // solo cifre, al massimo 6
+        viewModel.onMfaCodeChange("65a43 21")
         assertEquals("654321", viewModel.state.value.mfaCode)
         viewModel.submitCode()
         advanceUntilIdle()
 
         assertTrue(viewModel.state.value.loggedIn)
         assertEquals(UserRole.HIKER, session.state.value.role)
-        // nessun refresh partito dal 401 mfa-required: login e google sono fuori dal bearer
         assertTrue(backend.requests.none { it.startsWith("POST /api/v1/auth/refresh") })
     }
 
+    /**
+     * Un codice sbagliato mostra l'errore sul campo; anche un codice valido ma già usato da un altro accesso viene
+     * rifiutato, come protezione contro il riuso.
+     */
     @Test
     fun `2FA - codice sbagliato sul campo e stesso codice due volte rifiutato`() = runTest {
         val session = session()
@@ -306,7 +345,6 @@ class AuthViewModelsTest {
         assertEquals(UiMessage(Res.string.error_mfa_code_wrong), viewModel.state.value.mfaCodeError)
         assertTrue(viewModel.state.value.mfaStep)
 
-        // usato una volta da un altro login: non vale più (replay)
         assertTrue(session.login("hiker@test.dev", "password-giusta-1", "654321").isSuccess)
         session.logout()
         viewModel.onMfaCodeChange("654321")
@@ -316,6 +354,10 @@ class AuthViewModelsTest {
         assertFalse(viewModel.state.value.loggedIn)
     }
 
+    /**
+     * Al posto del codice TOTP si può usare un codice di recupero, scritto come testo libero. Tornando indietro dal
+     * passo del codice si ritorna alla password e la richiesta con il codice non parte più.
+     */
     @Test
     fun `2FA - codice di recupero e Indietro che dimentica la password`() = runTest {
         val session = session()
@@ -325,12 +367,11 @@ class AuthViewModelsTest {
 
         viewModel.onToggleRecoveryCode()
         viewModel.onMfaCodeChange("ABCD-EFGH")
-        assertEquals("ABCD-EFGH", viewModel.state.value.mfaCode) // testo libero
+        assertEquals("ABCD-EFGH", viewModel.state.value.mfaCode)
         viewModel.submitCode()
         advanceUntilIdle()
         assertTrue(viewModel.state.value.loggedIn)
 
-        // Indietro dal passo del codice: si torna alla password e la richiesta non parte più
         session.logout()
         val again = loginWithMfa(session)
         again.onMfaCancelled()
@@ -342,6 +383,7 @@ class AuthViewModelsTest {
         assertEquals(sent, backend.requests.size)
     }
 
+    /** Con Google la seconda richiesta riusa lo stesso ID token aggiungendo il codice della 2FA. */
     @Test
     fun `2FA - con Google lo stesso ID token e il codice`() = runTest {
         backend.mfaTotp["hiker@test.dev"] = "111222"
@@ -358,6 +400,7 @@ class AuthViewModelsTest {
         assertEquals(2, backend.requests.count { it.startsWith("POST /api/v1/auth/google") })
     }
 
+    /** Il toString dello stato non contiene la password, il codice né l'email dell'utente. */
     @Test
     fun `2FA - password e codice non finiscono nel toString dello stato`() = runTest {
         val session = session()

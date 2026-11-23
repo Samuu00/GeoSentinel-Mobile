@@ -1,3 +1,4 @@
+// Livello della mappa MapLibre che disegna i pericoli come triangoli colorati per gravità.
 package it.unical.geosentinel_mobile.hazard.ui
 
 import androidx.compose.material.icons.Icons
@@ -34,9 +35,11 @@ import org.maplibre.spatialk.geojson.FeatureCollection
 import org.maplibre.spatialk.geojson.Point
 
 /**
- * I pericoli attivi sulla mappa (M4.4): un triangolo grande nel colore della gravità, come `Severity.color()` della lista
- * (rosso solo per `CRITICAL`, §2), con un bordo chiaro o scuro che lo stacca da ogni mappa. Il colore non è l'unico
- * segno: la card e la lista dicono la gravità a parole. Le proprie segnalazioni ancora in verifica sono attenuate.
+ * Disegna i pericoli [hazards] sulla mappa come triangoli colorati in base alla gravità, con la stessa logica di
+ * `Severity.color()` usata nella lista: rosso solo per `CRITICAL`, arancio per `HIGH` e [otherColor] per le altre.
+ * [halo] è il bordo chiaro o scuro che stacca il simbolo da qualunque stile di mappa. Il colore non è l'unica
+ * informazione: card e lista riportano la gravità a parole. Le proprie segnalazioni ancora in verifica sono attenuate.
+ * Il tocco su un triangolo chiama [onHazardClick] con l'id del pericolo.
  */
 @Composable
 @MaplibreComposable
@@ -61,9 +64,10 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
         id = "pericoli",
         source = source,
         minZoom = from.toFloat(),
-        // più piccoli da lontano: restano tutti visibili (un pericolo non si nasconde), ma si sovrappongono meno
+        // Triangoli più piccoli da lontano: restano tutti visibili (un pericolo non va mai nascosto), ma si
+        // sovrappongono meno.
         iconSize = interpolate(linear(), zoom(), from to const(0.6f), 13 to const(1f)),
-        // SDF: il colore si sceglie qui, per gravità
+        // L'icona è disegnata come SDF (signed distance field), così MapLibre può colorarla a runtime con iconColor.
         iconImage = image(triangle, DpSize(30.dp, 30.dp), drawAsSdf = true),
         iconColor = switch(
             feature["severity"],
@@ -71,8 +75,8 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
             case(HazardResponse.Severity.HIGH.value, const(TrailWarning)),
             fallback = const(otherColor),
         ),
-        // le proprie segnalazioni in verifica attenuate: la card dice "In verifica" a parole
-        // e tutti in dissolvenza alla soglia di zoom
+        // Opacità: tutti i triangoli compaiono in dissolvenza oltre la soglia di zoom; le proprie segnalazioni ancora in
+        // verifica restano attenuate a metà (la card lo dice a parole).
         iconOpacity = interpolate(
             linear(),
             zoom(),
@@ -81,7 +85,8 @@ fun HazardMarkers(hazards: List<HazardResponse>, halo: Color, otherColor: Color,
         ),
         iconHaloColor = const(halo),
         iconHaloWidth = const(2.dp),
-        // tutti visibili: sono al massimo 50, e un pericolo nascosto da un'etichetta non va bene
+        // Collisioni disattivate: i pericoli sono pochi (il server ne restituisce al massimo 50) e uno nascosto da
+        // un'etichetta sarebbe un problema di sicurezza.
         iconAllowOverlap = const(true),
         iconIgnorePlacement = const(true),
         onClick = onClick,

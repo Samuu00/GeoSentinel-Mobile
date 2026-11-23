@@ -1,3 +1,6 @@
+// Traduzione degli errori delle API in messaggi comprensibili per l'utente.
+// Ogni ApiError viene associato a una stringa localizzata in `strings.xml`; slug e codici HTTP non vengono mai
+// mostrati all'utente.
 package it.unical.geosentinel_mobile.core.network
 
 import geosentinel_mobile.shared.generated.resources.Res
@@ -27,7 +30,10 @@ import geosentinel_mobile.shared.generated.resources.error_validation
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 
-/** Messaggio per l'utente, in italiano. Utilizzabile dal ViewModel (è suspend, non serve un Composable). */
+/**
+ * Restituisce il messaggio per l'utente già risolto nella lingua corrente. È una funzione `suspend` e non un
+ * Composable, quindi si può chiamare anche da un ViewModel. Per il 429 con attesa nota riporta i secondi.
+ */
 suspend fun ApiError.userMessage(): String =
     if (this is ApiError.RateLimited && retryAfterSeconds != null) {
         getString(Res.string.error_rate_limited_seconds, retryAfterSeconds)
@@ -35,7 +41,10 @@ suspend fun ApiError.userMessage(): String =
         getString(messageResource())
     }
 
-// Slug e status non si mostrano mai all'utente: uno slug sconosciuto ha il messaggio generico del suo ramo
+/**
+ * Sceglie la risorsa di testo per l'errore. Per conflitti e regole di dominio decide lo slug; uno slug sconosciuto
+ * (per esempio aggiunto da una versione più recente del backend) riceve il messaggio generico del suo gruppo.
+ */
 internal fun ApiError.messageResource(): StringResource = when (this) {
     ApiError.Network -> Res.string.error_network
     is ApiError.Unauthorized -> Res.string.error_unauthorized
@@ -62,6 +71,7 @@ internal fun ApiError.messageResource(): StringResource = when (this) {
         "invalid-reset-code" -> Res.string.error_invalid_reset_code
         else -> Res.string.error_generic
     }
-    // internal-error e storage-unavailable: Server non porta lo slug, e un 503 può venire anche da un proxy
+    // internal-error e storage-unavailable hanno lo stesso messaggio: Server non conserva lo slug, perché
+    // un 503 può arrivare anche da un proxy che non risponde con un ProblemDetail.
     is ApiError.Server -> Res.string.error_server
 }

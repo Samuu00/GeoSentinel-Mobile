@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Tema della finestra per Android 12 e successivi, che mostrano sempre uno splash all'avvio. Con lo sfondo
+     dell'app e un'icona trasparente lo splash non si nota e sembra che l'app si apra subito. -->
 <resources>
-    <!-- Android 12+ mostra sempre uno splash all'avvio: senza icona e con lo sfondo dell'app non si vede,
-         sembra che l'app si apra subito -->
     <style name="Theme.GeoSentinel" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/start_background</item>
         <item name="android:windowSplashScreenBackground">@color/start_background</item>

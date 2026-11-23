@@ -1,3 +1,5 @@
+// Schermata "Crediti e licenze" del Profilo. Raccoglie in un solo posto le attribuzioni richieste dalle licenze
+// dei dati e delle risorse usate (mappe, immagini satellitari, foto, icone, font).
 package it.unical.geosentinel_mobile.profile.ui
 
 import androidx.compose.foundation.layout.Column
@@ -39,8 +41,8 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 
 /**
- * Crediti e licenze (redesign "Luce di quota"): le attribuzioni che le licenze chiedono, raccolte qui, così sulla
- * mappa e sulle foto restano chiuse dietro una "i". Righe solo da leggere, senza azione.
+ * Pagina dei crediti, divisa in sezioni (mappa, foto, app). Raccogliere qui le attribuzioni permette di tenerle
+ * nascoste dietro un pulsante "i" sulla mappa e sulle foto. Le righe sono solo da leggere e non hanno azioni.
  */
 @Composable
 fun CreditsScreen(onBack: () -> Unit) {
@@ -69,6 +71,7 @@ fun CreditsScreen(onBack: () -> Unit) {
     }
 }
 
+/** Una sezione dei crediti: titolo e una card con una riga per ogni risorsa (nome e licenza). */
 @Composable
 private fun Section(title: StringResource, rows: List<Pair<StringResource, StringResource>>) {
     GroupHeader(stringResource(title))

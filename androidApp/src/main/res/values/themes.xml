@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Tema Android della finestra, usato solo fino a quando Compose disegna la prima schermata. -->
 <resources>
-    <!-- Sfondo della finestra prima che Compose disegni: il colore dello sfondo dell'app, niente lampo bianco -->
+    <!-- La finestra ha lo stesso colore dello sfondo dell'app, così all'avvio non compare un lampo bianco. -->
     <style name="Theme.GeoSentinel" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@color/start_background</item>
     </style>

@@ -1,3 +1,6 @@
+// Componenti per mostrare le foto delle segnalazioni: la striscia di miniature, il visualizzatore a schermo intero e
+// la gestione degli URL firmati (che scadono e vanno richiesti di nuovo). SignedUrl e photoRequest sono riusati anche
+// da altre schermate con foto, come la foto profilo.
 package it.unical.geosentinel_mobile.media.ui
 
 import androidx.compose.foundation.background
@@ -51,20 +54,24 @@ import org.jetbrains.compose.resources.stringResource
 import org.koin.compose.koinInject
 import it.unical.geosentinel_mobile.core.ui.AppIcons
 
+/** Forma delle miniature: rettangolo con gli angoli arrotondati. */
 private val ThumbShape = RoundedCornerShape(14.dp)
-// il primo URL più due rinnovi, come nel dettaglio del sentiero
+
+/** Richieste massime di URL firmato per una foto: il primo più due rinnovi, poi la foto si dà per non disponibile. */
 private const val MaxUrlRequests = 3
 
 /**
- * Le foto di una segnalazione (M4.2 bis): una striscia di miniature che un tocco apre a schermo intero. Si caricano
- * quando la striscia compare; senza foto (o se la lista non arriva) non occupa spazio: le foto sono un di più, il testo
- * della segnalazione resta. Gli URL sono firmati e durano 5 minuti: quando un download non riesce se ne chiede un altro.
+ * Mostra le foto della segnalazione [hazardId] come una striscia orizzontale di miniature; un tocco apre la foto a
+ * schermo intero. La lista si carica quando la striscia compare. Se non ci sono foto, o se la richiesta fallisce, il
+ * componente non occupa spazio: le foto sono un'aggiunta e il testo della segnalazione resta comunque leggibile.
+ * Gli URL sono firmati e valgono 5 minuti: quando un download non riesce se ne chiede uno nuovo.
  */
 @Composable
 fun HazardPhotoStrip(hazardId: String, modifier: Modifier = Modifier) {
     val media = koinInject<MediaRepository>()
     var photos by remember(hazardId) { mutableStateOf<List<MediaResponse>>(emptyList()) }
-    // la lista è in cache nel repository per poco (una riga che rientra scorrendo non la richiede di nuovo)
+    // Il repository tiene la lista in cache per poco tempo, così una riga che rientra nello schermo scorrendo non
+    // ripete la richiesta.
     LaunchedEffect(hazardId) { media.photosOfHazard(hazardId).onSuccess { photos = it } }
     if (photos.isEmpty()) return
 
@@ -77,22 +84,29 @@ fun HazardPhotoStrip(hazardId: String, modifier: Modifier = Modifier) {
     opened?.let { photo -> PhotoViewer(photo, media, onClose = { opened = null }) }
 }
 
-// L'URL firmato di una foto: chiesto quando serve, rinnovato quando il download non riesce (scaduto), al massimo 3 volte
+/**
+ * Stato dell'URL firmato di una foto, osservabile da Compose. L'URL si chiede quando la foto deve essere mostrata e
+ * si rinnova quando il download non riesce (di solito perché è scaduto), fino a MaxUrlRequests richieste in tutto.
+ * [url] è null finché non arriva; [failed] diventa true quando la foto va considerata non disponibile.
+ */
 internal class SignedUrl(private val media: MediaRepository, private val mediaId: String) {
     var url by mutableStateOf<String?>(null)
     var failed by mutableStateOf(false)
     private var requests = 0
 
+    /** Chiede un nuovo URL al server; in caso di errore segna la foto come non disponibile. */
     suspend fun load() {
         requests++
         media.downloadUrl(mediaId).fold(onSuccess = { url = it }, onFailure = { failed = true })
     }
 
+    /** Da chiamare quando Coil non riesce a scaricare l'immagine: scarta l'URL e ne chiede un altro, se ne restano. */
     suspend fun onDownloadFailed() {
         url = null
         if (requests >= MaxUrlRequests) failed = true else load()
     }
 
+    /** Nuovo tentativo chiesto dall'utente dopo un fallimento: azzera il conteggio delle richieste e ricarica. */
     suspend fun retry() {
         requests = 0
         failed = false
@@ -100,6 +114,7 @@ internal class SignedUrl(private val media: MediaRepository, private val mediaId
     }
 }
 
+/** Crea e ricorda lo stato dell'URL firmato di [mediaId] e lo carica la prima volta che il componente compare. */
 @Composable
 internal fun rememberSignedUrl(media: MediaRepository, mediaId: String): SignedUrl {
     val signed = remember(mediaId) { SignedUrl(media, mediaId) }
@@ -107,6 +122,11 @@ internal fun rememberSignedUrl(media: MediaRepository, mediaId: String): SignedU
     return signed
 }
 
+/**
+ * Miniatura di una foto nella striscia. Mostra un indicatore di caricamento, poi l'immagine ritagliata; se la foto non
+ * è disponibile mostra un testo e il tocco riprova, altrimenti il tocco apre la foto. [number] e [total] servono alla
+ * descrizione per i lettori di schermo ("Foto 2 di 3").
+ */
 @Composable
 private fun Thumbnail(photo: MediaResponse, number: Int, total: Int, media: MediaRepository, onOpen: () -> Unit) {
     val signed = rememberSignedUrl(media, photo.id)
@@ -143,7 +163,10 @@ private fun Thumbnail(photo: MediaResponse, number: Int, total: Int, media: Medi
     }
 }
 
-// La foto a schermo intero, intera (non tagliata), su fondo scuro; il tondo in alto a destra la chiude, come Indietro
+/**
+ * Mostra la foto a schermo intero in un Dialog, intera (non ritagliata) su fondo scuro. Il pulsante tondo in alto a
+ * destra la chiude, come il tasto Indietro. In basso a sinistra c'è l'eventuale credito della foto.
+ */
 @Composable
 internal fun PhotoViewer(photo: MediaResponse, media: MediaRepository, onClose: () -> Unit) {
     val signed = rememberSignedUrl(media, photo.id)
@@ -186,7 +209,10 @@ internal fun PhotoViewer(photo: MediaResponse, media: MediaRepository, onClose: 
     }
 }
 
-// La chiave della cache è l'id, non l'URL: l'URL cambia a ogni richiesta, la foto no (come nel dettaglio del sentiero)
+/**
+ * Costruisce la richiesta di Coil per una foto. Come chiave della cache (in memoria e su disco) si usa l'id della foto
+ * e non l'URL: l'URL firmato cambia a ogni richiesta, mentre la foto resta la stessa e non va riscaricata.
+ */
 @Composable
 internal fun photoRequest(url: String, mediaId: String): ImageRequest {
     val context = LocalPlatformContext.current
