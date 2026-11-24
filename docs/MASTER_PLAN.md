@@ -30,6 +30,9 @@
 > "Apri il sentiero" tolto dalla card del POI (resta su quella del pericolo), commenti del codice riscritti in italiano
 > in forma esplicativa (intestazione di file, KDoc), nel backend `User.passwordHash` nullable come la migrazione;
 > tolti i riferimenti alla produzione e agli store. 389 test host.
+> **24/11:** nel backend il rate limit del login è più giusto (azzerato dopo un accesso riuscito, limite per
+> account e IP più uno largo per account, IPv6 per rete /64, token rifiutati contati per IP); l'app non cambia
+> (gestisce già 429 e `Retry-After`). Backend ricostruito nel compose; build `5d029f6` installata sull'iPhone.
 > **Cosa manca, in ordine: §9.**
 
 ---
@@ -1995,7 +1998,7 @@ Scelte esplicite, non dimenticanze:
 3. Chiedimi "review <task>": leggo i file e ti segnalo i problemi con file e riga, senza riscrivere il codice.
 4. Spunta i checkpoint e, a fine milestone, lancia la catena di review di §6.
 
-## 9. Cosa manca (aggiornato al 23/11)
+## 9. Cosa manca (aggiornato al 24/11)
 
 In ordine di priorità. I dettagli stanno nei checkpoint dei singoli task; qui solo l'elenco, per non perdere niente.
 Il progetto è una tesi triennale e gira solo in locale: qui non c'è niente su produzione, store o rilascio.
@@ -2011,10 +2014,13 @@ Il progetto è una tesi triennale e gira solo in locale: qui non c'è niente su 
 5. **Commenti del codice** riscritti in italiano in forma esplicativa: intestazione di file, KDoc su classi e funzioni.
 6. Backend: `User.passwordHash` nullable, come la colonna nella migrazione (account Google senza password).
 7. Tolti dal codice e dalla documentazione i riferimenti alla produzione e agli store.
+8. (24/11) Backend: rate limit del login corretto (vedi "Dopo M9" del piano del backend). Build `5d029f6`
+   installata sull'iPhone contro il backend locale (`http://192.168.1.188:8080`).
 
 ### 9.2 Prossimo lavoro
-1. **Mappa sull'iPhone senza rilievo**: verificare che non laggi più zoomando. Se lagga ancora: profilare i livelli
-   dell'app (sentieri, POI con le collisioni, dati rimandati a ogni fermata) prima di togliere altro.
+1. **Prove sull'iPhone con la build `5d029f6`:** la mappa non lagga più zoomando (senza rilievo); la card del POI ha
+   solo "Indicazioni"; più login di fila non danno 429. Se la mappa lagga ancora: profilare i livelli dell'app
+   (sentieri, POI con le collisioni, dati rimandati a ogni fermata) prima di togliere altro.
 2. **Review non ancora lanciate** (§6): M9; redesign ("Dopo M11"); mappa entro 50 km e percorso ("Dopo il redesign").
 
 ### 9.3 Prove sull'emulatore (si fanno da qui)
@@ -2044,6 +2050,12 @@ L'emulatore `Medium_Phone` dal 22/11 si chiude da solo (crash della grafica con 
 3. **Pulizia della cache senza posizione:** il limite segue il centro della mappa, quindi la pulizia gira a ogni
    spostamento. Da fare solo quando il centro si sposta di qualche km, come con la posizione.
 4. Da decidere: controlli della mappa in orizzontale (fine di M8.3).
+5. **Template del client generato:** il commento in `apiClient/build.gradle.kts` diceva che
+   `templates/data_class.mustache` veniva da openapi-generator 7.14.0, mentre il catalogo usa la 7.25.0. Da
+   ricopiare dal 7.25 e ripatchare (`unknown_default_open_api`).
+6. **URL della release:** `https://api.geosentinel.dev` (release Android e `Config.xcconfig` di iOS) è un segnaposto di
+   un dominio che non esiste. Le build per l'iPhone ricevono l'URL dal workflow; da decidere se puntarlo al backend
+   locale.
 
 ### 9.6 Checkpoint del backend che si chiudono dall'app
 1. Flusso completo da Android e iOS (M7 del backend): registrazione → login → sentieri vicini → segnalazione con foto
