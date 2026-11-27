@@ -60,6 +60,8 @@ data class BookRefugeUiState(
     val pickingDeparture: Boolean = false,
     val submitting: Boolean = false,
     val done: BookingDone? = null,
+    /** Totale in centesimi restituito dal server con la prenotazione creata (null se senza prezzo o ancora in coda). */
+    val bookedTotalCents: Int? = null,
     val error: UiMessage? = null,
 ) {
     /** Giorno di partenza, ricavato da arrivo e numero di notti. */
@@ -128,7 +130,7 @@ class BookRefugeViewModel(
         val start = arrival?.takeIf { it >= today() } ?: today()
         pickFirstFree = arrival == null
         _state.update {
-            it.copy(arrival = start, nights = 1, pickingDeparture = true, pageStart = mondayOf(start), done = null, error = null)
+            it.copy(arrival = start, nights = 1, pickingDeparture = true, pageStart = mondayOf(start), done = null, bookedTotalCents = null, error = null)
         }
         loadPage(mondayOf(start))
     }
@@ -196,7 +198,7 @@ class BookRefugeViewModel(
             val outcome = bookings.book(owner, BookingPayload(refugeId, current.arrival, current.departure, current.guests))
             _state.update { state ->
                 when (outcome) {
-                    is BookingOutcome.Booked -> state.copy(submitting = false, done = BookingDone.BOOKED)
+                    is BookingOutcome.Booked -> state.copy(submitting = false, done = BookingDone.BOOKED, bookedTotalCents = outcome.booking.totalPriceCents)
                     BookingOutcome.Queued -> state.copy(submitting = false, done = BookingDone.QUEUED)
                     // Rifiuto (per esempio posti esauriti o date non valide): le scelte restano, così l'utente le può
                     // cambiare e riprovare.

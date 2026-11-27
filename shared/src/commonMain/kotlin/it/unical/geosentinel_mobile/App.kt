@@ -141,6 +141,8 @@ import it.unical.geosentinel_mobile.staff.ui.TicketDetailScreen
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateScreen
 import it.unical.geosentinel_mobile.staff.ui.ManageLink
 import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityScreen
+import it.unical.geosentinel_mobile.staff.ui.RefugePriceScreen
+import it.unical.geosentinel_mobile.core.ui.centsToEuroInput
 import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateScreen
 import it.unical.geosentinel_mobile.trail.ui.DefaultArea
 import geosentinel_mobile.shared.generated.resources.staff_capacity_edit
@@ -521,6 +523,9 @@ fun App() {
                         onEditCapacity = { refuge ->
                             navController.navigate(Route.RefugeCapacity(refuge.id, refuge.capacity)) { launchSingleTop = true }
                         },
+                        onEditPrice = { refuge ->
+                            navController.navigate(Route.RefugePrice(refuge.id, centsToEuroInput(refuge.pricePerNightCents))) { launchSingleTop = true }
+                        },
                     )
                 }
                 composable<Route.RefugeCapacity>(
@@ -529,6 +534,13 @@ fun App() {
                 ) { entry ->
                     val route = entry.toRoute<Route.RefugeCapacity>()
                     RefugeCapacityScreen(route.refugeId, route.capacity, onBack = { navController.popBackStack() })
+                }
+                composable<Route.RefugePrice>(
+                    enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },
+                    popExitTransition = { slideOutHorizontally(tween(PopMillis)) { it } },
+                ) { entry ->
+                    val route = entry.toRoute<Route.RefugePrice>()
+                    RefugePriceScreen(route.refugeId, route.priceDraft, onBack = { navController.popBackStack() })
                 }
                 composable<Route.RescueTeamCreate>(
                     enterTransition = { slideInHorizontally(tween(PushMillis)) { it } },

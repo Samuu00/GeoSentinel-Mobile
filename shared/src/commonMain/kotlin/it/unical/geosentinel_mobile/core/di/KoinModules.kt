@@ -53,6 +53,7 @@ import it.unical.geosentinel_mobile.staff.ui.HazardQueueViewModel
 import it.unical.geosentinel_mobile.staff.ui.MfaResetViewModel
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityViewModel
+import it.unical.geosentinel_mobile.staff.ui.RefugePriceViewModel
 import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.TicketCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.TicketDetailViewModel
@@ -229,6 +230,7 @@ fun coreModule(
     viewModel { (trailId: String) -> TicketCreateViewModel(trailId, get()) }
     // Posti letto dei rifugi, squadre di soccorso e azzeramento della verifica in due passaggi.
     viewModel { (refugeId: String, capacity: Int) -> RefugeCapacityViewModel(refugeId, capacity, get()) }
+    viewModel { (refugeId: String, priceDraft: String) -> RefugePriceViewModel(refugeId, priceDraft, get()) }
     viewModel { RescueTeamCreateViewModel(get()) }
     viewModel { MfaResetViewModel(get()) }
 }

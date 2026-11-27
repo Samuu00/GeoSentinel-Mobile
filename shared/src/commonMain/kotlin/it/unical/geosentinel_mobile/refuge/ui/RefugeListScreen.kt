@@ -2,6 +2,8 @@
 // soggiorno, prenotazioni in arrivo e passate, avvisi dei rifiuti e foglio delle azioni su una prenotazione).
 package it.unical.geosentinel_mobile.refuge.ui
 
+import geosentinel_mobile.shared.generated.resources.refuge_per_night_short
+import it.unical.geosentinel_mobile.core.ui.formatEuro
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -339,6 +341,13 @@ private fun RefugeCard(
                     )
                 }
             }
+            // Prezzo a persona per notte in evidenza a destra, come nelle app di prenotazione.
+            refuge.pricePerNightCents?.let { cents ->
+                Column(horizontalAlignment = Alignment.End, modifier = Modifier.padding(start = 12.dp, end = 4.dp)) {
+                    Text(formatEuro(cents), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold, color = colors.primary)
+                    Text(stringResource(Res.string.refuge_per_night_short), style = MaterialTheme.typography.labelSmall, color = colors.onSurfaceVariant)
+                }
+            }
             Icon(AppIcons.ChevronRight, contentDescription = null, tint = colors.onSurfaceVariant, modifier = Modifier.size(22.dp))
         }
     }
@@ -485,6 +494,7 @@ private fun LazyListScope.bookingRows(
                         checkIn = row.booking.checkIn,
                         checkOut = row.booking.checkOut,
                         guests = row.booking.guests,
+                        totalCents = row.booking.totalPriceCents,
                         status = row.booking.status.label(),
                         muted = muted,
                         onClick = { onOpen(row.booking.id) },
@@ -517,6 +527,7 @@ private fun BookingRow(
     guests: Int,
     status: String?,
     onClick: (() -> Unit)?,
+    totalCents: Int? = null,
     muted: Boolean = false,
     pending: Boolean = false,
 ) {
@@ -539,7 +550,7 @@ private fun BookingRow(
                 color = if (muted) colors.onSurfaceVariant else colors.onSurface,
             )
             Text(
-                stayLabel(checkIn, checkOut, null, guests),
+                stayLabel(checkIn, checkOut, null, guests) + (totalCents?.let { " · " + formatEuro(it) } ?: ""),
                 style = MaterialTheme.typography.bodyMedium,
                 color = colors.onSurfaceVariant,
                 modifier = Modifier.padding(top = 2.dp),
@@ -578,6 +589,7 @@ private fun NextStay(booking: BookingResponse, refuge: RefugeResponse?, today: L
             checkOut = booking.checkOut,
             guests = booking.guests,
             note = note,
+            totalCents = booking.totalPriceCents,
             modifier = Modifier.clickable(role = Role.Button, onClick = onClick),
             actions = if (refuge == null) null else {
                 {
@@ -662,6 +674,7 @@ private fun BookingActionsSheet(
                     checkOut = booking.checkOut,
                     guests = booking.guests,
                     note = booking.status.label(),
+                    totalCents = booking.totalPriceCents,
                 )
                 Spacer(Modifier.height(16.dp))
                 GroupCard {

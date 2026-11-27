@@ -3,6 +3,8 @@
 // una barra fissa apre il foglio "Prenota".
 package it.unical.geosentinel_mobile.refuge.ui
 
+import geosentinel_mobile.shared.generated.resources.booking_guests_count
+import geosentinel_mobile.shared.generated.resources.stat_price_night
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -89,6 +91,10 @@ import geosentinel_mobile.shared.generated.resources.refuge_tonight
 import geosentinel_mobile.shared.generated.resources.refuge_tonight_lower
 import geosentinel_mobile.shared.generated.resources.refuge_trails_title
 import geosentinel_mobile.shared.generated.resources.staff_capacity_edit
+import geosentinel_mobile.shared.generated.resources.staff_price_edit
+import geosentinel_mobile.shared.generated.resources.staff_price_none
+import geosentinel_mobile.shared.generated.resources.refuge_price_ask
+import it.unical.geosentinel_mobile.core.ui.formatEuro
 import geosentinel_mobile.shared.generated.resources.weekday_1
 import geosentinel_mobile.shared.generated.resources.weekday_2
 import geosentinel_mobile.shared.generated.resources.weekday_3
@@ -154,7 +160,6 @@ import androidx.compose.ui.text.style.TextAlign
 import it.unical.geosentinel_mobile.core.ui.cardShadow
 import geosentinel_mobile.shared.generated.resources.booking_less
 import geosentinel_mobile.shared.generated.resources.booking_more
-import geosentinel_mobile.shared.generated.resources.refuge_guests_value
 import geosentinel_mobile.shared.generated.resources.refuge_nights_tap
 import geosentinel_mobile.shared.generated.resources.refuge_cell_beds
 import it.unical.geosentinel_mobile.core.ui.AppIcons
@@ -194,6 +199,7 @@ fun RefugeDetailScreen(
     onOpenBookings: () -> Unit,
     canManage: (RefugeResponse) -> Boolean = { false },
     onEditCapacity: (RefugeResponse) -> Unit = {},
+    onEditPrice: (RefugeResponse) -> Unit = {},
 ) {
     val viewModel = koinViewModel<RefugeDetailViewModel> { parametersOf(refugeId) }
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -282,6 +288,12 @@ fun RefugeDetailScreen(
                                     value = pluralStringResource(Res.plurals.refuge_beds, value.capacity, value.capacity),
                                     onClick = { onEditCapacity(value) },
                                 )
+                                GroupDivider()
+                                GroupRow(
+                                    title = stringResource(Res.string.staff_price_edit),
+                                    value = value.pricePerNightCents?.let(::formatEuro) ?: stringResource(Res.string.staff_price_none),
+                                    onClick = { onEditPrice(value) },
+                                )
                             }
                         }
                     }
@@ -329,7 +341,7 @@ private fun BookingHost(refuge: RefugeResponse, arrival: String, guests: Int, on
         viewModel.open(arrival.takeIf { it.isNotEmpty() }?.let(LocalDate::parse))
         viewModel.onGuestsChange(guests)
     }
-    BookingSheet(refuge.name, viewModel, onDismiss = onClose, onBooked = onBooked, onOpenBookings = onOpenBookings)
+    BookingSheet(refuge.name, refuge.pricePerNightCents, viewModel, onDismiss = onClose, onBooked = onBooked, onOpenBookings = onOpenBookings)
 }
 
 // Testata.
@@ -454,10 +466,21 @@ private fun Title(refuge: RefugeResponse) {
     }
     Column(Modifier.widthIn(max = PageMaxWidth).fillMaxWidth().padding(horizontal = 20.dp)) {
         Text(refuge.name, style = MaterialTheme.typography.headlineLarge, modifier = Modifier.semantics { heading() })
+        // Senza prezzo una riga sotto il nome dice di chiederlo al rifugio; con il prezzo c'è la tessera "Notte".
+        if (refuge.pricePerNightCents == null) {
+            Text(
+                stringResource(Res.string.refuge_price_ask),
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 4.dp),
+            )
+        }
         StatTiles(
             listOfNotNull(
                 altitude?.let { Stat(stringResource(Res.string.stat_altitude), formatThousands(it), "m") },
                 Stat(stringResource(Res.string.stat_beds), refuge.capacity.toString()),
+                // Prezzo a persona per notte, con il numero in evidenza come gli altri dati.
+                refuge.pricePerNightCents?.let { Stat(stringResource(Res.string.stat_price_night), formatEuro(it)) },
                 refuge.season?.takeIf { it.isNotBlank() }?.let { Stat(stringResource(Res.string.stat_season), it) },
             ),
             modifier = Modifier.padding(top = 16.dp),
@@ -577,7 +600,7 @@ private fun NightCell(night: NightAvailability, tonight: Boolean, onClick: () ->
 @Composable
 private fun BookBar(guests: Int, maxGuests: Int, onGuests: (Int) -> Unit, onBook: () -> Unit) {
     val colors = MaterialTheme.colorScheme
-    val guestsLabel = stringResource(Res.string.refuge_guests_value, guests)
+    val guestsLabel = pluralStringResource(Res.plurals.booking_guests_count, guests, guests)
     Row(verticalAlignment = Alignment.CenterVertically) {
         Surface(shape = CircleShape, color = colors.surfaceContainerLowest, modifier = Modifier.cardShadow(CircleShape)) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.semantics(mergeDescendants = false) { }) {

@@ -62,7 +62,7 @@ class BookingSheetTest {
      * Prepara la rotta delle prenotazioni sul server finto, crea il ViewModel con la capienza [capacity] e i posti
      * liberi per notte dati da [freeBeds], apre il foglio con arrivo oggi e aspetta che compaia il pulsante "Conferma".
      */
-    private fun show(capacity: Int, freeBeds: (LocalDate) -> Int = { 8 }) {
+    private fun show(capacity: Int, freeBeds: (LocalDate) -> Int = { 8 }, pricePerNightCents: Int? = null) {
         val json = headersOf(HttpHeaders.ContentType, "application/json")
         backend.extraRoutes = { request, _ ->
             if (request.method == HttpMethod.Post && request.url.encodedPath == "/api/v1/bookings") {
@@ -91,7 +91,7 @@ class BookingSheetTest {
         )
         viewModel.open(today)
         compose.setContent {
-            TestTheme { BookingSheet("Rifugio Monte Botte Donato", viewModel, onDismiss = {}, onBooked = {}, onOpenBookings = {}) }
+            TestTheme { BookingSheet("Rifugio Monte Botte Donato", pricePerNightCents, viewModel, onDismiss = {}, onBooked = {}, onOpenBookings = {}) }
         }
         compose.waitForText("Conferma")
     }
@@ -124,6 +124,29 @@ class BookingSheetTest {
         assertEquals(1, posts.size)
         assertTrue("\"guests\":2" in posts.single())
         assertTrue(outbox.rows.value.isEmpty())
+    }
+
+    /**
+     * Con un prezzo il foglio mostra il totale (prezzo × notti × persone) e lo aggiorna quando cambiano le persone;
+     * senza prezzo dice di chiederlo al rifugio. La richiesta non contiene mai un importo.
+     */
+    @Test
+    fun `il totale segue le persone e la richiesta non manda importi`() {
+        show(capacity = 4, pricePerNightCents = 3500)
+        compose.waitForSubstring("35,00\u00A0€")
+        more().performScrollTo().performClick()
+        compose.waitForSubstring("70,00\u00A0€")
+        confirm().performScrollTo().performClick()
+
+        compose.waitForText("Prenotazione confermata")
+        assertTrue("Price" !in posts.single())
+    }
+
+    /** Senza prezzo il foglio non inventa un totale. */
+    @Test
+    fun `senza prezzo il foglio dice di chiederlo al rifugio`() {
+        show(capacity = 4)
+        compose.waitForText("Prezzo da chiedere al rifugio")
     }
 
     /**

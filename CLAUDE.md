@@ -3,7 +3,9 @@
 App per chi va in montagna: mappa dei sentieri, segnalazione dei pericoli, rifugi e **SOS**, più le schermate per
 gestori del parco e soccorritori. **Kotlin Multiplatform** (Android + iOS), unico client del backend in
 `../GeoSentinel-Backend`. Il piano completo, con milestone, task, firme e checkpoint, è in
-[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 (verifica in due passaggi) → M11 (foto profilo), pianificate il 18/10 sul contratto di M8 e M9 del backend.
+[`docs/MASTER_PLAN.md`](docs/MASTER_PLAN.md). Ordine delle milestone: M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 (verifica in due passaggi) → M11 (foto profilo), pianificate il 18/10 sul contratto di M8 e M9 del backend; poi M12–M16 (pianificate il 26/11: prezzi, pagamento, sci, funghi, riconoscimento con l'AI) su M10–M14 del backend.
+
+**28/11: M12 fatta** (prezzo dei rifugi su M10 del backend, scritta da Claude su richiesta: `core/ui/Money.kt` con `formatEuro`/`parseEuroToCents`, `staff/ui/RefugePriceScreen`, totale nel foglio "Prenota", nella conferma e nelle prenotazioni; 397 test host, provata sull'emulatore).
 
 **Stato (23/11/2026, in ordine di data; progetto di tesi triennale, gira solo in locale):** M0 e M1 fatte (checkpoint aperti: Accessibility Scanner, simulatore iPhone; job `ios` verde dal 12/10).
 M2 fatta: `SecureTokenStore` (Keystore + DataStore cifrato, Keychain), `SessionManager` con login, registrazione,

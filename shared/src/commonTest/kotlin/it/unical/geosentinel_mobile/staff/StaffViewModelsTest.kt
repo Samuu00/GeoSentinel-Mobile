@@ -28,6 +28,7 @@ import it.unical.geosentinel_mobile.staff.data.StaffRepository
 import it.unical.geosentinel_mobile.staff.ui.HazardQueueViewModel
 import it.unical.geosentinel_mobile.staff.ui.PoiCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.RefugeCapacityViewModel
+import it.unical.geosentinel_mobile.staff.ui.RefugePriceViewModel
 import it.unical.geosentinel_mobile.staff.ui.RescueTeamCreateViewModel
 import it.unical.geosentinel_mobile.staff.ui.TrailStatusViewModel
 import it.unical.geosentinel_mobile.trail.FakeCatalogDao
@@ -75,6 +76,8 @@ class StaffViewModelsTest {
     private val poiBodies = mutableListOf<String>()
     /** Posti letto del rifugio sul server finto. */
     private var refugeCapacity = 24
+    /** Ultimo corpo ricevuto da PATCH /refuges/r1/price. */
+    private var lastPriceBody: String? = null
     /** Ospiti confermati in una delle prossime notti: una capienza inferiore riceve 409 capacity-exceeded. */
     private val confirmedGuests = 10
     /** Nomi delle squadre già esistenti, unici senza distinguere maiuscole e minuscole. */
@@ -154,6 +157,16 @@ class StaffViewModelsTest {
                                 ok,
                             )
                         }
+                    }
+                    request.method == HttpMethod.Patch && path == "/refuges/r1/price" -> {
+                        val sent = body()
+                        lastPriceBody = sent
+                        val price = Regex("\"pricePerNightCents\"\\s*:\\s*(\\d+)").find(sent)?.groupValues?.get(1) ?: "null"
+                        respond(
+                            """{"id":"r1","name":"Rifugio","capacity":24,"location":{"lat":39.3,"lon":16.5},"managerId":"m1","amenities":[],"pricePerNightCents":$price}""",
+                            HttpStatusCode.OK,
+                            ok,
+                        )
                     }
                     request.method == HttpMethod.Post && path == "/rescue-teams" -> {
                         val sent = body()
@@ -331,6 +344,37 @@ class StaffViewModelsTest {
         assertEquals(Res.string.error_forbidden, viewModel.state.value.error?.text)
     }
 
+
+    /**
+     * Il prezzo si scrive in euro e parte in centesimi: "35,5" diventa 3550; un testo non valido non si salva; il campo
+     * vuoto toglie il prezzo e manda null (o nessun campo), mai uno zero.
+     */
+    @Test
+    fun `il prezzo parte in centesimi e il campo vuoto lo toglie`() = runTest {
+        val (_, staff, _) = repositories()
+        val viewModel = RefugePriceViewModel("r1", "", staff)
+        assertFalse(viewModel.state.value.canSave, "vuoto come prima: niente da salvare")
+
+        viewModel.onDraftChange("35,555")
+        assertFalse(viewModel.state.value.valid)
+        assertFalse(viewModel.state.value.canSave)
+        viewModel.onDraftChange("35,5")
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertTrue(lastPriceBody!!.contains("3550"), lastPriceBody)
+        assertTrue(viewModel.state.value.saved)
+        assertEquals(3550, viewModel.state.value.priceCents)
+        assertEquals("35,50", viewModel.state.value.draft)
+
+        viewModel.onDraftChange("")
+        viewModel.save()
+        advanceUntilIdle()
+
+        assertFalse(lastPriceBody!!.contains(Regex("\\d")), lastPriceBody)
+        assertEquals(null, viewModel.state.value.priceCents)
+        assertEquals("", viewModel.state.value.draft)
+    }
 
     /** Una capienza inferiore agli ospiti già confermati riceve 409: il messaggio spiega il motivo e la capienza resta quella di prima. */
     @Test

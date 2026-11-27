@@ -3,6 +3,12 @@
 // riusati in "Le mie prenotazioni", e alcune funzioni per scrivere le date in italiano.
 package it.unical.geosentinel_mobile.refuge.ui
 
+import geosentinel_mobile.shared.generated.resources.booking_pay_at_refuge
+import geosentinel_mobile.shared.generated.resources.booking_price_breakdown
+import geosentinel_mobile.shared.generated.resources.booking_total
+import geosentinel_mobile.shared.generated.resources.refuge_price_ask
+import it.unical.geosentinel_mobile.core.ui.formatEuro
+import it.unical.geosentinel_mobile.core.ui.stayTotalCents
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.tween
@@ -157,6 +163,7 @@ private const val LargeTextScale = 1.3f
 @Composable
 internal fun BookingSheet(
     refugeName: String,
+    pricePerNightCents: Int?,
     viewModel: BookRefugeViewModel,
     onDismiss: () -> Unit,
     onBooked: () -> Unit,
@@ -188,7 +195,7 @@ internal fun BookingSheet(
             ) {
                 Column(Modifier.widthIn(max = 480.dp).fillMaxWidth()) {
                     if (done == null) {
-                        BookingForm(refugeName = refugeName, state = state, viewModel = viewModel, onCancel = { close(onDismiss) })
+                        BookingForm(refugeName = refugeName, pricePerNightCents = pricePerNightCents, state = state, viewModel = viewModel, onCancel = { close(onDismiss) })
                     } else {
                         BookingConfirmation(
                             refugeName = refugeName,
@@ -206,7 +213,7 @@ internal fun BookingSheet(
 
 /** Form della prenotazione: barra con "Annulla", calendario, persone, riepilogo, errore e pulsante di conferma. */
 @Composable
-private fun BookingForm(refugeName: String, state: BookRefugeUiState, viewModel: BookRefugeViewModel, onCancel: () -> Unit) {
+private fun BookingForm(refugeName: String, pricePerNightCents: Int?, state: BookRefugeUiState, viewModel: BookRefugeViewModel, onCancel: () -> Unit) {
     val colors = MaterialTheme.colorScheme
     // Barra del foglio come nei fogli di iOS: "Annulla" a sinistra e titolo al centro.
     Box(Modifier.fillMaxWidth().heightIn(min = 48.dp)) {
@@ -285,9 +292,57 @@ private fun BookingForm(refugeName: String, state: BookRefugeUiState, viewModel:
         textAlign = TextAlign.Center,
         modifier = Modifier.fillMaxWidth().padding(top = 4.dp, bottom = 16.dp),
     )
+    PriceSummary(pricePerNightCents, state.nights, state.guests)
     FormErrorBanner(state.error?.resolve())
     if (state.error != null) Spacer(Modifier.height(12.dp))
     PrimaryPillButton(stringResource(Res.string.booking_confirm), onClick = viewModel::submit, loading = state.submitting)
+}
+
+/**
+ * Riepilogo del prezzo prima della conferma, in una card: a sinistra il calcolo (prezzo × notti × persone) e "Si paga
+ * in rifugio", a destra il totale in grande. È indicativo e calcolato come il server: l'importo che fa fede arriva con
+ * la prenotazione. Senza prezzo la card dice di chiederlo al rifugio. Regione "live": lo screen reader rilegge il
+ * totale quando cambiano date o persone.
+ */
+@Composable
+private fun PriceSummary(pricePerNightCents: Int?, nights: Int, guests: Int) {
+    val colors = MaterialTheme.colorScheme
+    val total = stayTotalCents(pricePerNightCents, nights, guests)
+    GroupCard(Modifier.padding(bottom = 16.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp)
+                .semantics(mergeDescendants = true) { liveRegion = LiveRegionMode.Polite },
+        ) {
+            if (pricePerNightCents == null || total == null) {
+                Text(stringResource(Res.string.refuge_price_ask), style = MaterialTheme.typography.bodyLarge, color = colors.onSurfaceVariant)
+                return@Row
+            }
+            Column(Modifier.weight(1f)) {
+                Text(stringResource(Res.string.booking_total), style = MaterialTheme.typography.titleMedium)
+                Text(
+                    stringResource(
+                        Res.string.booking_price_breakdown,
+                        formatEuro(pricePerNightCents),
+                        pluralStringResource(Res.plurals.booking_nights_count, nights, nights),
+                        pluralStringResource(Res.plurals.booking_guests_count, guests, guests),
+                    ),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                    modifier = Modifier.padding(top = 2.dp),
+                )
+                Text(
+                    stringResource(Res.string.booking_pay_at_refuge),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = colors.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            Text(formatEuro(total), style = MaterialTheme.typography.headlineSmall, color = colors.primary)
+        }
+    }
 }
 
 // Calendario.
@@ -506,7 +561,8 @@ private fun BookingConfirmation(refugeName: String, state: BookRefugeUiState, bo
             modifier = Modifier.padding(horizontal = 16.dp),
         )
         Spacer(Modifier.height(24.dp))
-        StayTicket(refugeName, state.arrival, state.departure, state.guests)
+        // Nel biglietto il totale che ha calcolato il server, quello che fa fede (in coda non c'è ancora).
+        StayTicket(refugeName, state.arrival, state.departure, state.guests, totalCents = state.bookedTotalCents)
         Spacer(Modifier.height(24.dp))
         PrimaryPillButton(stringResource(Res.string.booking_done), onClick = onDone)
         TextButton(onClick = onOpenBookings, modifier = Modifier.heightIn(min = 48.dp).padding(top = 4.dp)) {
@@ -544,7 +600,8 @@ private fun AnimatedCheck() {
 
 /**
  * Il soggiorno disegnato come un biglietto: in una fascia colorata l'eventuale [note] in maiuscolo (per esempio
- * "Tra 3 giorni"), il nome del rifugio e la riga con date, notti e persone. Se ci sono [actions], sotto compare una
+ * "Tra 3 giorni"), il nome del rifugio e la riga con date, notti, persone e, se c'è, il
+ * totale copiato sulla prenotazione ([totalCents]). Se ci sono [actions], sotto compare una
  * perforazione tratteggiata e poi la riga delle azioni; senza azioni il biglietto finisce con la fascia.
  */
 @Composable
@@ -555,6 +612,7 @@ internal fun StayTicket(
     guests: Int,
     modifier: Modifier = Modifier,
     note: String? = null,
+    totalCents: Int? = null,
     actions: (@Composable RowScope.() -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
@@ -583,6 +641,13 @@ internal fun StayTicket(
                 color = colors.onSurface,
                 modifier = Modifier.padding(top = 6.dp),
             )
+            // Totale su una riga sua, con l'importo in evidenza a destra.
+            if (totalCents != null) {
+                Row(Modifier.fillMaxWidth().padding(top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(stringResource(Res.string.booking_total), style = MaterialTheme.typography.bodyMedium, color = colors.onSurface, modifier = Modifier.weight(1f))
+                    Text(formatEuro(totalCents), style = MaterialTheme.typography.titleLarge, color = colors.onSurface)
+                }
+            }
         }
         // Perforazione: due mezzi cerchi nel colore della pagina sui bordi, che sembrano tacche, e un tratteggio in
         // mezzo.

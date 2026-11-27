@@ -33,6 +33,9 @@
 > **24/11:** nel backend il rate limit del login è più giusto (azzerato dopo un accesso riuscito, limite per
 > account e IP più uno largo per account, IPv6 per rete /64, token rifiutati contati per IP); l'app non cambia
 > (gestisce già 429 e `Retry-After`). Backend ricostruito nel compose; build `5d029f6` installata sull'iPhone.
+> **26/11: pianificate M12–M16** (sezione "Nuove feature" in fondo a §5), sulle M10–M14 del backend: prezzo dei
+> rifugi, pagamento con carta (Stripe, poi PayPal), impianti sciistici con skipass, funghi (stagione e posti),
+> riconoscimento dei funghi da foto con l'AI.
 > **Cosa manca, in ordine: §9.**
 
 ---
@@ -1936,12 +1939,144 @@ una linea dritta. "Indicazioni" sui rifugi e sul sentiero apriva le mappe del te
 
 ---
 
+### Nuove feature (pianificate il 26/11): M12–M16
+
+> Pianificate il 26/11 sul piano del backend (sua sezione "Nuove feature": M10–M14). Il codice lo scrivi tu.
+> Ogni milestone parte quando la sua controparte del backend ha `docs/openapi.json` rigenerato: si rigenera il client
+> (`apiClient`) e si aggiornano gli enum (`BookingStatus.PENDING_PAYMENT` e quelli nuovi) **nello stesso giro**,
+> perché gli enum generati sono rigidi.
+
+Regole comuni:
+- **Importi:** arrivano in centesimi (`Int`). Si formattano solo nella UI con una funzione unica in `core/ui`
+  (`formatEuro(cents)` → "35,00 €", formato italiano), mai convertiti in `Double`. L'app non manda mai un importo.
+- **Avvisi:** gli stati "indicativi" (impianto aperto o chiuso) e le risposte dell'AI hanno l'avviso **sempre
+  visibile**, non in un dialogo che si chiude.
+- Testi in italiano, nomi delle specie in italiano con il nome scientifico sotto.
+
+---
+
+### Milestone 12: prezzo dei rifugi (su M10 del backend)
+
+- `RefugeDetailScreen`: il prezzo a persona per notte (`pricePerNightCents`) sotto il nome; senza prezzo
+  "Prezzo da chiedere al rifugio".
+- `BookingSheet`: il totale del soggiorno (`totalPriceCents` della disponibilità) si aggiorna con date e ospiti;
+  nelle mie prenotazioni il totale salvato (`BookingResponse.totalPriceCents`).
+- Gestore (`staff/ui/RefugeCapacityScreen`, da rinominare in `RefugeSettingsScreen`): campo "Prezzo per notte"
+  accanto ai posti letto, euro con due decimali convertiti in centesimi una volta sola (`parseEuroToCents`), vuoto =
+  togli il prezzo. 403 e 409 gestiti come la capacità.
+- Checkpoint:
+  - [x] `commonTest`: `formatEuro` e `parseEuroToCents` (0, 3500, 100000, virgola e punto, valori non validi)
+  - [x] sull'emulatore: prezzo impostato dal gestore → visibile all'escursionista con il totale nel foglio "Prenota"
+
+> **Fatta il 28/11** (scritta da Claude su richiesta), provata sull'emulatore con il backend in container. Differenze:
+> - form del prezzo in una schermata a parte (`staff/ui/RefugePriceScreen` + `RefugePriceViewModel`, rotta
+>   `Route.RefugePrice` con `priceDraft` come parametro di query), non dentro `RefugeCapacityScreen` (non rinominata);
+> - il totale del foglio "Prenota" si calcola nell'app da `pricePerNightCents` (`stayTotalCents`, stessa formula del
+>   server) invece di richiamare la disponibilità a ogni tocco; fa fede `totalPriceCents` della prenotazione, mostrato
+>   nella conferma, nel biglietto del prossimo soggiorno e nelle righe di "Le mie prenotazioni";
+> - UX (28/11, richiesta dell'utente): tessera "Notte" nella pagina del rifugio, prezzo "a notte" a destra nella card
+>   della lista, card "Totale" con il calcolo nel foglio; `formatEuro` con spazio non separabile (il "€" non va a capo);
+> - corretto anche l'etichetta per lo screen reader dello stepper ("1 persone" → plurale).
+
+### Milestone 13: pagamento con carta (su M11 del backend)
+
+- **Scelta:** nessun SDK di Stripe nell'app. Il backend restituisce `checkoutUrl` e l'app lo apre nel browser di
+  sistema dentro l'app: `expect fun openCheckout(url: String)` → `ASWebAuthenticationSession` su iOS (si chiude da
+  sola al redirect verso `geosentinel://payments/return`, schema di callback), Custom Tab su Android con un intent
+  filter sullo stesso schema. Il redirect lo fa il backend (M11, "Ritorno nell'app"). I dati della carta non toccano
+  l'app, e il ritorno non vale come conferma: conta solo il sync.
+- **Flusso:** "Prenota" → la richiesta parte come oggi dall'outbox con la sua `Idempotency-Key`. Risposta
+  `PENDING_PAYMENT` con `checkoutUrl` → si apre il pagamento. Al ritorno nell'app (resume) →
+  `POST /bookings/{id}/payment/sync`, poi altri sync con attesa crescente per al massimo 2 minuti, finché lo stato
+  diventa `CONFIRMED` o `CANCELLED`.
+- **Outbox:** invariata. Il retry di una prenotazione già creata torna con lo stesso `checkoutUrl` (lo garantisce il
+  backend), quindi l'app non apre mai due pagamenti diversi per la stessa prenotazione.
+- **Le mie prenotazioni:** stato "In attesa di pagamento" con il tempo che resta (`paymentExpiresAt`) e "Paga ora"
+  (riapre `checkoutUrl`); scaduta → "Annullata: pagamento non completato". L'annullamento di una pagata dice
+  "Verrai rimborsato".
+- **Errori:** `payment-unavailable` (503) → "Pagamento non disponibile, riprova tra poco"; `payment-expired` (409) →
+  ricarica la prenotazione.
+- **PayPal (dopo, con il backend):** scelta "Carta" / "PayPal" nel foglio "Prenota"; stesso flusso, cambia solo
+  l'URL.
+- Checkpoint:
+  - [ ] `commonTest`: risposta `PENDING_PAYMENT` → `openCheckout` chiamato una volta; sync fino a `CONFIRMED`; dopo 2
+    minuti smette e lascia "In attesa"; retry dall'outbox → stesso URL, nessuna seconda apertura
+  - [ ] sull'emulatore, chiavi di test del backend: carta 4242… → confermata; carta rifiutata → in attesa, poi
+    annullata alla scadenza; annullamento → rimborso nella dashboard di test
+  - [ ] sull'iPhone: il ritorno dal browser riporta nell'app e fa il sync
+
+### Milestone 14: impianti sciistici e skipass (su M12 del backend)
+
+- **Mappa:** livello degli impianti (icona, area con un contorno leggero dallo zoom 12), con le stesse regole dei
+  rifugi: entro 50 km, collisioni delle icone, cache in Room come il catalogo (ETag).
+- **Foglio dell'impianto:** stato "Aperto" / "Chiuso" / "Stato non disponibile" con il motivo ("fuori stagione",
+  "chiuso dal gestore fino al …") e sempre la riga "Stato indicativo: controlla le condizioni della neve prima di
+  partire"; stagione, quote, numero di impianti e piste, prezzo dello skipass al giorno.
+- **Prenota skipass:** calendario dei giorni (lo stesso di `BookingSheet`, con i giorni chiusi non selezionabili),
+  da 1 a 7 giorni consecutivi, sciatori da 1 a 10, totale; poi lo stesso pagamento di M13. Outbox con
+  `Idempotency-Key` come le prenotazioni dei rifugi.
+- **I miei skipass:** sezione nelle prenotazioni, separata da quella dei rifugi; annullamento prima del primo giorno.
+- **Gestore:** stagione, prezzo e capienza; "Chiudi" / "Apri" fino a una data (override), con `If-Match` e ricarica
+  su 409 come i ticket.
+- Errori: `resort-closed` (422) → "In uno dei giorni scelti l'impianto è chiuso"; `capacity-exceeded` come i rifugi.
+- Checkpoint:
+  - [ ] `commonTest`: giorni chiusi non selezionabili; più di 7 giorni rifiutati; retry dall'outbox senza doppioni
+  - [ ] sull'emulatore: Gambarie, Lorica, Monte Curcio e la località della Sila Piccola sulla mappa; impianto fuori
+    stagione → "Chiuso, fuori stagione" e niente "Prenota"; override del gestore visibile subito
+
+### Milestone 15: funghi (su M13 del backend)
+
+- **Stagione vicino al sentiero:** nella scheda del sentiero, card "Funghi in stagione" con le specie del mese alla
+  quota del sentiero (la quota media del profilo altimetrico che l'app calcola già con `ElevationRepository`).
+  Per ogni specie: nome, nome scientifico, habitat e commestibilità **solo con l'avviso fisso** sotto ("Non
+  raccogliere né mangiare funghi senza averli fatti controllare da un esperto o dall'Ispettorato micologico
+  dell'ASL"). Le specie `DEADLY` hanno un'etichetta rossa e l'elenco delle specie con cui si confondono.
+- **Regole della raccolta:** una riga con il link alle regole regionali e del parco (autorizzazione, giorni,
+  limiti); testi e fonti li fissa M13 del backend, l'app non li scrive a memoria.
+- **Posti:** livello "Posti dei funghi" sulla mappa, **spento di default**; aggiunta con pressione lunga sulla mappa
+  (come una segnalazione di pericolo): specie facoltativa dal catalogo, data, nota, interruttore "Visibile a tutti"
+  (spento = privato). "I miei posti" nel Profilo: elenco paginato, cambio di visibilità, cancellazione. Gestore:
+  "Nascondi" su un posto pubblico.
+- Offline: catalogo delle specie in cache (ETag); i posti si vedono solo con la rete.
+- Checkpoint:
+  - [ ] `commonTest`: interruttore spento → `PRIVATE` nel corpo; posto nascosto mostrato al proprietario con
+    l'etichetta "Nascosto dal parco"
+  - [ ] sull'emulatore: un posto privato non compare a un secondo utente; reso pubblico, sì; account cancellato →
+    nessun posto rimasto
+
+### Milestone 16: riconoscimento dei funghi con l'AI (su M14 del backend)
+
+- **Privacy:** al primo uso una schermata dice che la foto viene mandata a un servizio di AI esterno (tramite il
+  nostro backend), non viene salvata e non deve ritrarre persone; si conferma una volta (preferenza locale).
+- **Ingresso:** "Riconosci un fungo" (dalla card dei funghi e dal menu della mappa) → `rememberPhotoPicker` →
+  `ImageEncoder.toJpeg` con il lato lungo ≤ 1568 px e senza EXIF (come le segnalazioni) → `POST
+  /mushrooms/identify` multipart. La foto non si salva sul telefono né in cache. Se il client generato non gestisce
+  bene una parte file multipart, la chiamata si fa a mano con Ktor (`submitFormWithBinaryData`), come
+  `MediaUploader`.
+- **Attesa:** la risposta può richiedere diversi secondi: stato "Sto analizzando la foto…" con indicatore e
+  annullamento; nessun retry automatico (ogni tentativo conta nel limite giornaliero).
+- **Risultato:** in alto, **sempre visibile e non chiudibile**, il `disclaimer` del backend. Se `dangerWarning`,
+  sopra c'è un riquadro rosso ("Tra i possibili funghi o i loro simili ce n'è uno velenoso o mortale"). Poi fino a
+  3 candidati con la confidenza a parole (bassa / media / alta, mai una percentuale), le caratteristiche viste e i
+  simili pericolosi. **Mai** la parola "commestibile" in questa schermata, nemmeno se il catalogo la conosce.
+- Con `photoIssues` (foto sfocata, manca il gambo…) l'app suggerisce di rifare la foto inquadrando cappello,
+  lamelle e gambo.
+- **Offline:** il pulsante è disattivato con "Serve la connessione": in montagna spesso non c'è, e va detto prima di
+  scattare.
+- Errori: 422 `mushroom-not-recognized` → "Non riconosco un fungo in questa foto"; 429 → "Hai usato i
+  riconoscimenti di oggi"; 503 → "Riconoscimento non disponibile".
+- Checkpoint:
+  - [ ] `commonTest`: avviso presente in ogni stato del risultato; `dangerWarning` → riquadro rosso; nessuna stringa
+    "commestibile" nella schermata (test di Compose); offline → pulsante disattivato
+  - [ ] sull'emulatore e sull'iPhone (foto HEIC → JPEG): foto di un fungo → candidati; foto di un sasso → 422
+
 ## 6. Ordine e review
 
 ```
 M0 → M1 → M2 → M3 → M4.1 → M4.3 → M6 → M4.2 → M4.4 → M5 → M7 → M8 → M9 → M10 → M11
+  → M12 → M13 → M14 → M15 → M16
 ```
-M10 e M11 (18/10) seguono M8 e M9 del backend.
+M10 e M11 (18/10) seguono M8 e M9 del backend; M12–M16 (26/11) seguono M10–M14 del backend.
 L'SOS (M6) viene subito dopo la mappa: è la funzione per cui l'app esiste, e i suoi problemi conviene scoprirli presto.
 Eccezione decisa il 04/10: la segnalazione (M4.1, già fatta) e "Le mie segnalazioni" (M4.3) vengono prima; le foto
 (M4.2) e i pericoli vicini (M4.4) restano dopo M6.
@@ -1964,6 +2099,11 @@ perché scriverebbero il codice al posto tuo.
 | 9 | Qualità e build release | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 | 10 | Verifica in due passaggi | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 | 11 | Foto profilo | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 12 | Prezzo dei rifugi | `ecc:kotlin-reviewer,ecc:code-reviewer` |
+| 13 | Pagamento con carta | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 14 | Impianti sciistici | `ecc:kotlin-reviewer,ecc:code-reviewer` |
+| 15 | Funghi | `ecc:kotlin-reviewer,ecc:security-reviewer` |
+| 16 | Riconoscimento con l'AI | `ecc:kotlin-reviewer,ecc:security-reviewer` |
 
 ```bash
 /ecc:orchestrate custom "ecc:kotlin-build-resolver,ecc:kotlin-reviewer" "[Plan: docs/MASTER_PLAN.md#step-0] Review only, do not write feature code: KMP Gradle setup (libs.versions.toml with Ktor 3, Koin, Room KMP + KSP, Navigation Compose, MapLibre Compose, stable Material 3), AppConfig per platform, debug-only cleartext (network_security_config, NSAllowsLocalNetworking), theme and role-based bottom bar, CI android+ios jobs; Acceptance: assembleDebug and host tests green; release manifest has no cleartext; local.properties untracked"
@@ -1990,6 +2130,9 @@ Scelte esplicite, non dimenticanze:
 - Creazione e modifica dei sentieri disegnando il percorso.
 - Assegnare un ticket a un altro gestore (manca la rotta nel backend).
 - Lingua inglese.
+- PayPal finché il backend non ha il suo adattatore (M11 del backend, ultimo checkpoint).
+- Noleggio dell'attrezzatura da sci e stato della neve in tempo reale.
+- Foto dei posti dei funghi e stagione legata al meteo (piogge recenti).
 - Layout per tablet e desktop.
 
 ## 8. Come lavoriamo
@@ -1998,7 +2141,7 @@ Scelte esplicite, non dimenticanze:
 3. Chiedimi "review <task>": leggo i file e ti segnalo i problemi con file e riga, senza riscrivere il codice.
 4. Spunta i checkpoint e, a fine milestone, lancia la catena di review di §6.
 
-## 9. Cosa manca (aggiornato al 24/11)
+## 9. Cosa manca (aggiornato al 26/11)
 
 In ordine di priorità. I dettagli stanno nei checkpoint dei singoli task; qui solo l'elenco, per non perdere niente.
 Il progetto è una tesi triennale e gira solo in locale: qui non c'è niente su produzione, store o rilascio.
@@ -2022,6 +2165,7 @@ Il progetto è una tesi triennale e gira solo in locale: qui non c'è niente su 
    solo "Indicazioni"; più login di fila non danno 429. Se la mappa lagga ancora: profilare i livelli dell'app
    (sentieri, POI con le collisioni, dati rimandati a ogni fermata) prima di togliere altro.
 2. **Review non ancora lanciate** (§6): M9; redesign ("Dopo M11"); mappa entro 50 km e percorso ("Dopo il redesign").
+3. **Nuove feature M12–M16** (pianificate il 26/11), ognuna dopo la sua controparte del backend (M10–M14).
 
 ### 9.3 Prove sull'emulatore (si fanno da qui)
 L'emulatore `Medium_Phone` dal 22/11 si chiude da solo (crash della grafica con `-gpu auto`; anche con

@@ -68,6 +68,8 @@ sealed interface Route {
     @Serializable data class TicketCreate(val trailId: String) : Route
     /** Modifica dei posti letto di un rifugio; [capacity] è il valore attuale da cui parte il form. */
     @Serializable data class RefugeCapacity(val refugeId: String, val capacity: Int) : Route
+    /** Prezzo del rifugio; [priceDraft] è il prezzo attuale nel formato del campo. Ha un default, così è un parametro di query: vuoto ("" = nessun prezzo) come segmento del path romperebbe la rotta. */
+    @Serializable data class RefugePrice(val refugeId: String, val priceDraft: String = "") : Route
     /** Creazione di una squadra di soccorso (solo `ADMIN`), con la mappa che parte da [lat], [lon] e [zoom]. */
     @Serializable data class RescueTeamCreate(val lat: Double, val lon: Double, val zoom: Double) : Route
     /** Azzeramento della verifica in due passaggi di un utente, solo `ADMIN`, dalla scheda Gestione. */
@@ -100,7 +102,7 @@ sealed interface Route {
 val FormRoutes = setOf(
     Route.Login::class, Route.Register::class, Route.PasswordReset::class, Route.EditName::class, Route.ChangePassword::class, Route.ReportHazard::class,
     Route.PoiCreate::class, Route.TicketCreate::class,
-    Route.RefugeCapacity::class, Route.RescueTeamCreate::class, Route.Mfa::class, Route.MfaReset::class,
+    Route.RefugeCapacity::class, Route.RefugePrice::class, Route.RescueTeamCreate::class, Route.Mfa::class, Route.MfaReset::class,
 )
 
 // Tutte le schermate senza barra in basso: i form, i dettagli di sentiero, rifugio e allerta, le liste personali

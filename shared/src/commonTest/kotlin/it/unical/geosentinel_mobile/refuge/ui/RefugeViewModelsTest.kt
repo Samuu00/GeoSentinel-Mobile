@@ -101,7 +101,7 @@ class RefugeViewModelsTest {
                         if (availabilityOffline) throw IOException("rete assente")
                         // La disponibilità arriva in disordine e con una notte piena: è l'app a ordinarla.
                         respond(
-                            """{"refugeId":"r1","totalCapacity":4,"from":"2026-10-05","to":"2026-10-19","availableBedsPerNight":{"2026-10-07":0,"2026-10-05":4,"2026-10-06":2}}""",
+                            """{"refugeId":"r1","totalCapacity":4,"from":"2026-10-05","to":"2026-10-19","availableBedsPerNight":{"2026-10-07":0,"2026-10-05":4,"2026-10-06":2},"guests":1,"totalPriceCents":null}""",
                             HttpStatusCode.OK,
                             json,
                         )

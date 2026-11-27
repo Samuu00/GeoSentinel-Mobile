@@ -1,5 +1,5 @@
 // Accesso alle API riservate al personale: stato di pericoli e sentieri, creazione di POI, posti letto dei rifugi,
-// nuove squadre di soccorso e azzeramento della verifica in due passaggi di un utente.
+// prezzo dei rifugi, nuove squadre di soccorso e azzeramento della verifica in due passaggi di un utente.
 package it.unical.geosentinel_mobile.staff.data
 
 import io.ktor.client.HttpClient
@@ -21,6 +21,7 @@ import it.unical.geosentinel_mobile.api.model.CreateRescueTeamRequest
 import it.unical.geosentinel_mobile.api.model.RefugeResponse
 import it.unical.geosentinel_mobile.api.model.RescueTeamResponse
 import it.unical.geosentinel_mobile.api.model.UpdateCapacityRequest
+import it.unical.geosentinel_mobile.api.model.UpdateRefugePriceRequest
 import it.unical.geosentinel_mobile.core.location.GeoPoint
 import it.unical.geosentinel_mobile.core.network.apiCall
 
@@ -63,6 +64,10 @@ class StaffRepository(httpClient: () -> HttpClient, apiBaseUrl: String) {
     /** Imposta i posti letto del rifugio [refugeId]. */
     suspend fun updateRefugeCapacity(refugeId: String, capacity: Int): Result<RefugeResponse> =
         apiCall { refugesApi.updateRefugeCapacity(refugeId, UpdateCapacityRequest(capacity = capacity)) }
+
+    /** Imposta il prezzo a persona per notte del rifugio [refugeId] in centesimi; null lo toglie. */
+    suspend fun updateRefugePrice(refugeId: String, pricePerNightCents: Int?): Result<RefugeResponse> =
+        apiCall { refugesApi.updateRefugePrice(refugeId, UpdateRefugePriceRequest(pricePerNightCents = pricePerNightCents)) }
 
     /** Crea una nuova squadra di soccorso con nome, nominativo radio, numero di contatto e posizione della base. */
     suspend fun createRescueTeam(
